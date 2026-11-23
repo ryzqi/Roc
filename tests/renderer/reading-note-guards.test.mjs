@@ -12,11 +12,12 @@ const pageErrors = [];
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-reading-note-guards-'));
   await buildViteRenderer({ directory, script: `
-    import React from 'react';
+    import React,{useState} from 'react';
     import { createRoot } from 'react-dom/client';
     import { flushSync } from 'react-dom';
     import { LazyMotion, domAnimation, MotionConfig } from 'motion/react';
     import ReadingNotesPanel from './src/renderer/literature/ReadingNotesPanel';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     import { readingNoteSaveSchema, readingNoteExportSchema, readingNoteDeleteSchema } from './src/shared/schemas/research-reading';
     const root = createRoot(document.getElementById('root'));
     let session = 0, stored;
@@ -59,14 +60,21 @@ before(async () => {
         return Promise.resolve({ok:true,data:{path:'/tmp/synthetic-note.md'}});
       }
     }}};
+    function RetainedNotes({writable}) {
+      const [active,setActive]=useState(true);
+      window.setNotesActive=value=>flushSync(()=>setActive(value));
+      return <div style={{height:620,width:620}}><button data-testid="outside-notes" style={{position:'fixed',top:0,right:0}}>Other workspace</button><ViewActivity active={active}>
+        <div hidden={!active} style={{height:'100%'}}><ReadingNotesPanel client={client} projectId="fixture" items={[]} writable={writable}/></div>
+      </ViewActivity></div>;
+    }
     window.mountNotes = (writable = true) => {
       window.listMode = window.saveMode = window.exportMode = window.deleteMode = 'ready';
       window.listCalls = window.saveCalls = window.exportCalls = window.deleteCalls = 0;
       stored = {id:'note',projectId:'fixture',itemId:null,title:'Stored note',markdown:'Stored body',
         archived:false,revision:1,links:[],createdAt:'2026-11-10',updatedAt:'2026-11-10'};
-      flushSync(() => root.render(<LazyMotion features={domAnimation}><MotionConfig reducedMotion="user"><div style={{height:620,width:620}}>
-        <ReadingNotesPanel key={++session} client={client} projectId="fixture" items={[]} writable={writable}/>
-      </div></MotionConfig></LazyMotion>));
+      flushSync(() => root.render(<LazyMotion features={domAnimation}><MotionConfig reducedMotion="user">
+        <RetainedNotes key={++session} writable={writable}/>
+      </MotionConfig></LazyMotion>));
     };
   `, style: 'html,body{margin:0}' });
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
@@ -270,5 +278,40 @@ test('formula drafts and Markdown source render math live without saving or expo
   await expect(preview.locator('.katex-error')).toBeVisible();
   await page.getByTestId('notes-save').click();
   await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');
+  assert.deepEqual(pageErrors,[]);
+});
+
+test('hidden notes release only Markdown preview and retain the exact source editor and pending save', async () => {
+  await openStoredNote();
+  await page.getByRole('button',{name:'Markdown 源码',exact:true}).click();
+  await page.evaluate(()=>{window.saveMode='pending';});
+  const source=page.getByLabel('Markdown 源码',{exact:true});
+  const markdown=Array.from({length:60},(_,index)=>`### Section ${index}\n\nEvidence with $E=mc^2$ and a retained source draft.`).join('\n\n');
+  await source.fill(markdown);
+  await page.getByTestId('notes-save').click();
+  await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('保存中…');
+  await expect(page.getByTestId('notes-markdown-preview').locator('.katex')).toHaveCount(60);
+  const location=await page.evaluate(()=>{
+    const source=document.querySelector('[aria-label="Markdown 源码"]');
+    const preview=document.querySelector('[data-testid="notes-markdown-preview"] .scientific-markdown');
+    window.retainedNoteSource=source;source.setSelectionRange(20,55);source.scrollTop=120;preview.scrollTop=180;
+    return {source:source.scrollTop,preview:preview.scrollTop};
+  });
+  assert.ok(location.preview>0);
+  await page.evaluate(()=>window.setNotesActive(false));
+  await expect(page.locator('.reading-notes-list li')).toHaveCount(0);
+  await expect(page.getByTestId('notes-markdown-preview').locator('.scientific-markdown')).toHaveCount(0);
+  assert.equal(await source.evaluate(node=>node===window.retainedNoteSource),true);
+  await expect(source).toHaveValue(markdown);
+  await page.getByTestId('outside-notes').focus();
+  await page.evaluate(()=>window.resolveSave());
+  await expect(page.getByTestId('notes-panel').getByRole('status',{includeHidden:true})).toHaveText('已保存');
+  await page.evaluate(()=>window.setNotesActive(true));
+  await expect(page.getByTestId('notes-markdown-preview').locator('.katex')).toHaveCount(60);
+  await expect.poll(()=>page.getByTestId('notes-markdown-preview').locator('.scientific-markdown').evaluate(node=>node.scrollTop)).toBe(location.preview);
+  assert.deepEqual(await source.evaluate(node=>({same:node===window.retainedNoteSource,start:node.selectionStart,end:node.selectionEnd,scroll:node.scrollTop})),
+    {same:true,start:20,end:55,scroll:location.source});
+  await expect(page.getByTestId('outside-notes')).toBeFocused();
+  assert.equal(await page.evaluate(()=>window.saveCalls),1);
   assert.deepEqual(pageErrors,[]);
 });

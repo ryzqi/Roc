@@ -60,6 +60,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   }, [subView]);
   const [returnToSearch, setReturnToSearch] = useState(false);
   const [readerFocusRequestId, setReaderFocusRequestId] = useState(0);
+  const [indexRequestId, setIndexRequestId] = useState(0);
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [monitorLock, setMonitorLock] = useState(false);
@@ -78,6 +79,9 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     };
     if (destination !== workspace) scope.openView(destination, proceed);
     else proceed();
+  };
+  const openPipelineKnowledge = (target: 'index' | 'wiki'): void => {
+    selectSubView(target === 'index' ? 'rag' : 'wiki', target === 'index' ? () => setIndexRequestId(value => value + 1) : undefined);
   };
   useEffect(() => {
     const element = hubRef.current;
@@ -236,6 +240,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
       {store.projectId === null || workspace !== 'library' ? null : <LiteratureProcessingPanel client={store.client} projectId={store.projectId}
         writable={scope.writable} pickFile={actions.pickFile} addPdfToItem={store.addPdfToItem}
         onOpenPdf={scope.openFileInCanvas} onDocumentsChanged={store.reloadDocuments}
+        onOpenKnowledge={openPipelineKnowledge}
         onOpenItem={libraryItemId => scope.openLiterature({kind: 'reader', libraryItemId})}/>}
 
       {subView === 'reader' ? <div className="literature-paper-picker flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1">
@@ -277,6 +282,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               literature={store}
               onClearFocus={() => setFocus({parseId: null, locator: null})}
               openInFilesView={scope.openFileInCanvas}
+              onOpenKnowledge={openPipelineKnowledge}
               focusParseId={focus.parseId}
               focusLocator={focus.locator}
               focusText={focus.text}
@@ -291,6 +297,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             <div className="flex min-h-0 flex-1 flex-col">
             <RagStudio
               literature={store}
+              indexRequestId={indexRequestId}
               openInFilesView={scope.openFileInCanvas}
               onOpenInReader={(target) => scope.openLiterature({kind: 'reader', ...target, returnToSearch: true})}
             />

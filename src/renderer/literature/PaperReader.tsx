@@ -42,6 +42,7 @@ export type PaperReaderProps = {
   literature: LiteratureStore;
   openInFilesView: (relativePath: string) => void;
   onClearFocus: () => void;
+  onOpenKnowledge?: (target: 'index' | 'wiki') => void;
   /** Deep link from a retrieval hit: the **parse** the hit came from (`document:<parseId>`). */
   focusParseId?: string | null;
   /** Deep link from a retrieval hit: the locator to scroll to. */
@@ -72,6 +73,7 @@ export function PaperReader({
   literature,
   openInFilesView,
   onClearFocus,
+  onOpenKnowledge,
   focusParseId = null,
   focusLocator = null,
   focusText = null,
@@ -81,6 +83,7 @@ export function PaperReader({
   const documents = literature.documents;
   const scope = useWorkspaceScope();
   const copy = useCopyFeedback();
+  const readerRoot = useRef<HTMLDivElement>(null);
   const reader = useReaderDocument(literature, focusParseId);
   const activeDocument = reader.document;
   const activeDocumentId = activeDocument?.id ?? null;
@@ -256,6 +259,12 @@ export function PaperReader({
   const showParsed = !showOriginal || (comparePdf && reader.parsed !== null);
   const changeReadingMode = (mode: typeof readingMode): void => {
     requestReadingChange(literature.projectId ?? '', () => setReadingMode(mode));
+  };
+  const revealDisclosure = (testId: string): void => {
+    const summary = readerRoot.current?.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+    const details = summary?.closest('details');
+    if (details !== null && details !== undefined) details.open = true;
+    summary?.focus({preventScroll: true});
   };
   // `null` when the record carries no DOI — never a placeholder, and never the
   // bibliography copy when the metadata one is missing (they are equal by contract:
@@ -528,8 +537,7 @@ export function PaperReader({
   </aside> : null;
 
   return (
-    <div className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode}>
-      <ResourceStatus itemId={selected.id} document={activeDocument}/>
+    <div ref={readerRoot} className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode}>
       <header className="reading-paper-header">
         <div className="reading-paper-heading">
         <h2 className="text-ink" data-testid="reader-title" title={paperTitle}>
@@ -541,6 +549,7 @@ export function PaperReader({
           {selected.metadata.citationCount === null ? null : <span>被引 {selected.metadata.citationCount}</span>}
         </p>
         </div>
+        <div className="reading-paper-header-actions">
         <details className="reading-disclosure reading-paper-details">
           <summary data-testid="reader-tools-disclosure">文献信息</summary>
           <div className="reading-disclosure-body">
@@ -591,6 +600,16 @@ export function PaperReader({
         </div>
           </div>
         </details>
+        <ResourceStatus key={JSON.stringify([literature.projectId, selected.id])} itemId={selected.id} document={activeDocument}
+          onMetadata={() => revealDisclosure('reader-tools-disclosure')}
+          onPdf={() => {
+            if (activeDocument?.mediaType === 'application/pdf') changeReadingMode('original');
+            else if (activeDocument !== null) revealDisclosure('reader-parse-disclosure');
+            else literature.requestImport('document');
+          }}
+          onParse={() => {revealDisclosure('reader-parse-disclosure'); if (reader.parsed !== null) changeReadingMode('parsed');}}
+          onKnowledge={target => {if (onOpenKnowledge) onOpenKnowledge(target); else scope.openView('knowledge');}}/>
+        </div>
         {actionNote === null && copy.error === null && literature.assistant.error === null ? null : (
           <p role="status" className="text-muted text-[length:var(--font-micro-size)]" data-testid="reader-action-note">
             {actionNote ?? copy.error ?? literature.assistant.error}

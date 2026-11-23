@@ -2,6 +2,7 @@ import {useState} from 'react';
 import type {MonitorAlert, MonitorCheck, MonitorQuery, MonitorSource} from '../../shared/schemas/research-monitors';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource, type AsyncResource} from '../app/use-async-resource';
+import {useViewSelected} from '../shared/view-activity';
 
 export const monitorButton = 'inline-flex flex-wrap items-center gap-2 rounded-control border-[0.5px] border-line px-2 py-1 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
 export const monitorStatus = {running: '检查中', complete: '检查完成', partial: '部分完成', failed: '检查失败', cancelled: '已取消', interrupted: '已中断'};
@@ -32,12 +33,14 @@ export function MonitorQueryView({query}: {query: MonitorQuery}): React.JSX.Elem
       {query.search.collections ? <><dt>官方目录范围</dt><dd>{Object.values(query.search.collections).join('、')}（仅所选集合）</dd></> : null}</dl>;
 }
 function MonitorRawSource({source}: {source: MonitorSource}): React.JSX.Element {
+  const selected = useViewSelected();
   const [open, setOpen] = useState(false);
   return <details onToggle={event => setOpen(event.currentTarget.open)}><summary className="cursor-pointer text-muted">请求回执与来源快照</summary>
-    {open ? <pre className="max-w-full whitespace-pre-wrap break-all py-2 text-[length:var(--font-meta-size)]">{JSON.stringify(source, null, 2)}</pre> : null}
+    {open && selected ? <pre className="max-w-full whitespace-pre-wrap break-all py-2 text-[length:var(--font-meta-size)]">{JSON.stringify(source, null, 2)}</pre> : null}
   </details>;
 }
 export function MonitorCheckView({check}: {check: MonitorCheck}): React.JSX.Element {
+  const selected = useViewSelected();
   const [open, setOpen] = useState(false);
   return <details className="py-2" data-testid="literature-monitor-check" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="cursor-pointer break-words">{monitorStatus[check.status]} / 查询版本 {check.queryVersion} / {check.startedAt}</summary>
@@ -52,12 +55,12 @@ export function MonitorCheckView({check}: {check: MonitorCheck}): React.JSX.Elem
         <dt>错误</dt><dd>{source.errorCode ?? '无已报告错误'}</dd><dt>重试等待</dt><dd>{source.retryAfterMs === null ? '未报告' : `${source.retryAfterMs} ms`}</dd>
         <dt>覆盖</dt><dd>{source.material === null ? (source.search === null ? '覆盖范围未知' : '见搜索来源覆盖') : coverageLabels[source.material.coverage]}</dd>
       </dl>
-      {source.search?.sources.map(receipt => <div key={receipt.source} className="space-y-1 break-all py-1">
+      {selected ? source.search?.sources.map(receipt => <div key={receipt.source} className="space-y-1 break-all py-1">
         <p>{receipt.source} / {coverageLabels[receipt.coverage.state]} / 已验证 {receipt.coverage.validatedPages} 页</p>
         <p>命中 {receipt.coverage.apiHitCount ?? '未知'} / 停止原因 {receipt.stopReason}</p>
         {receipt.pages.map((entry, index) => <p key={index}>页 {index + 1} / 缓存 {entry.cache.state}
           {entry.cache.state === 'hit' ? ` / 原获取 ${entry.cache.fetchedAt}` : ''} / {entry.url}</p>)}
-      </div>)}
+      </div>) : null}
       <MonitorRawSource source={source}/>
     </details>)}</> : null}
   </details>;

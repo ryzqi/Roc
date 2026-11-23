@@ -1,5 +1,15 @@
 # UI 重构验证记录
 
+## 2026-11-23 P4.5 / P7.4：发现分页、处理轨迹与隐藏阅读视图
+
+状态：**Verified passing**（文献界面与生命周期范围）。发现页订阅真实来源事件，按可信请求/项目隔离；合并前记录只读，最终候选可分页与加入。后页追加保持选择，每次导入最多30篇。五阶段轨迹进入已有信息、PDF、解析、索引和知识页，重试只提交真实任务版本；异步文档就绪不重建已展开的轨迹，旧文档重试回执不跨身份发布。
+
+隐藏检索、笔记预览、问答证据、雷达和监控时释放只读重DOM，保留查询/草稿/选择/未决保存。ReadingViewBoundary在隐藏前记录滚动和details，返回同一内容时有界恢复；新内容重置位置，用户操作立即接管，不抢焦点。PDF原文高度保持既有预算，处理阶段收进标题披露。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test --test-concurrency=1 tests/renderer/source-editor-lifecycle.test.mjs tests/renderer/authoring-tools-layout.test.mjs tests/renderer/inline-polish-scope.test.mjs tests/renderer/discovery-search.test.mjs tests/renderer/reading-view-boundary.test.mjs tests/renderer/reading-note-guards.test.mjs tests/renderer/literature-workspace-layout.test.mjs tests/renderer/literature-processing.test.mjs tests/renderer/paper-reader.test.mjs` 为 **126/128**，两项失败定位到处理轨迹在文档异步就绪时重挂载。修复组件身份并保留确定性回归后，`node --test --test-concurrency=1 tests/renderer/literature-processing.test.mjs tests/renderer/paper-reader.test.mjs` **28/28**。发现7/7、阅读边界4/4通过。此前文献组合134项中127通过，包括action-guards、retrieval-workspace、research-monitors；另7项失败及对应PDF高度、隐藏身份/滚动和夹具修正由本次定向检查覆盖，未记为单轮全绿。
+
+`pnpm test:unit` **2736通过、0失败、1既有跳过**（2737项，434.7秒）；`pnpm build`、`pnpm check:renderer-chunks`通过，eager JS 517554 bytes / 11 files。外部学术源质量与真人阅读体验另验。
+
 ## 2026-11-23 P7.3：工件只读资源释放
 
 状态：**Verified passing**（工件生命周期范围）。隐藏检视器释放只读Markdown、JSON、来源图像、综述报告/记录与生产文件字节；编辑器、草稿、协议版本、未决保存和关闭守卫继续存活。返回按同一版本恢复展开、分页、文件选择及阅读位置，不抢当前焦点；异步文件重新按原SHA读取。

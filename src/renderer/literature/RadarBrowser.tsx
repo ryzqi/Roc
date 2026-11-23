@@ -2,9 +2,12 @@ import {useEffect,useRef,useState} from 'react';
 import type {z} from 'zod';
 import type {radarBrowserPaperSchema} from '../../shared/schemas/research-reading';
 import type {RocClient} from '../shared/roc-client';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 export default function RadarBrowser({client,source,active,projectId,writable,onImported,onBusyChange}: {
   client:RocClient;source:'cool'|'modelscope';active:boolean;projectId:string;writable:boolean;onImported:()=>void;onBusyChange?:(busy:boolean)=>void;
 }):React.JSX.Element {
+  const selected=useViewSelected(),readingRoot=useRef<HTMLDivElement>(null);
   const area=useRef<HTMLDivElement>(null),[papers,setPapers]=useState<z.infer<typeof radarBrowserPaperSchema>[]|null>(null);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState('');
   const mounted=useRef(true),pending=useRef(false),layoutRevision=useRef(0),activity=useRef(onBusyChange);
@@ -75,16 +78,17 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
       setStatus(`已入库：${paper.title}`);onImported();
     }catch(error){if(mounted.current){setStatus('');setError(String(error));}}finally{finish();}
   };
-  return <div className="flex min-h-0 flex-1 flex-col" data-testid="radar-browser">
+  return <ReadingViewBoundary selected={selected} identity={papers} containerRef={readingRoot} scrollSelectors={['[data-radar-papers]']}>
+    <div ref={readingRoot} className="flex min-h-0 flex-1 flex-col" data-testid="radar-browser">
     <div className="reading-toolbar"><button type="button" disabled={busy} onClick={()=>void command('back')}>后退</button><button type="button" disabled={busy} onClick={()=>void command('reload')}>刷新网页</button>
       <button type="button" disabled={busy} onClick={()=>void command('inspect')}>读取当前页论文 / 入库</button>
       {papers!==null?<button type="button" disabled={busy} onClick={()=>{if(!pending.current){setPapers(null);setError(null);setStatus('');}}}>返回浏览</button>:null}
     </div>
     {error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error}</p>:null}{status?<p role="status" className="p-2">{status}</p>:null}
-    <div ref={area} className="relative min-h-0 flex-1 overflow-auto" aria-label={source==='cool'?'Cool Papers 浏览区':'魔搭论文浏览区'}>
-      {papers!==null?<div className="p-3">{papers.length===0?<p>当前页没有可识别的论文链接，请打开论文详情后重试。</p>:papers.map(paper=><article className="border-b-[0.5px] border-line py-3" key={paper.url}>
+    <div ref={area} data-radar-papers className="relative min-h-0 flex-1 overflow-auto" aria-label={source==='cool'?'Cool Papers 浏览区':'魔搭论文浏览区'}>
+      {!selected?null:papers!==null?<div className="p-3">{papers.length===0?<p>当前页没有可识别的论文链接，请打开论文详情后重试。</p>:papers.map(paper=><article className="border-b-[0.5px] border-line py-3" key={paper.url}>
         <h3 className="font-medium">{paper.title}</h3><p className="break-all text-muted">{paper.url}</p><button className="mt-2 rounded-control border-[0.5px] border-line px-3 py-1" type="button" disabled={busy||!writable} onClick={()=>void importPaper(paper)}>加入文献库</button>
       </article>)}</div>:<p className="p-4 text-muted">正在加载 {source==='cool'?'Cool Papers':'魔搭论文'}…</p>}
     </div>
-  </div>;
+  </div></ReadingViewBoundary>;
 }

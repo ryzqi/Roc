@@ -139,6 +139,28 @@ test('knowledge modules load on first entry and hidden graphs release the projec
   await page.evaluate(() => window.selectWorkspace('library'));
 });
 
+test('reader pipeline opens the actual index task manager and knowledge pages in the existing workspace', async () => {
+  await page.evaluate(() => window.openObject({kind:'reader',libraryItemId:'paper'}));
+  await page.getByTestId('reader-pipeline-toggle').click();
+  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
+  await expect(page.getByTestId('pipeline-stage-index')).toBeVisible();
+  await page.getByTestId('pipeline-stage-index').focus();
+  await expect(page.getByTestId('pipeline-stage-index')).toBeFocused(); await page.keyboard.press('Enter');
+  await expect(page.getByTestId('reader-pipeline-details')).toContainText('向量索引：待核验');
+  await page.getByRole('button',{name:'查看索引任务',exact:true}).click();
+  await expect(page.getByTestId('literature-subview-rag')).toHaveAttribute('aria-selected','true');
+  await expect(page.getByTestId('rag-index-panel')).toBeVisible();
+  await expect(page.getByTestId('rag-no-jobs')).toBeVisible();
+  await page.getByRole('button',{name:'返回检索',exact:true}).click();
+  await page.evaluate(() => window.openObject({kind:'reader',libraryItemId:'paper'}));
+  await page.getByTestId('pipeline-stage-wiki').click();
+  await expect(page.getByTestId('reader-pipeline-details')).toContainText('知识页：未确认生成');
+  await page.getByRole('button',{name:'查看知识页',exact:true}).click();
+  await expect(page.getByTestId('literature-subview-wiki')).toHaveAttribute('aria-selected','true');
+  await expect(page.getByTestId('wiki-pages')).toBeVisible();
+  await page.evaluate(() => window.selectWorkspace('library'));
+});
+
 test('literature keeps full reading width, with reachable navigation at narrow and wide canvas sizes',async()=>{
   await page.evaluate(() => {window.setHubActive(true); window.setContextDrawerOpen(false); window.openObject({kind:'reader',libraryItemId:'paper'});});
   for(const width of [440,820,1280]) {

@@ -40,6 +40,8 @@ Crossref 每次最多 100 条：满页下一检查 offset 加 100；短页重置
 
 保存、暂停/恢复、检查和已读保留精确失败请求；重试不生成新的 requestId。取消针对主进程返回的真实 running check ID，并分别显示取消信号与终态。当前检查每秒刷新权威回执，最多 120 次，隐藏、读取错误或终态停止；手动刷新可恢复。列表、查询版本、检查和提醒分别分页，每页 20 条。
 
+隐藏监控视图时释放展开来源的原始 JSON 与逐页回执 DOM，保留查询编辑器、检查身份、分页和展开状态。回到同一监控时恢复详情滚动；隐藏或卸载不会重写保存的阅读位置，也不改变未决操作与导航保护。
+
 DOI 目标按真实条目 ID 读取，不从当前过滤列表推断目标缺失。读取未完成或失败时禁止保存/立即检查，显示原始失败和重试；版本变化要求显式重新选择。查询保留已绑定选项，避免过滤列表清空合法绑定。检查详情展开后才渲染大型来源内容，原始 JSON 第二层展开后才序列化。
 
 合同与实现入口为 [research-monitors.ts](../src/shared/schemas/research-monitors.ts)、[monitor-service.ts](../src/main/plugins/research/monitor-service.ts) 和 [MonitorEditor.tsx](../src/renderer/literature/MonitorEditor.tsx)。界面检查可在仓库根目录执行 `node --test tests/renderer/research-monitors.test.mjs`；跨模块检查按[开发与检查](development.md)选择。

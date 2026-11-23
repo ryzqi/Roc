@@ -6,6 +6,8 @@ import {useAsyncResource} from '../app/use-async-resource';
 import {useImeGuard} from '../shared/hooks/use-ime-guard';
 import {LiteratureEditorBoundary,useLiteratureEditor} from './literature-editor-guard';
 import RadarBrowser from './RadarBrowser';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 import './reading.css';
 import './discovery-workspace.css';
 type Source='feeds'|'daily'|'cool'|'modelscope';
@@ -20,6 +22,7 @@ export default function AcademicRadarPanel(props:Props):React.JSX.Element {
   </LiteratureEditorBoundary>;
 }
 function AcademicRadarContent({client,projectId,writable,active,onImported}:Props):React.JSX.Element {
+  const viewSelected=useViewSelected(),readingRoot=useRef<HTMLElement>(null);
   const [source,setSource]=useState<Source>('feeds'),[feedId,setFeedId]=useState<string|null>(null),[unread,setUnread]=useState(false);
   const [filter,setFilter]=useState(''),[type,setType]=useState('all'),[selected,setSelected]=useState<Set<string>>(new Set());
   const [article,setArticle]=useState<RadarArticle|null>(null),[title,setTitle]=useState(''),[url,setUrl]=useState('');
@@ -29,7 +32,10 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
   const mounted=useRef(true),pending=useRef(false),ime=useImeGuard();
   const articleHeading=useRef<HTMLHeadingElement>(null),articleOpener=useRef<HTMLButtonElement|null>(null),filterInput=useRef<HTMLInputElement>(null);
   useEffect(()=>{if(article!==null)articleHeading.current?.focus({preventScroll:true});},[article?.id]);
-  const closeArticle=():void=>{setArticle(null);requestAnimationFrame(()=>{const target=articleOpener.current?.isConnected?articleOpener.current:filterInput.current;target?.focus({preventScroll:true});});};
+  const closeArticle=():void=>{setArticle(null);requestAnimationFrame(()=>{
+    const restored=Array.from(readingRoot.current?.querySelectorAll<HTMLButtonElement>('[data-radar-article]')??[]).find(node=>node.dataset.radarArticle===article?.id);
+    const target=articleOpener.current?.isConnected?articleOpener.current:restored??filterInput.current;target?.focus({preventScroll:true});
+  });};
   const draft=useRef({title:'',url:'',names:new Map<string,RenameDraft>()});
   const [names,setNames]=useState<ReadonlyMap<string,RenameDraft>>(draft.current.names);
   const guard=useLiteratureEditor({label:'RSS 订阅',busy:()=>pending.current,
@@ -121,7 +127,9 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
   };
   const filtered=filter!==''||type!=='all'||unread;
   const loading=source==='feeds'&&(feeds.status==='loading'||articles.status==='loading');
-  return <section className="radar-workspace flex h-full min-h-0 flex-col" data-detail={article!==null} data-testid="radar-panel" aria-label="学术雷达">
+  return <ReadingViewBoundary selected={viewSelected} identity={JSON.stringify([projectId,source,feedId,filter,type,unread,article?.id])}
+    containerRef={readingRoot} scrollSelectors={['.radar-articles','.radar-detail']}>
+    <section ref={readingRoot} className="radar-workspace flex h-full min-h-0 flex-col" data-detail={article!==null} data-testid="radar-panel" aria-label="学术雷达">
     <div className="reading-toolbar" role="tablist" aria-label="发现来源"><Radar size={15} aria-hidden="true"/>{tabs.map((tab,index)=><button type="button" role="tab" aria-selected={source===tab.id} tabIndex={source===tab.id?0:-1} key={tab.id}
       disabled={busy} className={source===tab.id?'bg-[var(--accent-soft)] text-accent-ink':''} onClick={()=>selectSource(tab.id)}
       onKeyDown={event=>{
@@ -130,7 +138,7 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
         if(next===null)return;event.preventDefault();selectSource(tabs[next]!.id);
         event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});
       }}>{tab.label}</button>)}</div>
-    {source==='cool'||source==='modelscope'?<RadarBrowser key={source} client={client} projectId={projectId} writable={writable} source={source} active={active} onImported={onImported}
+    {source==='cool'||source==='modelscope'?<RadarBrowser key={source} client={client} projectId={projectId} writable={writable} source={source} active={active&&viewSelected} onImported={onImported}
       onBusyChange={value=>{pending.current=value;if(mounted.current){setBusy(value);guard.notify();}}}/>:<>
       <div className="radar-controls">
       {source==='feeds'?<>
@@ -171,20 +179,20 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
       <p role="status" className="tabular-nums px-3 py-1 text-muted">{busy?'正在处理…':loading?'正在读取订阅…':status||`${rows.length.toLocaleString('zh-CN')} 篇文章`}</p>
       <div className="radar-columns">
         <div className="radar-articles" data-testid="radar-articles">
-          {rows.length===0&&!busy&&!loading&&!error&&!feeds.error&&!articles.error?<div className="py-8 text-center text-muted"><p>{filtered?'没有符合筛选条件的文章。':source==='daily'?'暂无推荐，请确认嵌入服务可用后获取。':'暂无文章，添加订阅后刷新。'}</p>
+          {!viewSelected?null:rows.length===0&&!busy&&!loading&&!error&&!feeds.error&&!articles.error?<div className="py-8 text-center text-muted"><p>{filtered?'没有符合筛选条件的文章。':source==='daily'?'暂无推荐，请确认嵌入服务可用后获取。':'暂无文章，添加订阅后刷新。'}</p>
             {filtered?<button type="button" onClick={()=>{setFilter('');setType('all');setUnread(false);}}>清除筛选</button>:null}</div>:rows.map(row=><article key={row.id} className="border-b-[0.5px] border-line py-3">
             <div className="flex items-start gap-2"><input type="checkbox" aria-label={`选择 ${row.title}`} disabled={busy||row.importedItemId!==null} checked={selected.has(row.id)} onChange={event=>{if(pending.current)return;const checked=event.target.checked;setSelected(current=>{const next=new Set(current);if(checked)next.add(row.id);else next.delete(row.id);return next;});}}/>
-              <button type="button" disabled={busy} className={`text-left ${row.read?'text-muted':'font-medium text-ink'}`} onClick={event=>{if(pending.current)return;articleOpener.current=event.currentTarget;setArticle(row);if(writable)void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:row.id,read:true});if(!mounted.current)return;if(!result.ok)throw new Error(result.error.message);articles.reload();});}}>{row.title}</button></div>
+              <button type="button" data-radar-article={row.id} disabled={busy} className={`text-left ${row.read?'text-muted':'font-medium text-ink'}`} onClick={event=>{if(pending.current)return;articleOpener.current=event.currentTarget;setArticle(row);if(writable)void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:row.id,read:true});if(!mounted.current)return;if(!result.ok)throw new Error(result.error.message);articles.reload();});}}>{row.title}</button></div>
             <p className="mt-1 line-clamp-2 text-muted">{row.summary}</p><div className="mt-2 flex flex-wrap items-center gap-3 text-[length:var(--font-meta-size)] text-muted"><span>{row.publishedAt?.slice(0,10)??'日期未知'}</span>
               {row.score!==null?<span className="tabular-nums">相关度 {row.score.toFixed(3)}</span>:null}<span>{row.read?'已读':'未读'}</span>
               {row.importedItemId?<span className="inline-flex items-center gap-1"><Check size={12}/>已入库</span>:<button className="text-accent-ink" type="button" disabled={busy||!writable} onClick={()=>void run(()=>importSelected([row.id]))}>加入文献库</button>}
             </div>
           </article>)}
         </div>
-        {article?<aside className="radar-detail" aria-label="文章详情"><button type="button" className="radar-detail-back" onClick={closeArticle}>关闭详情</button><h3 ref={articleHeading} tabIndex={-1} className="my-3 font-semibold">{article.title}</h3><p className="text-muted">{article.authors.join(', ')}</p><p className="my-3 whitespace-pre-wrap">{article.summary}</p><p className="break-all text-muted">{article.url}</p>
+        {article?<aside className="radar-detail" aria-label="文章详情"><button type="button" className="radar-detail-back" onClick={closeArticle}>关闭详情</button><h3 ref={articleHeading} tabIndex={-1} className="my-3 font-semibold">{article.title}</h3>{viewSelected?<><p className="text-muted">{article.authors.join(', ')}</p><p className="my-3 whitespace-pre-wrap">{article.summary}</p><p className="break-all text-muted">{article.url}</p></>:null}
           <div className="reading-toolbar"><button type="button" disabled={busy||!writable||article.importedItemId!==null} onClick={()=>void run(()=>importSelected([article.id]))}>入库</button><button type="button" disabled={busy||!writable} onClick={()=>void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:article.id,read:false});if(!mounted.current)return;if(!result.ok)throw new Error(result.error.message);articles.reload();closeArticle();})}>标为未读</button></div>
         </aside>:null}
       </div>
     </>}
-  </section>;
+  </section></ReadingViewBoundary>;
 }

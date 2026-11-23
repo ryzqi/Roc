@@ -404,6 +404,22 @@ test('actual reader requests currentParseId even when repository run order is ne
   assert.equal(await f.changes(), before);
 });
 
+test('reader pipeline keyboard actions disclose metadata and real parsing controls without mutations', async () => {
+  const f = scene(), before = await f.changes();
+  await mount(f); await textEquals('Current first snapshot.');
+  await page.getByTestId('reader-pipeline-toggle').focus(); await page.keyboard.press('Enter');
+  const metadata = page.getByTestId('reader-tools-disclosure');
+  await page.getByTestId('pipeline-stage-metadata').focus(); await page.keyboard.press('Enter');
+  await expect(metadata).toBeFocused();
+  assert.equal(await metadata.evaluate(summary => summary.closest('details').open), true);
+  const parse = page.getByTestId('reader-parse-disclosure');
+  await page.getByTestId('pipeline-stage-parse').focus(); await page.keyboard.press('Space');
+  await expect(parse).toBeFocused();
+  assert.equal(await parse.evaluate(summary => summary.closest('details').open), true);
+  await expect(page.getByTestId('paper-reader')).toHaveAttribute('data-reading-mode', 'parsed');
+  assert.equal(await f.changes(), before);
+});
+
 test('historical parse resolves its actual document and exact block instead of opening another current parse', async () => {
   const f = scene(), before = await f.changes();
   await mount(f, {parseId: 'old-first-parse', locator: 'page:1:section1'});
@@ -1350,7 +1366,7 @@ test('hidden Reader resource benchmark uses native macOS close and reopen', {tim
   saveReport(process.env.ROC_PERF_BACKGROUND_REPORT, report);
 });
 
-for (const action of ['page', 'collapse', 'replace', 'compare', 'document', 'saved-location']) {
+for (const action of ['page', 'collapse', 'replace', 'compare', 'pipeline-parse', 'document', 'saved-location']) {
   test(`annotation draft protects the actual ${action} transition until explicit discard`, async () => {
     const f = await realPdfScene({pdfOptions: {pageCount: 2}, pageRange: '1-2'});
     if (action === 'document') {
@@ -1358,6 +1374,7 @@ for (const action of ['page', 'collapse', 'replace', 'compare', 'document', 'sav
       f.snapshot = () => ({...snapshot(), documents: [...snapshot().documents, f.repository.documents.get(f.second.id)]});
     }
     await openAnnotationReader(f);
+    if (action === 'pipeline-parse') await page.getByTestId('reader-pipeline-toggle').click();
     await pageNote();
     if (action === 'saved-location') {
       await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('Saved exact location');
@@ -1373,6 +1390,7 @@ for (const action of ['page', 'collapse', 'replace', 'compare', 'document', 'sav
       if (action === 'collapse') await page.getByTestId('reader-annotations-toggle').click();
       if (action === 'replace') await page.getByRole('button', {name: '本页批注', exact: true}).click();
       if (action === 'compare') await page.getByTestId('reader-compare-pdf').click();
+      if (action === 'pipeline-parse') await page.getByTestId('pipeline-stage-parse').click();
       if (action === 'document') await page.getByTestId(`reader-document-tab-${f.second.id}`).click();
       if (action === 'saved-location') await page.getByRole('button', {name: '回到批注位置', exact: true}).click();
     };
@@ -1395,7 +1413,7 @@ for (const action of ['page', 'collapse', 'replace', 'compare', 'document', 'sav
     } else if (action === 'saved-location') {
       await page.getByTestId('reader-annotation-form').waitFor({state: 'detached'});
     } else {
-      await page.getByTestId(action === 'compare' ? 'reader-pdf' : 'reader-annotations').waitFor({state: 'detached'});
+      await page.getByTestId(action === 'compare' || action === 'pipeline-parse' ? 'reader-pdf' : 'reader-annotations').waitFor({state: 'detached'});
     }
     assert.equal(await f.changes(), before);
   });

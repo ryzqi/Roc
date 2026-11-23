@@ -7,6 +7,8 @@ import {useAsyncAction,useAsyncResource} from '../app/use-async-resource';
 import {BEFORE_NAVIGATE} from '../app/navigation-guard';
 import {ConfirmDialog} from '../shell/ConfirmDialog';
 import ReadingNoteEditor from './ReadingNoteEditor';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 import './reading.css';
 type Draft = Pick<ReadingNote,'id'|'title'|'markdown'|'itemId'|'archived'>;
 type Operation = 'export'|'reload'|'delete';
@@ -14,6 +16,7 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
   client:RocClient;projectId:string;items:ResearchLibraryItem[];writable:boolean;itemId?:string|null;
   seed?:{id:string;text:string}|null;onSeedConsumed?:()=>void;onReveal?:()=>void;
 }):React.JSX.Element {
+  const selected=useViewSelected(),readingRoot=useRef<HTMLElement>(null);
   const list=useAsyncResource(projectId,()=>client.api.research.listReadingNotes({projectId}),{label:'读取笔记'});
   const [draft,setDraft]=useState<Draft|null>(null),[baseline,setBaseline]=useState<ReadingNote|null>(null);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[filter,setFilter]=useState(''),[archived,setArchived]=useState(false);
@@ -104,7 +107,9 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
   };
   const backlinks=(list.data??[]).filter(note=>!note.archived && note.id!==draft?.id && note.links.some(title=>title.toLocaleLowerCase()===draft?.title.toLocaleLowerCase()));
   const visibleNotes=(list.data??[]).filter(note=>(archived||!note.archived)&&(!itemId||note.itemId===itemId)&&`${note.title} ${note.markdown}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
-  return <section className="reading-notes" data-testid="notes-panel" aria-label="阅读笔记"
+  return <ReadingViewBoundary selected={selected} identity={JSON.stringify([projectId,itemId,filter,archived,draft?.id])}
+    containerRef={readingRoot} scrollSelectors={['.reading-notes-list','.reading-note-detail']}>
+    <section ref={readingRoot} className="reading-notes" data-testid="notes-panel" aria-label="阅读笔记"
     onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='s'&&!event.nativeEvent.isComposing){event.preventDefault();void save();}}}>
     <header className="reading-toolbar reading-notes-header">
       <NotebookPen size={15} aria-hidden="true"/><h2>阅读笔记</h2>
@@ -122,11 +127,11 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
           <option value="">选择笔记</option>{visibleNotes.map(note=><option key={note.id} value={note.id}>{note.archived?'[归档] ':''}{note.title}</option>)}
         </select>
         <ul className="reading-notes-list">
-          {visibleNotes.map(note=><li key={note.id}><button type="button" disabled={dirty||pending} aria-current={draft?.id===note.id?'true':undefined} onClick={()=>open(note)}>
+          {selected?visibleNotes.map(note=><li key={note.id}><button type="button" disabled={dirty||pending} aria-current={draft?.id===note.id?'true':undefined} onClick={()=>open(note)}>
             <strong>{note.title}</strong>
             <span className="reading-note-excerpt">{note.markdown.replace(/[#*`$>]/g,'').trim().slice(0,140)||'空白笔记'}</span>
             <small>{note.archived?'已归档':note.itemId?'文献笔记':'独立笔记'}</small>
-          </button></li>)}
+          </button></li>):null}
           {list.status==='ready'&&visibleNotes.length===0?<li className="reading-notes-no-results">{filter?'没有匹配的笔记':'尚无笔记'}</li>:null}
         </ul>
       </aside>
@@ -167,5 +172,5 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
     <ConfirmDialog open={operation==='delete'} title="删除阅读笔记" message={`删除“${draft?.title??''}”及其未保存修改？此操作无法撤销。`}
       confirmLabel="删除笔记" tone="destructive" confirmDisabled={!writable} pending={deleting} testId="notes-delete-dialog"
       onCancel={()=>{if(!deletingRef.current)finishOperation();}} onConfirm={deleteCurrentNote}/>
-  </section>;
+  </section></ReadingViewBoundary>;
 }

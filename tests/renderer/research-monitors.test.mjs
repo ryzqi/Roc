@@ -33,6 +33,7 @@ before(async () => {
     import {LiteratureHubView} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/LiteratureHubView'))};
     import {LiteratureScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/literature-scope'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
+    import {ViewActivity} from ${JSON.stringify(join(process.cwd(), 'src/renderer/shared/view-activity'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     // The shared hub also mounts the processing panel; this monitor fixture has no acquisition jobs.
@@ -44,12 +45,13 @@ before(async () => {
     window.unmountHarness=()=>flushSync(()=>root.unmount());
     window.navigateAway=()=>requestNavigation({page:'project',projectId:'another-project'},()=>window.navigations++);
     function Harness({initial}){const [state,setState]=useState(initial);window.updateHub=state=>flushSync(()=>setState(state));
+      const [visible,setVisible]=useState(true);window.setMonitorVisible=value=>flushSync(()=>setVisible(value));
       const store={client,...state,selected:null,selectedId:null,status:'ready',query:'',includeArchived:false,documents:[],
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,importRequestId:0,
         claims:[],evidence:[],derivedStatus:'ready',derivedError:null,reload(){},reloadDerived(){},select(){},setQuery(){},setIncludeArchived(){}};
       const scope={client,projectId:state.projectId,writable:state.writable,workspacePath:'/synthetic',workspaceStatus:'ready',workspaceError:null};
-      return <WorkspaceScopeProvider value={scope}><LiteratureScopeProvider value={store}>
-        <LiteratureHubView view="discover" projectId={state.projectId}/></LiteratureScopeProvider></WorkspaceScopeProvider>;
+      return <ViewActivity active={visible}><div hidden={!visible} style={{height:'100%'}}><WorkspaceScopeProvider value={scope}><LiteratureScopeProvider value={store}>
+        <LiteratureHubView view="discover" projectId={state.projectId}/></LiteratureScopeProvider></WorkspaceScopeProvider></div></ViewActivity>;
     }
     window.mountHub=initial=>{window.navigations=0;flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));};
@@ -289,6 +291,14 @@ test('existing hub loads monitor reads only on first visit and creates real sear
   const checkView = page.getByTestId('literature-monitor-check').first(); await checkView.locator('summary').first().click();
   await checkView.getByTestId('literature-monitor-source').locator('summary').first().click();
   await expect(checkView).toContainText('来源报告结束');
+  await checkView.getByText('请求回执与来源快照',{exact:true}).click();
+  await expect(checkView.locator('pre')).toContainText('crossref');
+  const location=await page.locator('.monitor-detail').evaluate(node=>{node.scrollTop=170;return node.scrollTop;});
+  await page.evaluate(()=>window.setMonitorVisible(false));
+  await expect(checkView.locator('pre')).toHaveCount(0);
+  await page.evaluate(()=>window.setMonitorVisible(true));
+  await expect(checkView.locator('pre')).toContainText('crossref');
+  await expect.poll(()=>page.locator('.monitor-detail').evaluate(node=>node.scrollTop)).toBe(location);
   assert.equal(f.network.length, 2); assert.deepEqual(f.repository.getWorkflow(f.project.id), workflow);
   assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_evidence').pluck().get(), 0);
 });

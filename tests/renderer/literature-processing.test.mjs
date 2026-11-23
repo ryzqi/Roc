@@ -17,6 +17,8 @@ before(async () => {
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LiteratureProcessingPanel} from './src/renderer/literature/LiteratureProcessingPanel';
+    import {ResourceStatus} from './src/renderer/literature/ResourceStatus';
+    import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
     import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
     import {ViewActivity} from './src/renderer/shared/view-activity';
     import './src/renderer/styles/index.css';
@@ -52,6 +54,7 @@ before(async () => {
         addPdfToItem={async input=>{const result=await call('addPdfToItem',input,importOutcome);return result.data;}}
         onOpenPdf={path=>calls.push({method:'openPdf',input:path})}
         onOpenItem={id=>calls.push({method:'openItem',input:id})}
+        onOpenKnowledge={target=>calls.push({method:'openKnowledge',input:target})}
         onDocumentsChanged={()=>calls.push({method:'documentsChanged'})}/>
     </ViewActivity>));
     window.mount = (options={}) => {
@@ -63,6 +66,21 @@ before(async () => {
       if(options.empty) window.response=()=>({jobs:[],total:0,nextOffset:null});
       if(options.readonly) window.writable=false;
       renderPanel();
+    };
+    window.renderResource = () => flushSync(()=>root.render(<ViewActivity active={active}>
+      <WorkspaceScopeProvider value={{client,projectId,writable}}>
+        <ResourceStatus key={JSON.stringify([projectId,resourceItemId])}
+          itemId={resourceItemId} document={resourceDocument}
+          onMetadata={()=>calls.push({method:'metadata'})} onPdf={()=>calls.push({method:'pdf'})}
+          onParse={()=>calls.push({method:'parse'})} onKnowledge={target=>calls.push({method:'openKnowledge',input:target})}/>
+      </WorkspaceScopeProvider>
+    </ViewActivity>));
+    window.mountResource = (options={}) => {
+      mount(options);clear();
+      window.resourceItemId='item-a';
+      window.resourceDocument=options.metadataOnly?null:{id:'document-a',status:'ready',currentParseId:'parse-a',error:null};
+      if(options.metadataOnly)window.response=()=>({jobs:[],total:0,nextOffset:null});
+      renderResource();
     };
     function StoreProbe() {window.literatureStore=useLiteratureStore(client,projectId);return null;}
     window.mountStore=()=>{mount();clear();flushSync(()=>root.render(<StoreProbe/>));};
@@ -109,6 +127,13 @@ async function mount(options) {
   await expect(page.getByRole('status').first()).toContainText(options?.empty ? '暂无任务' : '共 22 篇任务');
 }
 async function expand() {await toggle().click();}
+async function mountResource(options) {
+  await page.evaluate(options => window.mountResource(options), options);
+  const toggle = page.getByTestId('reader-pipeline-toggle');
+  await toggle.focus(); await expect(toggle).toBeFocused(); await page.keyboard.press('Enter');
+  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
+  await expect(page.getByTestId('pipeline-stage-metadata')).toBeVisible();
+}
 
 test('progress is page-local and truthful, with keyboard disclosure, exact stage/errors and existing document actions', async () => {
   await mount();
@@ -126,6 +151,140 @@ test('progress is page-local and truthful, with keyboard disclosure, exact stage
     {method: 'openPdf', input: '.roc/literature/a.pdf'}, {method: 'openItem', input: 'item-a'}
   ]);
   assert.equal(await page.getByRole('button', {name: '取消处理：Paper b', exact: true}).count(), 0);
+});
+
+test('five-stage trajectory supports keyboard navigation and focuses the real retry without submitting it', async () => {
+  await mount(); await expand();
+  const failed = page.getByTestId('literature-processing-job-job-a');
+  await failed.getByTestId('pipeline-stage-metadata').focus(); await page.keyboard.press('Enter');
+  await failed.getByTestId('pipeline-stage-pdf').focus(); await page.keyboard.press('Space');
+  await failed.getByTestId('pipeline-stage-index').focus(); await page.keyboard.press('Enter');
+  await expect(failed.getByRole('button', {name:'重试处理：Paper a',exact:true})).toBeFocused();
+  await expect(failed.getByTestId('literature-processing-stage-detail')).toContainText('向量索引：待处理');
+  assert.equal(await count('retryAcquisition'), 0);
+  assert.equal(await count('openKnowledge'), 0);
+  const ready = page.getByTestId('literature-processing-job-job-b');
+  await ready.getByTestId('pipeline-stage-index').click();
+  await ready.getByTestId('pipeline-stage-wiki').focus(); await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => calls.filter(call => ['openPdf','openItem','openKnowledge'].includes(call.method))), [
+    {method:'openItem',input:'item-a'}, {method:'openPdf',input:'.roc/literature/a.pdf'},
+    {method:'openKnowledge',input:'index'}, {method:'openKnowledge',input:'wiki'}
+  ]);
+});
+
+test('reader stages retain verified facts and use explicit exact-generation retry with duplicate and conflict protection', async () => {
+  await mountResource();
+  const resource = page.getByTestId('reader-resource-status');
+  await resource.getByTestId('pipeline-stage-index').focus(); await page.keyboard.press('Enter');
+  await expect(resource.getByTestId('reader-pipeline-details')).toContainText('向量索引：待处理');
+  assert.equal(await count('retryAcquisition'), 0);
+  await page.evaluate(() => held.add('retryAcquisition'));
+  const retry = resource.getByTestId('reader-pipeline-retry');
+  await retry.evaluate(button => {button.click();button.click();});
+  assert.equal(await count('retryAcquisition'), 1);
+  await expect(retry).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'retryAcquisition').input),
+    {projectId:'project-a',destination:'current_project',jobId:'job-a',generation:'generation-a'});
+  const reads = await count('listAcquisition');
+  await page.evaluate(() => resolveNext('retryAcquisition',{ok:false,error:{message:'Generation changed. Refresh required.'}}));
+  await expect(resource.getByRole('alert').filter({hasText:'Generation changed'})).toBeVisible();
+  await expect.poll(() => count('listAcquisition')).toBeGreaterThan(reads);
+  await expect(retry).toBeEnabled();
+  await expect(resource.getByTestId('pipeline-stage-index')).toContainText('待处理');
+  await expect(resource.getByRole('status').filter({hasText:'已提交后台重试'})).toHaveCount(0);
+  assert.equal(await count('retryAcquisition'), 1);
+  await resource.getByRole('button',{name:'查看索引任务',exact:true}).click();
+  assert.deepEqual(await page.evaluate(() => calls.filter(call => call.method === 'openKnowledge')),
+    [{method:'openKnowledge',input:'index'}]);
+});
+
+test('reader metadata-only stages never claim full text and keep import and knowledge navigation explicit', async () => {
+  await mountResource({metadataOnly:true});
+  const resource = page.getByTestId('reader-resource-status');
+  await expect(resource.getByTestId('pipeline-stage-pdf')).toContainText('未获取');
+  await expect(resource.getByTestId('pipeline-stage-index')).toContainText('未建立');
+  await resource.getByTestId('pipeline-stage-metadata').focus();
+  await expect(resource.getByTestId('pipeline-stage-metadata')).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(resource.getByTestId('pipeline-stage-metadata')).toHaveAttribute('aria-pressed', 'true');
+  assert.equal(await count('metadata'), 1);
+  await resource.getByTestId('pipeline-stage-pdf').click();
+  assert.equal(await count('pdf'), 0);
+  await resource.getByRole('button',{name:'添加 PDF',exact:true}).click();
+  assert.equal(await count('pdf'), 1);
+  await resource.getByTestId('pipeline-stage-parse').click();
+  assert.equal(await count('parse'), 0);
+  await resource.getByTestId('pipeline-stage-wiki').click();
+  assert.equal(await count('openKnowledge'), 0);
+  await resource.getByRole('button',{name:'查看知识页',exact:true}).click();
+  assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'openKnowledge').input), 'wiki');
+  assert.equal(await count('retryAcquisition'), 0);
+});
+
+test('reader document hydration retains the open trajectory, selected stage and keyboard focus', async () => {
+  await mountResource({metadataOnly:true});
+  const resource = page.getByTestId('reader-resource-status');
+  const stage = resource.getByTestId('pipeline-stage-index');
+  await stage.click(); await stage.focus();
+  await expect(resource.getByTestId('reader-pipeline-details')).toContainText('向量索引：未建立');
+  await resource.evaluate(element => {window.retainedResource = element;});
+  await page.evaluate(() => {
+    resourceDocument={id:'document-a',status:'ready',currentParseId:'parse-a',error:null};renderResource();
+  });
+  assert.equal(await resource.evaluate(element => element === window.retainedResource), true);
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(stage).toBeFocused();
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await expect(resource.getByTestId('reader-pipeline-details')).toContainText('向量索引：待核验');
+});
+
+test('reader retry is readonly-safe and cannot apply another document receipt or a late prior-scope result', async () => {
+  await mountResource({readonly:true});
+  await page.getByTestId('pipeline-stage-index').click();
+  await expect(page.getByTestId('reader-pipeline-retry')).toBeDisabled();
+  await page.getByTestId('reader-pipeline-retry').evaluate(button => button.click());
+  assert.equal(await count('retryAcquisition'), 0);
+  await page.evaluate(() => {resourceDocument={...resourceDocument,id:'different-document'};renderResource();});
+  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
+  await expect(page.getByTestId('pipeline-stage-index')).toContainText('待核验');
+  await page.getByTestId('pipeline-stage-index').click();
+  await expect(page.getByTestId('reader-pipeline-retry')).toHaveCount(0);
+  await expect(page.getByText('embedding_unconfigured',{exact:true})).toHaveCount(0);
+  await mountResource();
+  await page.getByTestId('pipeline-stage-index').click();
+  await page.evaluate(() => held.add('retryAcquisition'));
+  await page.getByTestId('reader-pipeline-retry').click();
+  await page.evaluate(() => {
+    projectId='project-b';resourceItemId='item-b';resourceDocument=null;
+    response=()=>({jobs:[],total:0,nextOffset:null});renderResource();
+    resolveNext('retryAcquisition',{ok:true,data:job('a',{generation:'generation-new'})});
+  });
+  await page.getByTestId('reader-pipeline-toggle').click();
+  await expect(page.getByTestId('pipeline-stage-index')).toContainText('未建立');
+  await settle();
+  await expect(page.getByRole('status').filter({hasText:'已提交后台重试'})).toHaveCount(0);
+  assert.equal(await count('retryAcquisition'), 1);
+});
+
+test('reader retry ignores a late receipt after switching documents and returning to its original document', async () => {
+  await mountResource();
+  await page.getByTestId('pipeline-stage-index').click();
+  await page.evaluate(() => held.add('retryAcquisition'));
+  await page.getByTestId('reader-pipeline-retry').click();
+  await expect(page.getByTestId('reader-pipeline-retry')).toBeDisabled();
+  await page.evaluate(() => {
+    const original=resourceDocument;
+    resourceDocument={...original,id:'different-document'};renderResource();
+    resourceDocument=original;renderResource();
+  });
+  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
+  await expect(page.getByTestId('reader-pipeline-retry')).toBeEnabled();
+  const reads = await count('listAcquisition');
+  await page.evaluate(() => resolveNext('retryAcquisition',{ok:true,data:job('a',{generation:'generation-new'})}));
+  await settle();
+  await expect(page.getByRole('status').filter({hasText:'已提交后台重试'})).toHaveCount(0);
+  assert.equal(await count('listAcquisition'), reads);
+  assert.equal(await count('retryAcquisition'), 1);
 });
 
 test('acquisition preferences save explicit consent and receipt shows actual version/license at desktop size', async () => {

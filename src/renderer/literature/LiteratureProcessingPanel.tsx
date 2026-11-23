@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {ChevronDown, ChevronRight, RefreshCw} from 'lucide-react';
 import {PipelineProgress} from './PipelineProgress';
-import {literaturePipeline} from './pipeline-state';
+import {acquisitionPipelineStage, literaturePipeline, type PipelineStage} from './pipeline-state';
 import {AcquisitionPreferences} from './AcquisitionPreferences';
 import type {PaperAcquisitionJob} from '../../shared/schemas/literature-acquisition';
 import {useAsyncResource} from '../app/use-async-resource';
@@ -18,6 +18,7 @@ type Props = {
   addPdfToItem: (input: {sourcePath: string; libraryItemId: string}) => Promise<LiteratureImportOutcome>;
   onOpenPdf: (relativePath: string) => void;
   onOpenItem: (libraryItemId: string) => void;
+  onOpenKnowledge?: (target: 'index' | 'wiki') => void;
   onDocumentsChanged: () => void;
 };
 const buttonClass = 'min-h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
@@ -28,13 +29,14 @@ export function LiteratureProcessingPanel(props: Props): React.JSX.Element {
   return <ProcessingSession key={props.projectId} {...props}/>;
 }
 
-function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem, onOpenPdf, onOpenItem, onDocumentsChanged}: Props): React.JSX.Element {
+function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem, onOpenPdf, onOpenItem, onOpenKnowledge, onDocumentsChanged}: Props): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [preferences, setPreferences] = useState(false);
   const [offset, setOffset] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [inspectedStage, setInspectedStage] = useState<{jobId: string; stage: PipelineStage['id']} | null>(null);
   const locked = useRef(false), mounted = useRef(false);
   const writableRef = useRef(writable); writableRef.current = writable;
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
@@ -115,11 +117,28 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
       </p> : null}
       {page.data !== null && jobs.length === 0 ? <p className="py-2 text-muted">当前页无后台任务。仅导入元数据的文献不创建全文任务。</p> : null}
       <ul aria-label="逐篇处理进度" className="m-0 list-none p-0">
-        {jobs.map(job => <li key={job.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 border-t-[0.5px] border-line py-2" data-testid={`literature-processing-job-${job.id}`} aria-busy={pending === job.id}>
+        {jobs.map(job => <li key={job.id} id={`literature-processing-row-${job.id}`} className="flex flex-wrap items-start gap-x-3 gap-y-1 border-t-[0.5px] border-line py-2" data-testid={`literature-processing-job-${job.id}`} aria-busy={pending === job.id}>
           <div className="min-w-0 flex-[1_1_240px]">
             <button type="button" onClick={() => onOpenItem(job.libraryItemId)} className={`${buttonClass} max-w-full break-words text-left text-ink`}>{job.title}</button>
             <p className="px-2 text-muted">{acquisitionStageLabels[job.stage]}：{acquisitionStatusLabels[job.status]}</p>
-            <div className="p-2"><PipelineProgress stages={literaturePipeline(null, job)}/></div>
+            <div className="p-2"><PipelineProgress stages={literaturePipeline(null, job)} onSelect={stage => {
+              setInspectedStage({jobId: job.id, stage});
+              if (stage === 'metadata') {onOpenItem(job.libraryItemId); return;}
+              if (stage === 'pdf' && job.receipt?.relativePath) {onOpenPdf(job.receipt.relativePath); return;}
+              if (stage === acquisitionPipelineStage(job) && canRetryAcquisition(job)) {
+                // Reveal the existing guarded action; selecting a stage never submits a write.
+                const row = document.getElementById(`literature-processing-row-${job.id}`);
+                row?.querySelector<HTMLButtonElement>('[data-processing-retry]')?.focus();
+                return;
+              }
+              if (stage === 'index' || stage === 'wiki') {if (onOpenKnowledge) onOpenKnowledge(stage); return;}
+              onOpenItem(job.libraryItemId);
+            }} selected={inspectedStage?.jobId === job.id ? inspectedStage.stage : null}/></div>
+            {inspectedStage?.jobId !== job.id ? null : <p className="px-2 text-muted" data-testid="literature-processing-stage-detail">
+              {literaturePipeline(null, job).find(stage => stage.id === inspectedStage.stage)?.label}：
+              {literaturePipeline(null, job).find(stage => stage.id === inspectedStage.stage)?.state}
+              {inspectedStage.stage !== acquisitionPipelineStage(job) || !canRetryAcquisition(job) ? null : '，可核对下方原因后重试。'}
+            </p>}
             {job.receipt ? <div className="break-words px-2 text-muted">
               <p>全文来源：{job.receipt.provider}，版本：{{published: '正式发表版', accepted: '接受稿', preprint: '预印本', unknown: '未标注'}[job.receipt.version]}，许可证：{job.receipt.license ?? '未标注'}</p>
               <details><summary className="cursor-pointer">下载凭证</summary>
@@ -134,7 +153,7 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
           </div>
           <div className="flex flex-wrap gap-1">
             {job.receipt?.relativePath ? <button type="button" className={buttonClass} onClick={() => {if (job.receipt?.relativePath) onOpenPdf(job.receipt.relativePath);}} aria-label={`打开 PDF：${job.title}`}>打开 PDF</button> : null}
-            {canRetryAcquisition(job) ? <button type="button" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'retry')} aria-label={`重试处理：${job.title}`}>重试</button> : null}
+            {canRetryAcquisition(job) ? <button type="button" data-processing-retry className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'retry')} aria-label={`重试处理：${job.title}`}>重试</button> : null}
             {canCancelAcquisition(job) ? <button type="button" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'cancel')} aria-label={`取消处理：${job.title}`}>取消处理</button> : null}
             {canRetryAcquisition(job) ? <button type="button" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'attach')} aria-label={`手动补充 PDF：${job.title}`}>手动补充 PDF</button> : null}
             {pending === job.id ? <span className="self-center text-muted">正在提交…</span> : null}

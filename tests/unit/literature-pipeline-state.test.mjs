@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
-const {literaturePipeline} = await importTypeScriptModule('src/renderer/literature/pipeline-state.ts');
+const {acquisitionPipelineStage, literaturePipeline} = await importTypeScriptModule('src/renderer/literature/pipeline-state.ts');
 const states = (document, job) => Object.fromEntries(literaturePipeline(document, job).map(stage => [stage.id, stage.state]));
 const job = {stage: 'resolve', status: 'queued', receipt: null, documentId: null};
 
@@ -30,4 +30,10 @@ test('wiki failure does not erase the verified index or mark knowledge generatio
 });
 test('cancelled acquisition never claims a saved full text', () => {
   assert.equal(states(null, {...job, status: 'cancelled'}).pdf, '已取消');
+});
+test('the retry detail targets the actual durable acquisition stage', () => {
+  for (const [stage, expected] of [['resolve', 'pdf'], ['download', 'pdf'], ['import', 'pdf'],
+    ['parse', 'parse'], ['index', 'index'], ['wiki', 'wiki']]) {
+    assert.equal(acquisitionPipelineStage({...job, stage}), expected);
+  }
 });

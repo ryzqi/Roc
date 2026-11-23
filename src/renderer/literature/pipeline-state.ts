@@ -3,6 +3,10 @@ import type {ResearchDocument} from '../../shared/types';
 
 export type PipelineStage = {id: 'metadata' | 'pdf' | 'parse' | 'index' | 'wiki'; label: string; state: string};
 
+export function acquisitionPipelineStage(job: PaperAcquisitionJob): PipelineStage['id'] {
+  return job.stage === 'resolve' || job.stage === 'download' || job.stage === 'import' ? 'pdf' : job.stage;
+}
+
 /** Acquisition stages advance only after the preceding durable receipt is verified. */
 export function literaturePipeline(document: ResearchDocument | null, job: PaperAcquisitionJob | null): PipelineStage[] {
   const at = job === null ? -1 : ['resolve', 'download', 'import', 'parse', 'index', 'wiki'].indexOf(job.stage);
@@ -15,9 +19,9 @@ export function literaturePipeline(document: ResearchDocument | null, job: Paper
   }[document.status];
   return [
     {id: 'metadata', label: '论文信息', state: '已收录'},
-    {id: 'pdf', label: '全文', state: document !== null || job?.receipt != null || job?.documentId != null ? '已保存' : at >= 0 && at <= 2 ? current : '未获取'},
-    {id: 'parse', label: '解析', state: at > 3 ? '已完成' : at === 3 ? current : parseState},
-    {id: 'index', label: '索引', state: at > 4 ? '可检索' : at === 4 ? current : document?.currentParseId ? '待核验' : '未建立'},
+    {id: 'pdf', label: 'PDF 获取', state: document !== null || job?.receipt != null || job?.documentId != null ? '已保存' : at >= 0 && at <= 2 ? current : '未获取'},
+    {id: 'parse', label: '全文解析', state: at > 3 ? '已完成' : at === 3 ? current : parseState},
+    {id: 'index', label: '向量索引', state: at > 4 ? '可检索' : at === 4 ? current : document?.currentParseId ? '待核验' : '未建立'},
     {id: 'wiki', label: '知识页', state: at === 5 ? job?.status === 'ready' ? '可查看' : current : '未确认生成'}
   ];
 }

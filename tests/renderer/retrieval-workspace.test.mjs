@@ -12,14 +12,21 @@ const errors = [];
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-retrieval-workspace-'));
   await buildViteRenderer({directory, script: `
-    import React from 'react';
+    import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {RagStudio} from './src/renderer/literature/RagStudio';
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     import {researchKnowledgeSearchResultSchema} from './src/shared/schemas/research';
     const root=createRoot(document.getElementById('root'));
     let session=0;
+    function Retained({children}) {
+      const [active,setActive]=useState(true);
+      window.setRetrievalActive=value=>flushSync(()=>setActive(value));
+      return <><button data-testid="outside-retrieval" style={{position:'fixed',top:0,right:0}}>Other workspace</button>
+        <ViewActivity active={active}><div hidden={!active} style={{height:'100%'}}>{children}</div></ViewActivity></>;
+    }
     window.mount=()=>{
       window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[],questions:[]};
       window.emptyResults=false;
@@ -56,8 +63,8 @@ before(async () => {
         captureChunkEvidence:async id=>{window.calls.evidence.push(id);return true;},
         saveKnowledgeNote:async input=>{window.calls.notes.push(input);return true;}};
       const scope={client,projectId:'p1',writable:true,workspacePath:'/tmp/synthetic-retrieval',openSettings:()=>{}};
-      flushSync(()=>root.render(<WorkspaceScopeProvider value={scope}><RagStudio key={++session} literature={literature}
-        openInFilesView={path=>window.calls.opened.push({path})} onOpenInReader={target=>window.calls.opened.push(target)}/></WorkspaceScopeProvider>));
+      flushSync(()=>root.render(<Retained key={++session}><WorkspaceScopeProvider value={scope}><RagStudio literature={literature}
+        openInFilesView={path=>window.calls.opened.push({path})} onOpenInReader={target=>window.calls.opened.push(target)}/></WorkspaceScopeProvider></Retained>));
     };
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedText=text;}}});
     window.mount();
@@ -170,6 +177,33 @@ test('failed retrieval keeps the last evidence and its original query visible', 
   await page.getByTestId('rag-query').fill('attention energy');
   await page.getByTestId('rag-search').click();
   await expect(page.getByTestId('rag-search-error')).toHaveCount(0);
+});
+
+test('hidden retrieval releases readonly markup while retaining query, selection, expansion, details and scroll', async () => {
+  await page.setViewportSize({width:1100,height:760});
+  await page.getByTestId('rag-evidence-file-hit').click();
+  await page.getByTestId('rag-hit-paper-hit').getByRole('button',{name:'展开原文',exact:true}).click();
+  await page.getByTestId('rag-result-details').locator('summary').click();
+  await page.getByTestId('rag-hit-paper-hit').locator('.rag-hit-ranking summary').click();
+  const top=await page.getByTestId('rag-results').evaluate(node=>{node.scrollTop=160;return node.scrollTop;});
+  assert.ok(top>0);
+  const before=await page.evaluate(()=>window.calls.search.length);
+  await page.evaluate(()=>window.setRetrievalActive(false));
+  await expect(page.getByTestId('rag-hits')).toHaveCount(0);
+  await expect(page.getByTestId('rag-evidence-file-hit')).toHaveCount(0);
+  await page.getByTestId('outside-retrieval').focus();
+  await page.evaluate(()=>window.setRetrievalActive(true));
+  await expect(page.getByTestId('rag-hit-paper-hit').locator('.katex').first()).toBeVisible();
+  await expect(page.getByTestId('rag-hit-paper-hit').getByRole('button',{name:'收起原文',exact:true})).toBeVisible();
+  await expect(page.getByTestId('rag-evidence-file-hit')).toHaveAttribute('aria-current','true');
+  await expect(page.getByTestId('rag-result-details')).toHaveAttribute('open','');
+  await expect(page.getByTestId('rag-hit-paper-hit').locator('.rag-hit-ranking')).toHaveAttribute('open','');
+  await expect.poll(()=>page.getByTestId('rag-results').evaluate(node=>node.scrollTop)).toBe(top);
+  await expect(page.getByTestId('outside-retrieval')).toBeFocused();
+  await expect(page.getByTestId('rag-query')).toHaveValue('attention energy');
+  assert.equal(await page.evaluate(()=>window.calls.search.length),before);
+  await page.getByTestId('rag-hit-paper-hit').getByRole('button',{name:'收起原文',exact:true}).click();
+  await page.getByTestId('rag-result-details').locator('summary').click();
 });
 
 test('search results retain usable space in narrow and wide canvases with both themes',async()=>{

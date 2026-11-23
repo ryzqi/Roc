@@ -1,5 +1,6 @@
 import { useViewSelected, useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeft, Bookmark, Check, ChevronDown, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
@@ -47,6 +48,7 @@ const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
 
 export type RagStudioProps = {
   literature: LiteratureStore;
+  indexRequestId?: number;
   openInFilesView: (relativePath: string) => void;
   /**
    * Open the reader for a hit. `parseId` is the hit's own parse when it named one
@@ -91,16 +93,18 @@ export function RagStudio(props: RagStudioProps): React.JSX.Element {
   return <RagStudioContent key={props.literature.projectId} {...props} />;
 }
 
-function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagStudioProps): React.JSX.Element {
+function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRequestId = 0 }: RagStudioProps): React.JSX.Element {
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
   const [indexOpen, setIndexOpen] = useState(false);
+  useEffect(() => {if (indexRequestId > 0) setIndexOpen(true);}, [indexRequestId]);
   const [expandedHits, setExpandedHits] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedHitId, setSelectedHitId] = useState<string | null>(null);
   const hitRefs = useRef(new Map<string, HTMLLIElement>());
   const lastOpenedHit = useRef<string | null>(null);
   const viewSelected = useViewSelected();
+  const readingRoot = useRef<HTMLDivElement>(null);
   const wasSelected = useRef(viewSelected);
   const queryRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
@@ -354,7 +358,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     ({literature: '文献', file: '工作区文件', note: '知识笔记', experiment: '实验记录'} as Readonly<Record<string, string>>)[hit.sourceType] ?? '知识来源';
 
   return (
-    <div className="rag-studio flex h-full min-h-0 min-w-0 flex-col" data-testid="rag-studio">
+    <ReadingViewBoundary selected={viewSelected} identity={result} containerRef={readingRoot}
+      scrollSelectors={['.rag-results','.rag-evidence-sidebar']}>
+    <div ref={readingRoot} className="rag-studio flex h-full min-h-0 min-w-0 flex-col" data-testid="rag-studio">
       <header className="rag-heading">
         <div className="rag-heading-title">
           {indexOpen ? <button ref={backRef} type="button" className="rag-button" aria-label="返回检索" onClick={() => setIndexOpen(false)}>
@@ -601,13 +607,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
 
           <div className="rag-results-layout" data-has-evidence={Boolean(result?.hits.length)}>
           <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
-            {result === null ? (
+            {!viewSelected ? null : result === null ? (
               <EmptyState tone={searching ? 'loading' : 'empty'} icon={searching ? Loader2 : Search}
                 title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
             ) : <>
               <div className="rag-results-heading">
                 <p role="status" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></p>
-                <details className="rag-result-details" data-testid="rag-result-details">
+                <details className="rag-result-details" data-testid="rag-result-details" data-reading-detail="result">
                   <summary>检索详情</summary>
                   <div className="text-muted" data-testid="rag-search-meta">
                     <p>关键词命中 {result.keywordCount} 条，语义命中 {result.vectorCount} 条</p>
@@ -651,7 +657,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                         <button type="button" disabled={literature.action.pending || !scope.writable} onClick={() => saveHitAsNote(hit)}
                           data-testid={`rag-hit-save-${hit.chunkId}`} className="rag-button"><Bookmark size={13} aria-hidden="true" />写入知识库</button>
                       </footer>
-                      <details className="rag-hit-ranking"><summary>匹配依据</summary>
+                      <details className="rag-hit-ranking" data-reading-detail={`ranking:${hit.chunkId}`}><summary>匹配依据</summary>
                         <span>融合分数 {hit.rrfScore.toFixed(4)}</span>
                         {hit.keywordRank === null ? null : <span>关键词第 {hit.keywordRank} 名</span>}
                         {hit.vectorRank === null ? null : <span>语义第 {hit.vectorRank} 名</span>}
@@ -671,6 +677,6 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
           </div>
         </>
       )}
-    </div>
+    </div></ReadingViewBoundary>
   );
 }

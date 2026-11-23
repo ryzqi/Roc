@@ -1,4 +1,4 @@
-import {useState,useEffect,useDeferredValue} from 'react';
+import {useState,useEffect,useDeferredValue,useRef} from 'react';
 import {EditorContent, Node, nodeInputRule, useEditor, type Editor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {Markdown} from '@tiptap/markdown';
@@ -9,6 +9,8 @@ import {useImeGuard} from '../shared/hooks/use-ime-guard';
 import 'katex/dist/katex.min.css';
 import './reading.css';
 import ScientificMarkdown, {FormulaPreview} from './ScientificMarkdown';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 
 const WikiLink = Node.create({
   name:'wikiLink',group:'inline',inline:true,atom:true,
@@ -36,6 +38,7 @@ const actions: {label:string; run:(editor:Editor)=>void}[] = [
 export default function ReadingNoteEditor({markdown,editable,titles,onChange,onLink}: {
   markdown:string;editable:boolean;titles:string[];onChange:(markdown:string)=>void;onLink:(title:string)=>void;
 }):React.JSX.Element {
+  const selected=useViewSelected(),root=useRef<HTMLDivElement>(null);
   const [slash,setSlash]=useState(false),[source,setSource]=useState(false),[formula,setFormula]=useState('');
   const [formulaOpen,setFormulaOpen]=useState(false);
   const previewMarkdown=useDeferredValue(markdown);
@@ -61,7 +64,9 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
       }},onUpdate:({editor})=>onChange(editor.getMarkdown())});
   useEffect(()=>{editor?.setEditable(editable&&!source);},[editor,editable,source]);
   if(!editor)return <p role="status">加载编辑器…</p>;
-  return <div className="reading-editor flex min-h-0 flex-1 flex-col" data-mode={source?'source':'rich'}>
+  return <ReadingViewBoundary selected={selected} identity={markdown} containerRef={root}
+    scrollSelectors={['.reading-preview-pane .scientific-markdown','.reading-source-input','.reading-rich-text']}>
+    <div ref={root} className="reading-editor flex min-h-0 flex-1 flex-col" data-mode={source?'source':'rich'}>
     <div className="reading-toolbar" role="toolbar" aria-label="笔记格式">
       <button type="button" disabled={!editable||source} onClick={()=>editor.chain().focus().toggleBold().run()} aria-label="粗体"><b>B</b></button>
       <button type="button" disabled={!editable||source} onClick={()=>editor.chain().focus().toggleItalic().run()} aria-label="斜体"><i>I</i></button>
@@ -89,8 +94,8 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
         <textarea className="reading-source-input" aria-label="Markdown 源码" value={markdown} readOnly={!editable}
           spellCheck={false} onChange={event=>onChange(event.target.value)}/></label>
       <section className="reading-preview-pane" aria-label="Markdown 实时预览" data-testid="notes-markdown-preview">
-        <span className="reading-pane-label">实时预览</span><ScientificMarkdown text={previewMarkdown}/>
+        <span className="reading-pane-label">实时预览</span>{selected?<ScientificMarkdown text={previewMarkdown}/>:null}
       </section>
     </div>:<div className="reading-rich-text"><EditorContent editor={editor}/></div>}
-  </div>;
+  </div></ReadingViewBoundary>;
 }

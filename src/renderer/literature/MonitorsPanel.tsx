@@ -5,6 +5,8 @@ import {useAsyncResource} from '../app/use-async-resource';
 import MonitorEditor from './MonitorEditor';
 import {monitorButton, MonitorReadState, MonitorPager} from './MonitorHistory';
 import {LiteratureEditorBoundary} from './literature-editor-guard';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 import './discovery-workspace.css';
 
 type Props = {
@@ -18,6 +20,7 @@ export default function MonitorsPanel(props: Props): React.JSX.Element {
 }
 
 function MonitorsContent({client, projectId, items, writable, active, onLockChange}: Props): React.JSX.Element {
+  const viewSelected = useViewSelected(), readingRoot = useRef<HTMLElement>(null);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -40,7 +43,9 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
     if (lockRef.current) return;
     setSelected(id); setCreating(id === null);
   };
-  return <section aria-label="文献监控" data-testid="literature-monitors" className="monitor-workspace" data-detail={selected !== null || creating}>
+  return <ReadingViewBoundary selected={viewSelected} identity={JSON.stringify([projectId,selected])}
+    containerRef={readingRoot} scrollSelectors={['.monitor-detail','.monitor-index']}>
+    <section ref={readingRoot} aria-label="文献监控" data-testid="literature-monitors" className="monitor-workspace" data-detail={selected !== null || creating}>
     <header className="monitor-toolbar">
       <div><h2>文献监控</h2></div>
       <button className={monitorButton} type="button" disabled={!writable || locked}
@@ -87,5 +92,5 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
     </>}
     </div>
     </div>
-  </section>;
+  </section></ReadingViewBoundary>;
 }

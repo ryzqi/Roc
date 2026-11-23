@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
-import type { LiteratureImportResult, LiteratureSearchInput, LiteratureSearchResult } from '../../shared/schemas/literature-import';
+import type { LiteratureImportResult, LiteratureSearchInput, LiteratureSearchResult, LiteratureSearchProgress } from '../../shared/schemas/literature-import';
 import type { LiteratureImportOutcome, LiteratureStore } from './use-literature-store';
 import type { LiteratureSearchSource } from './library-store';
 
@@ -20,8 +20,10 @@ export type LiteratureImportActions = {
     query: string,
     sources: LiteratureSearchSource[],
     limit: number,
-    filters?: Pick<LiteratureSearchInput, 'yearFrom' | 'yearTo'>
+    filters?: Pick<LiteratureSearchInput, 'yearFrom' | 'yearTo'>,
+    options?: {paginated?: boolean; onProgress?: (progress: LiteratureSearchProgress) => void}
   ) => Promise<{ ok: true; result: LiteratureSearchResult } | { ok: false; message: string }>;
+  readSearch: (searchId: string, offset: number, limit: number) => Promise<{ok: true; result: LiteratureSearchResult} | {ok: false; message: string}>;
   addCandidates: (searchId: string, candidateIds: string[]) => Promise<{ ok: true; result: LiteratureImportResult } | { ok: false; message: string }>;
   addCandidate: (searchId: string, candidateId: string) => Promise<LiteratureImportOutcome>;
 };
@@ -45,15 +47,29 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
   }, [client]);
 
   const searchLiterature = useCallback(
-    async (query: string, sources: LiteratureSearchSource[], limit: number, filters?: Pick<LiteratureSearchInput, 'yearFrom' | 'yearTo'>) => {
-      const result = await client.api.research.searchLiterature({ query, sources, limit, maxPages: 1, projectId, ...filters });
-      if (!result.ok) {
-        return { ok: false as const, message: result.error.message };
+    async (query: string, sources: LiteratureSearchSource[], limit: number, filters?: Pick<LiteratureSearchInput, 'yearFrom' | 'yearTo'>,
+      options?: {paginated?: boolean; onProgress?: (progress: LiteratureSearchProgress) => void}) => {
+      const requestId = crypto.randomUUID();
+      const unsubscribe = options?.onProgress === undefined ? undefined : client.api.research.onLiteratureSearchProgress(progress => {
+        if (progress.requestId === requestId && progress.projectId === projectId) options.onProgress?.(progress);
+      });
+      try {
+        const result = await client.api.research.searchLiterature({ query, sources, limit, maxPages: 1, projectId, ...filters,
+          ...(options?.paginated ? {pageSize: limit, requestId} : {}) });
+        if (!result.ok) return { ok: false as const, message: result.error.message };
+        return { ok: true as const, result: result.data };
+      } finally {
+        unsubscribe?.();
       }
-      return { ok: true as const, result: result.data };
     },
     [client, projectId]
   );
+
+  const readSearch = useCallback(async (searchId: string, offset: number, limit: number) => {
+    const result = await client.api.research.readLiteratureSearch({searchId, offset, limit, projectId});
+    if (!result.ok) return {ok: false as const, message: result.error.message};
+    return {ok: true as const, result: result.data};
+  }, [client, projectId]);
 
   const addCandidates = useCallback(async (searchId: string, candidateIds: string[]) => {
     const ids = [...new Set(candidateIds)];
@@ -81,7 +97,7 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
   }, [addCandidates]);
 
   return useMemo(
-    () => ({ pickFile, searchLiterature, addCandidate, addCandidates }),
-    [pickFile, searchLiterature, addCandidate, addCandidates]
+    () => ({ pickFile, searchLiterature, readSearch, addCandidate, addCandidates }),
+    [pickFile, searchLiterature, readSearch, addCandidate, addCandidates]
   );
 }

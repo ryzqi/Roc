@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
-import type { LiteratureImportResult, LiteratureSearchResult } from '../../shared/schemas/literature-import';
+import type { LiteratureImportResult, LiteratureSearchResult, LiteratureSearchProgress } from '../../shared/schemas/literature-import';
 import { formButtonClass, formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
 import { useImeGuard } from '../shared/hooks/use-ime-guard';
 import { EmptyState } from '../shell/EmptyState';
@@ -9,6 +9,8 @@ import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 import type { LiteratureImportActions } from './use-literature-import-actions';
 import {DiscoveryCandidatePreview} from './DiscoveryCandidatePreview';
+import {useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from './ReadingViewBoundary';
 import './discovery-search.css';
 
 const SOURCES: { id: LiteratureSearchSource; label: string }[] = [
@@ -25,9 +27,17 @@ const DISPOSITION: Record<LiteratureImportResult['items'][number]['disposition']
   failed: '添加失败', cancelled: '已取消', not_processed: '尚未处理'
 };
 
-export default function DiscoverySearch({ store, actions, writable, onOpenLibrary }: {
+type Props = {
   store: LiteratureStore; actions: LiteratureImportActions; writable: boolean; onOpenLibrary: () => void;
-}): React.JSX.Element {
+};
+
+export default function DiscoverySearch(props: Props): React.JSX.Element {
+  return <DiscoverySearchScope key={props.store.projectId ?? 'global'} {...props}/>;
+}
+
+function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props): React.JSX.Element {
+  const viewSelected = useViewSelected();
+  const readingRoot = useRef<HTMLElement>(null);
   const [query, setQuery] = useState('');
   const [years, setYears] = useState<0 | 2 | 5>(0);
   const [sources, setSources] = useState<LiteratureSearchSource[]>(SOURCES.slice(0, 6).map(source => source.id));
@@ -39,7 +49,10 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
   const previewCandidate = result?.candidates.find(candidate => candidate.candidateId === previewId) ?? result?.candidates[0] ?? null;
   const resultList = useRef<HTMLDivElement>(null);
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
-  const [pending, setPending] = useState<'search' | 'add' | null>(null);
+  const [pending, setPending] = useState<'search' | 'more' | 'add' | null>(null);
+  const [progress, setProgress] = useState<LiteratureSearchProgress[]>([]);
+  const mounted = useRef(true);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const operationInFlight = useRef(false);
   const [addingIds, setAddingIds] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -47,39 +60,68 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
   const receiptRef = useRef<HTMLElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
-    if (receipt !== null) {receiptRef.current?.focus(); receiptRef.current?.scrollIntoView({block: 'nearest'});}
+    if (viewSelected && receipt !== null) {receiptRef.current?.focus(); receiptRef.current?.scrollIntoView({block: 'nearest'});}
   }, [receipt]);
   useEffect(() => {
     if (error === null) return;
     setPreviewOpen(false);
-    requestAnimationFrame(() => {errorRef.current?.focus(); errorRef.current?.scrollIntoView({block: 'nearest'});});
+    if (!viewSelected) return;
+    const frame = requestAnimationFrame(() => {errorRef.current?.focus(); errorRef.current?.scrollIntoView({block: 'nearest'});});
+    return () => cancelAnimationFrame(frame);
   }, [error]);
   const ime = useImeGuard();
   const inLibrary = (candidate: LiteratureSearchResult['candidates'][number]): boolean => added.has(candidate.candidateId) ||
     (candidate.matchedLibraryItemId !== null && store.items.some(item => item.id === candidate.matchedLibraryItemId));
   const selectable = result?.candidates.filter(candidate => !candidate.archived && !inLibrary(candidate)) ?? [];
+  const batch = selectable.slice(0, 30);
 
   const search = async (): Promise<void> => {
     if (operationInFlight.current || query.trim() === '' || sources.length === 0) return;
     operationInFlight.current = true;
-    setPending('search'); setError(null); setReceipt(null);
+    setPending('search'); setError(null); setReceipt(null); setProgress([]);
     try {
       const year = new Date().getFullYear();
       const response = await actions.searchLiterature(query.trim(), sources, 30,
-        years === 0 ? undefined : { yearFrom: year - years + 1, yearTo: year });
+        years === 0 ? undefined : { yearFrom: year - years + 1, yearTo: year },
+        {paginated: true, onProgress: event => {
+          if (mounted.current) setProgress(current => [...current.filter(item => item.source.source !== event.source.source), event]);
+        }});
+      if (!mounted.current) return;
       if (!response.ok) { setError(response.message); return; }
       setResult(response.result); setResultQuery(query.trim()); setSelected(new Set()); setAdded(new Set());
       setPreviewId(response.result.candidates[0]?.candidateId ?? null); setPreviewOpen(false);
       resultList.current?.scrollTo({top: 0});
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { operationInFlight.current = false; setPending(null); }
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { operationInFlight.current = false; if (mounted.current) {setPending(null); setProgress([]);} }
+  };
+
+  const loadMore = async (): Promise<void> => {
+    if (operationInFlight.current || result?.nextOffset == null) return;
+    operationInFlight.current = true;
+    const previous = result;
+    setPending('more'); setError(null);
+    try {
+      const response = await actions.readSearch(previous.searchId, previous.nextOffset!, 30);
+      if (!mounted.current) return;
+      if (!response.ok) {setError(response.message); return;}
+      const next = response.result;
+      if (next.searchId !== previous.searchId || next.total !== previous.total ||
+          next.nextOffset !== null && next.nextOffset <= previous.nextOffset!) throw new Error('检索分页未推进，请重新搜索。');
+      const ids = new Set(previous.candidates.map(candidate => candidate.candidateId));
+      if (next.candidates.some(candidate => ids.has(candidate.candidateId)) || next.candidates.length === 0) {
+        throw new Error('检索分页内容不一致，请重新搜索。');
+      }
+      setResult({...next, candidates: [...previous.candidates, ...next.candidates]});
+    } catch (cause) {if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause));}
+    finally {operationInFlight.current = false; if (mounted.current) setPending(null);}
   };
   const add = async (ids: string[]): Promise<void> => {
-    if (operationInFlight.current || result === null || !writable || ids.length === 0) return;
+    if (operationInFlight.current || result === null || !writable || ids.length === 0 || ids.length > 30) return;
     operationInFlight.current = true;
     setPending('add'); setAddingIds(new Set(ids)); setError(null); setReceipt(null);
     try {
       const response = await actions.addCandidates(result.searchId, ids);
+      if (!mounted.current) return;
       if (!response.ok) { setError(response.message); return; }
       const successful = response.result.items.filter(item =>
         item.disposition === 'created' || item.disposition === 'linked' || item.disposition === 'already_present')
@@ -88,15 +130,17 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       setSelected(current => new Set([...current].filter(id => !successful.includes(id))));
       setReceipt({ result: response.result, titles: ids.map(id => result.candidates.find(candidate => candidate.candidateId === id)!.record.title) });
       setPreviewOpen(false);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { operationInFlight.current = false; setPending(null); setAddingIds(new Set()); }
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { operationInFlight.current = false; if (mounted.current) {setPending(null); setAddingIds(new Set());} }
   };
 
-  return <section className="discovery-search flex h-full min-h-0 flex-col" aria-label="学术搜索" data-testid="discovery-search">
+  return <ReadingViewBoundary selected={viewSelected} identity={result?.searchId} containerRef={readingRoot}
+    scrollSelectors={['.discovery-result-list', '.discovery-preview-scroll']}>
+  <section ref={readingRoot} className="discovery-search flex h-full min-h-0 flex-col" aria-label="学术搜索" data-testid="discovery-search">
     <form className="ui-scroll-region flex max-h-[48%] shrink-0 flex-col gap-3 border-b-[0.5px] border-line p-4" onSubmit={event => { event.preventDefault(); void search(); }}>
       <label htmlFor="discovery-query" className="font-medium text-ink">研究主题或关键词</label>
       <div className="flex items-center gap-2">
-        <input id="discovery-query" value={query} onChange={event => setQuery(event.target.value)} className={formInputClass}
+        <input id="discovery-query" value={query} disabled={pending !== null} onChange={event => setQuery(event.target.value)} className={formInputClass}
           onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
           onKeyDown={event => { if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault(); }} />
         <button type="submit" disabled={pending !== null || query.trim() === '' || sources.length === 0}
@@ -123,9 +167,22 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       </details>
     </form>
 
-    <div className="discovery-result-workspace" data-preview-open={previewOpen}>
+    {viewSelected ? <div className="discovery-result-workspace" data-preview-open={previewOpen}>
     <div ref={resultList} className="discovery-result-list" aria-busy={pending === 'search'}>
       {error === null ? null : <p ref={errorRef} tabIndex={-1} role="alert" className="mb-3 text-[var(--st-bad)]">{error}</p>}
+      {pending !== 'search' ? null : <section className="mb-4 flex flex-col gap-2" aria-label="来源检索进度" data-testid="discovery-source-progress">
+        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-muted">{sources.map(source => {
+          const completed = progress.find(item => item.source.source === source)?.source;
+          return <li key={source}>{SOURCES.find(item => item.id === source)?.label ?? source}：
+            {completed === undefined ? '等待结果' : SOURCE_STATUS[completed.status]}
+            {completed !== undefined && completed.returnedCount > 0 ? ` ${completed.returnedCount} 篇` : ''}</li>;
+        })}</ul>
+        {progress.every(item => item.records.length === 0) ? null : <>
+          <p className="text-muted">已返回原始记录，来源合并完成后可选择加入。</p>
+          <ul>{progress.flatMap(item => item.records.map((record, index) => <li key={`${item.source.source}:${index}`}
+            className="border-b-[0.5px] border-line py-2 break-words">{record.title}</li>)).slice(0, 30)}</ul>
+        </>}
+      </section>}
       {result === null ? <EmptyState compact tone={pending === 'search' ? 'loading' : 'empty'}
         icon={pending === 'search' ? Loader2 : Search} title={pending === 'search' ? '正在检索论文…' : '搜索论文后选择加入项目'} /> : <>
         <div role="status" className="flex flex-col gap-2" data-testid="discovery-source-report">
@@ -139,28 +196,32 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
               {source.errorCode === null ? '' : `（${source.errorCode}）`}
             </li>)}
           </ul>
-          {result.warnings.length === 0 ? null : <details className="text-muted"><summary>检索说明</summary>
+          {result.warnings.length === 0 ? null : <details data-reading-detail="search-warnings" className="text-muted"><summary>检索说明</summary>
             <ul className="mt-2 space-y-2">{result.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
           </details>}
-          {result.truncated ? <p className="text-muted">仅展示本次返回的候选，可缩小主题或时间范围继续检索。</p> : null}
+          {result.truncated ? <p className="text-muted">候选仅覆盖本次已请求的来源页面，可缩小主题或时间范围继续检索。</p> : null}
         </div>
         {result.candidates.length === 0 ? <EmptyState compact title="没有匹配的文献" action={{ label: '修改查询', onClick: () => document.getElementById('discovery-query')?.focus() }} /> : <>
           <div className="mt-4 flex items-center justify-between gap-2 border-b-[0.5px] border-line py-2">
             <label className="flex min-h-6 items-center gap-2 text-muted">
-              <input type="checkbox" checked={selectable.length > 0 && selectable.every(candidate => selected.has(candidate.candidateId))}
-                disabled={!writable || pending !== null || selectable.length === 0}
-                onChange={event => setSelected(event.target.checked ? new Set(selectable.map(candidate => candidate.candidateId)) : new Set())} />
+              <input type="checkbox" checked={batch.length > 0 && batch.every(candidate => selected.has(candidate.candidateId))}
+                disabled={!writable || pending !== null || batch.length === 0}
+                onChange={event => setSelected(event.target.checked ? new Set(batch.map(candidate => candidate.candidateId)) : new Set())} />
               选择可添加文献
             </label>
-            <span className="tabular-nums text-muted">已选 {selected.size} 篇</span>
+            <span className="tabular-nums text-muted">已选 {selected.size} 篇{selectable.length > 30 ? '，每次最多 30 篇' : ''}</span>
           </div>
           <ul>{result.candidates.map(candidate => <LiteratureCandidateReview key={candidate.candidateId} candidate={candidate}
             compact active={candidate.candidateId === previewCandidate?.candidateId}
             onPreview={() => {setPreviewId(candidate.candidateId); setPreviewOpen(true);}}
             inLibrary={inLibrary(candidate)} adding={addingIds.has(candidate.candidateId)} selected={selected.has(candidate.candidateId)} pending={pending !== null || !writable}
             onSelectionChange={checked => setSelected(current => {
-              const next = new Set(current); if (checked) next.add(candidate.candidateId); else next.delete(candidate.candidateId); return next;
+              const next = new Set(current); if (checked && next.size < 30) next.add(candidate.candidateId); else if (!checked) next.delete(candidate.candidateId); return next;
             })} onAdd={() => void add([candidate.candidateId])} />)}</ul>
+          {result.nextOffset == null ? null : <button type="button" className={`${formButtonClass} my-3`} data-testid="discovery-load-more"
+            disabled={pending !== null} aria-busy={pending === 'more'} onClick={() => void loadMore()}>
+            {pending === 'more' ? '正在加载…' : `加载更多（${result.candidates.length} / ${result.total}）`}
+          </button>}
         </>}
       </>}
       {receipt === null ? null : <section ref={receiptRef} tabIndex={-1} aria-label="添加结果" data-testid="discovery-receipt" className="mt-4 border-t-[0.5px] border-line pt-4">
@@ -180,7 +241,7 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       onBack={() => {setPreviewOpen(false); requestAnimationFrame(() => {
         resultList.current?.querySelector<HTMLButtonElement>(`[data-testid="discovery-preview-${CSS.escape(previewCandidate.candidateId)}"]`)?.focus({preventScroll: true});
       });}}/> : null}
-    </div>
+    </div> : null}
     {selected.size === 0 ? null : <div className="flex shrink-0 items-center justify-end gap-2 border-t-[0.5px] border-line p-3">
       <button type="button" className={formPrimaryButtonClass} disabled={pending !== null || !writable} aria-busy={pending === 'add'}
         data-testid="discovery-add-selected" onClick={() => void add([...selected])}>
@@ -188,5 +249,5 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
         {pending === 'add' ? '添加中' : `加入文献库（${selected.size} 篇）`}
       </button>
     </div>}
-  </section>;
+  </section></ReadingViewBoundary>;
 }

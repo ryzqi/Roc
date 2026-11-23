@@ -12,7 +12,7 @@ const errors = [];
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-literature-action-guards-'));
   await buildViteRenderer({directory, script: `
-    import React from 'react';
+    import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
@@ -21,6 +21,7 @@ before(async () => {
     import AcademicRadarPanel from './src/renderer/literature/AcademicRadarPanel';
     import {LibraryList} from './src/renderer/literature/LibraryList';
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     import {readingDiscoveryRequestSchema, readingDiscoveryResultSchema, radarArticleSchema,
       radarFeedSchema, radarFeedSaveSchema, radarImportSchema, radarRefreshSchema,radarBrowserRequestSchema,
       radarCapturePageSchema,radarRecommendSchema}
@@ -61,6 +62,11 @@ before(async () => {
       captureRadarPage:input => call('captureRadarPage',input,article('captured-paper'))
     }}};
     window.clear = () => flushSync(() => root.render(null));
+    function Retained({children}) {
+      const [active,setActive]=useState(true);window.setPanelActive=value=>flushSync(()=>setActive(value));
+      return <><button data-testid="outside-radar" style={{position:'fixed',top:0,right:0}}>Other workspace</button>
+        <ViewActivity active={active}><div hidden={!active} style={{height:700}}>{children}</div></ViewActivity></>;
+    }
     window.navigateAway=()=>requestNavigation({page:'project',projectId:'project-b'},()=>window.navigations++);
     window.mountPanels = kind => {
       clear(); window.calls=[]; window.pending=[]; window.held=new Set(); window.imported=0;
@@ -71,12 +77,12 @@ before(async () => {
         total:1,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},
         query:'',selectedId:null,projectId:'project-a',includeArchived:false,action:{error:null},
         setQuery:()=>{},reload:()=>{},setIncludeArchived:()=>{},select:()=>{}};
-      flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><div style={{height:700}}>
+      flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><Retained>
         {kind==='discovery'
           ? <ReadingDiscoveryPanel client={client} projectId="project-a" itemId="item-a" writable onImported={onImported}/>
           :kind==='library'?<LiteratureScopeProvider value={library}><LibraryList onRequestImport={()=>{}}/></LiteratureScopeProvider>
           : <AcademicRadarPanel client={client} projectId="project-a" writable active onImported={onImported}/>}
-      </div></LazyMotion></MotionConfig>));
+      </Retained></LazyMotion></MotionConfig>));
     };
     window.resolveNext = (method,response) => {
       const index=pending.findIndex(entry => entry.method===method);
@@ -162,6 +168,32 @@ test('discovery unmount stops the remaining batch requests and late refresh call
   await settle();
   assert.equal(await count('importRadarArticle'),1);
   assert.equal(await page.evaluate(() => imported),0);
+});
+
+test('hidden radar drops article markup but preserves feed drafts, selection, detail and scroll', async () => {
+  await mount('radar');
+  await page.getByLabel('选择 paper-a',{exact:true}).check();
+  await page.getByRole('button',{name:'paper-a',exact:true}).click();
+  await page.getByLabel('订阅名称',{exact:true}).fill('Retained subscription');
+  const top=await page.locator('.radar-detail').evaluate(node=>{node.scrollTop=140;return node.scrollTop;});
+  assert.ok(top>0);
+  await page.getByLabel('订阅名称',{exact:true}).evaluate(node=>{window.retainedFeedInput=node;});
+  await page.evaluate(()=>window.setPanelActive(false));
+  await expect(page.getByTestId('radar-articles').locator('article')).toHaveCount(0);
+  await expect(page.locator('.radar-detail .whitespace-pre-wrap')).toHaveCount(0);
+  await expect(page.getByLabel('订阅名称',{exact:true})).toHaveValue('Retained subscription');
+  await page.getByTestId('outside-radar').focus();
+  await page.evaluate(()=>window.setPanelActive(true));
+  await expect(page.getByLabel('选择 paper-a',{exact:true})).toBeChecked();
+  await expect(page.locator('.radar-detail')).toContainText('observed limitations');
+  await expect.poll(()=>page.locator('.radar-detail').evaluate(node=>node.scrollTop)).toBe(top);
+  assert.equal(await page.getByLabel('订阅名称',{exact:true}).evaluate(node=>node===window.retainedFeedInput),true);
+  await expect(page.getByTestId('outside-radar')).toBeFocused();
+  await page.getByRole('button',{name:'关闭详情',exact:true}).click();
+  await expect(page.getByRole('button',{name:'paper-a',exact:true})).toBeFocused();
+  await page.evaluate(()=>navigateAway());
+  await expect(page.getByTestId('literature-editor-discard')).toBeVisible();
+  assert.equal(await page.evaluate(()=>navigations),0);
 });
 
 test('radar feed submission locks its fields and does not refresh a saved feed after unmount', async () => {
