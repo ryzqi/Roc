@@ -4,7 +4,8 @@ import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary } from '../shell/LazyBoundary';
 import { ViewActivity } from '../shared/view-activity';
-import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, viewHostFor, type ViewProps } from './view-registry';
+import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, type ViewProps } from './view-registry';
+import { retainedViewsAfterNavigation, viewHostFor } from './view-retention';
 
 type ViewContentProps = {
   view: AppViewId;
@@ -14,15 +15,16 @@ type ViewContentProps = {
 
 /**
  * Keep the current canvas visible while a cold module loads, then swap immediately.
- * Visited views stay mounted within one project, preserving editor selection, terminal
- * sessions and scroll positions. Hidden panels leave the keyboard/accessibility tree.
+ * Draft/session hosts stay mounted within one project; readonly hosts are released on
+ * successful navigation. Hidden panels leave the keyboard/accessibility tree, while
+ * ViewActivity lets hidden resources pause without removing draft guards.
  * The shell keys this host by project id so no cached workspace crosses project scope.
  */
 export function ViewContent({ view, subview = null, projectId }: ViewContentProps): React.JSX.Element {
   useViewResolution();
   const target = subview ?? view;
   const [shownView, setShownView] = useState<AppViewTarget>(target);
-  const [visited, setVisited] = useState<readonly AppViewTarget[]>(() => [target]);
+  const [retained, setRetained] = useState<readonly AppViewTarget[]>(() => [target]);
   const requestedResident = isViewResolved(target);
   const loadError = viewLoadError(target);
   const warming = target !== shownView;
@@ -33,12 +35,7 @@ export function ViewContent({ view, subview = null, projectId }: ViewContentProp
       return;
     }
     if (warming && requestedResident) {
-      setVisited(current => {
-        const host = viewHostFor(target);
-        return current.some(id => viewHostFor(id) === host)
-          ? current.map(id => viewHostFor(id) === host ? target : id)
-          : [...current, target];
-      });
+      setRetained(current => retainedViewsAfterNavigation(current, target));
       setShownView(target);
     }
   }, [warming, requestedResident, loadError, target]);
@@ -50,7 +47,7 @@ export function ViewContent({ view, subview = null, projectId }: ViewContentProp
       </div>}
       {!warming || requestedResident || loadError !== null ? null :
         <p role="status" className="shrink-0 px-3 py-1.5 text-muted text-[length:var(--font-meta-size)]">正在加载视图…</p>}
-      {visited.map(id => {
+      {retained.map(id => {
         const View = loadView(id);
         const active = viewHostFor(id) === viewHostFor(shownView);
         return (

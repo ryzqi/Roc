@@ -1,6 +1,7 @@
 import { lazy, useSyncExternalStore, type ComponentType } from 'react';
 import type { AppViewId, AppViewTarget } from './routes';
 import { errorMessage } from './loaded-state';
+import { viewHostFor } from './view-retention';
 
 /** Lazy modules are cached by host so related literature destinations share one instance. */
 
@@ -10,10 +11,6 @@ export type ViewProps = {
 };
 
 export type ViewModule = { default: ComponentType<ViewProps> };
-
-export function viewHostFor(view: AppViewTarget): AppViewId {
-  return view === 'discover' || view === 'knowledge' ? 'library' : view;
-}
 
 const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
   overview: async () => ({ default: (await import('../project/OverviewView')).OverviewView }),

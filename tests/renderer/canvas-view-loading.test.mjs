@@ -27,9 +27,20 @@ before(async () => {
         let session = 0;
         window.fixtureView = view => {
           window.loadCalls.push(view);
-          const module = {default: () => <section data-testid={'fixture-'+view}>
-            <label>Draft for {view}<input defaultValue={'Original '+view}/></label>
-          </section>};
+          const module = {default: () => {
+            React.useEffect(() => {
+              window.mountCalls.push(view);
+              const guard = event => {window.guardCalls.push(view); event.preventDefault();};
+              if(view !== 'overview') window.addEventListener('roc:before-navigate', guard);
+              return () => {
+                window.cleanupCalls.push(view);
+                window.removeEventListener('roc:before-navigate', guard);
+              };
+            }, []);
+            return <section data-testid={'fixture-'+view}>
+              <label>Draft for {view}<input defaultValue={'Original '+view}/></label>
+            </section>;
+          }};
           const mode = window.modes[view];
           if(mode === 'throw') throw new Error('Synthetic chunk load failure for '+view);
           if(mode === 'fail') return Promise.reject(new Error('Synthetic chunk load failure for '+view));
@@ -97,6 +108,7 @@ before(async () => {
           </main>));
         };
         window.modes = {}; window.finishView = {}; window.loadCalls = [];
+        window.mountCalls = []; window.cleanupCalls = []; window.guardCalls = [];
       `
     },
     bundle: true,
@@ -114,8 +126,7 @@ before(async () => {
               library: () => window.fixtureView('library'),
               writing: () => window.fixtureView('writing'),
               overview: () => window.fixtureView('overview'),
-              discover: () => window.fixtureView('library'),
-              knowledge: () => window.fixtureView('library')
+              runs: () => window.fixtureView('runs')
             };`
           );
           return {contents, loader: 'ts'};
@@ -167,6 +178,66 @@ test('failed cold navigation preserves the current editor and offers a working r
   assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'overview').length), 2);
   await page.evaluate(() => window.selectView('library'));
   await expect(page.getByLabel('Draft for library')).toHaveValue('Unsaved library draft');
+  assert.deepEqual(pageErrors, []);
+});
+
+test('readonly canvas is released only after a cold destination successfully resolves', async () => {
+  await fresh();
+  await page.evaluate(() => window.mountFixture('overview'));
+  await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  await page.evaluate(() => {window.modes.writing = 'defer'; window.selectView('writing');});
+  await page.waitForFunction(() => typeof window.finishView.writing === 'function');
+  await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.cleanupCalls), []);
+  await page.evaluate(() => window.finishView.writing(false));
+  await expect(page.getByTestId('view-load-error')).toContainText('Synthetic delayed failure');
+  await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  await page.evaluate(() => {window.modes.writing = 'ready';});
+  await page.getByTestId('view-load-error').getByRole('button', {name: '重试', exact: true}).click();
+  await expect(page.getByTestId('fixture-writing')).toBeVisible();
+  await expect(page.getByTestId('fixture-overview')).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => window.cleanupCalls), ['overview']);
+  await page.evaluate(() => window.selectView('overview'));
+  await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'overview').length), 1);
+  assert.equal(await page.evaluate(() => window.mountCalls.filter(view => view === 'overview').length), 2);
+  assert.deepEqual(pageErrors, []);
+});
+
+test('bounded navigation keeps pinned drafts, selection and lifecycle guards until the project host changes', async () => {
+  await fresh();
+  await page.evaluate(() => window.mountFixture('writing'));
+  await page.getByLabel('Draft for writing').fill('Unsaved writing text');
+  await page.getByLabel('Draft for writing').evaluate(input => input.setSelectionRange(3, 9));
+  for (const view of ['library', 'runs']) {
+    await page.evaluate(view => window.selectView(view), view);
+    await page.getByLabel('Draft for '+view).fill('Unsaved '+view+' text');
+  }
+  const destinations = ['overview', 'discover', 'writing', 'knowledge', 'runs', 'library'];
+  for (let index = 0; index < 20; index++) {
+    const target = destinations[index % destinations.length];
+    await page.evaluate(view => window.selectView(view), target);
+    await expect(page.locator('[data-shown-view="'+target+'"]')).toBeVisible();
+    // The host is visible before React.lazy has committed its resolved leaf.
+    await expect(page.getByTestId('fixture-overview')).toHaveCount(target === 'overview' ? 1 : 0);
+    await expect(page.locator('[data-testid^="fixture-"]')).toHaveCount(target === 'overview' ? 4 : 3);
+  }
+  for (const view of ['writing', 'library', 'runs']) {
+    await expect(page.getByLabel('Draft for '+view)).toHaveValue('Unsaved '+view+' text');
+  }
+  assert.deepEqual(await page.getByLabel('Draft for writing').evaluate(input => [input.selectionStart, input.selectionEnd]), [3, 9]);
+  const lifecycle = await page.evaluate(() => ({
+    mounts: window.mountCalls.filter(view => view !== 'overview'),
+    cleanups: window.cleanupCalls.filter(view => view !== 'overview'),
+    allowed: window.dispatchEvent(new CustomEvent('roc:before-navigate', {cancelable: true})),
+    guards: window.guardCalls
+  }));
+  assert.deepEqual(lifecycle, {mounts: ['writing', 'library', 'runs'], cleanups: [], allowed: false, guards: ['writing', 'library', 'runs']});
+  await page.evaluate(() => window.mountFixture('writing'));
+  await expect(page.getByLabel('Draft for writing')).toHaveValue('Original writing');
+  await expect(page.getByTestId('fixture-library')).toHaveCount(0);
+  await expect(page.getByTestId('fixture-runs')).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => window.cleanupCalls.filter(view => view !== 'overview')), ['writing', 'library', 'runs']);
   assert.deepEqual(pageErrors, []);
 });
 
