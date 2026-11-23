@@ -18,6 +18,7 @@ import { RemoteModelPicker } from '../RemoteModelPicker';
 import { clearProviderSecret, setProviderSecret, testProvider } from '../settings-store';
 import { useSettingsEditorBusy, useSettingsEditorTransition, useTransientSettingsEditor } from '../settings-editor-guard';
 import {
+  ActionButton,
   CheckboxField,
   NumberField,
   SelectField,
@@ -143,7 +144,7 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
           <TextField label="API Key" type="password" value={secretInput} onChange={setSecretInput}
             disabled={setSecret.pending || clearSecret.pending}
             placeholder={stored ? '输入新密钥以替换' : '输入密钥'} testId="settings-provider-secret-input" />
-          <button type="button" data-testid="settings-provider-secret-save" className={formButtonClass}
+          <ActionButton data-testid="settings-provider-secret-save" loading={setSecret.pending} loadingLabel="保存中…"
             disabled={setSecret.pending || clearSecret.pending || secretInput.trim().length === 0}
             onClick={() => {
               if (secretInFlight.current || secretInput.trim().length === 0) return;
@@ -159,8 +160,8 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
                 if (lifetime.current === requestLifetime) secretInFlight.current = false;
               });
             }}>
-            {setSecret.pending ? '保存中…' : '保存密钥'}
-          </button>
+            保存密钥
+          </ActionButton>
           <button type="button" data-testid="settings-provider-secret-clear" className={formButtonClass}
             disabled={clearSecret.pending || setSecret.pending || !stored} onClick={() => { clearSecret.reset(); setClearSecretOpen(true); }}>
             清除密钥
@@ -247,7 +248,7 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
               {testModelOptions.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
             </select>
           </label>
-          <button type="button" data-testid="settings-test-provider" className={formButtonClass}
+          <ActionButton data-testid="settings-test-provider" loading={test.pending} loadingLabel="测试中…"
             disabled={test.pending || testModelId === null || !saved} aria-describedby={!saved ? 'settings-test-save-required' : undefined}
             onClick={() => {
               if (testModelId === null || !saved) return;
@@ -255,7 +256,7 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
               void test.run({ providerId: provider.id, modelId: testModelId }).then((outcome) => {
                 if (outcome.ok) setTestResult({ modelId: testModelId, config, result: outcome.data });
               });
-            }}>{test.pending ? '测试中…' : '测试连通'}</button>
+            }}>测试连通</ActionButton>
         </div>
         {saved ? null : <p id="settings-test-save-required" className="text-muted text-[length:var(--font-meta-size)]">保存设置后可测试此供应商</p>}
         {test.error === null ? null : <FormNote tone="warn" testId="settings-test-error">{test.error}</FormNote>}

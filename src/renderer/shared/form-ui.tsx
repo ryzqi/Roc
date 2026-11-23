@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
-import { AlertTriangle, Info } from 'lucide-react';
+import { useEffect, useId, useState, type ComponentPropsWithRef, type InputHTMLAttributes, type ReactNode } from 'react';
+import { AlertTriangle, Info, LoaderCircle } from 'lucide-react';
 
 /**
  * Shared form primitives (extracted in P9 from P8's `settings/settings-ui.tsx`).
@@ -42,6 +42,45 @@ export const formButtonClass =
 /** 与输入框同高的主按钮（保存/确认）。 */
 export const formPrimaryButtonClass =
   'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 motion-safe:enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
+
+export type ActionButtonProps = ComponentPropsWithRef<'button'> & {
+  /** Secondary matches input height; compact is the existing toolbar button. */
+  variant?: 'primary' | 'secondary' | 'compact';
+  loading?: boolean;
+  loadingLabel?: ReactNode;
+};
+
+const actionButtonClasses = {
+  primary: formPrimaryButtonClass,
+  secondary: formButtonClass,
+  compact: formSecondaryButtonClass
+};
+
+/** Controlled presentation only: the caller owns pending state and command guards. */
+export function ActionButton({
+  variant = 'secondary',
+  loading = false,
+  loadingLabel,
+  disabled = false,
+  type = 'button',
+  className,
+  children,
+  'aria-busy': ariaBusy,
+  ...buttonProps
+}: ActionButtonProps): React.JSX.Element {
+  return (
+    <button
+      {...buttonProps}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || ariaBusy}
+      className={`${actionButtonClasses[variant]}${className ? ` ${className}` : ''}`}
+    >
+      {loading ? <LoaderCircle size={12} aria-hidden="true" className="shrink-0 motion-safe:animate-spin" /> : null}
+      {loading ? loadingLabel ?? children : children}
+    </button>
+  );
+}
 
 export function FormSection({
   title,

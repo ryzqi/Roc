@@ -98,9 +98,16 @@ test('provider secret writes freeze transient input and preserve a refused key f
   await save.evaluate(button => {button.click(); button.click();});
   assert.equal(await page.evaluate(() => window.secrets.length), 1);
   await expect(input).toBeDisabled();
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute('aria-busy', 'true');
+  await expect(save).toHaveText('保存中…');
+  await expect(save.locator('svg[aria-hidden="true"]')).toBeVisible();
   await page.evaluate(() => window.finishSecret({ok: false, error: {message: 'Secret unavailable'}}));
   await expect(page.getByTestId('settings-provider-secret-error')).toContainText('Secret unavailable');
   await expect(input).toHaveValue('fixture-key');
+  await expect(save).toBeEnabled();
+  await expect(save).not.toHaveAttribute('aria-busy', 'true');
+  await expect(save.locator('svg')).toHaveCount(0);
   await save.click();
   await page.evaluate(() => window.finishSecret({ok: true, data: {providerId: 'local', stored: true}}));
   await expect(input).toHaveValue('');

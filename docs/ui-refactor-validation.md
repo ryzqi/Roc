@@ -51,6 +51,32 @@ ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-p0-smoke-final-20261123
 
 P0 尚有独立验收缺口：100 个项目，100/2,000/10,000 篇文献，500/5,000 条流式消息，200 页 PDF 连续翻页，20 次面板切换，30 分钟空闲 CPU/RSS、输入到绘制/FPS/Profiler，以及真实服务 T1/T2/T3、系统输入法与 VoiceOver。P1 可在已固定的工程基线上按切片推进，这些缺口不记为已完成。
 
+## 2026-11-23 P1.1：共享按钮六态
+
+状态：**Verified passing**（按钮及设置接入范围；全量 renderer 有下述失败）。
+
+`ActionButton` 在既有 `shared/form-ui.tsx` 中复用按钮类；默认/悬停/按下/禁用/加载/可见焦点使用同一契约。加载由调用方控制，显示图标与真实操作文案，设置 `aria-busy` 并禁用。模型设置的保存密钥、测试连通和设置保存栏已接入，原有密钥保存同步防重、失败重试、草稿和供应商身份隔离保持在业务层。保存栏按下位移现在尊重减弱动效。
+
+永久组件画廊属于测试，不增加产品入口。真实 CSS 下检查浅/暗、两种密度和 1184/1280/1440px，驱动 hover/按下/Tab，校验最小字号 12px、点击目标 28px、无横溢出及 `clip.cut=0`。已查看浅色紧凑 1184px 和深色舒适 1440px 截图。回归还覆盖外部表单提交、原生 name/value/ref、disabled fieldset、加载防点击、恢复后键盘可达，以及 busy 与 saving 的区别。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+```sh
+pnpm build
+pnpm check:renderer-chunks
+pnpm audit:design
+ROC_UI_AUDIT_DIR=/tmp/roc-ui-p1-gallery-20261123 node --test --test-concurrency=1 tests/renderer/action-button.test.mjs tests/renderer/settings-write-guards.test.mjs tests/renderer/model-provider-settings.test.mjs
+pnpm test:renderer
+node --test --test-name-pattern='rendered transcript keeps|intentional scroll away' tests/renderer/lifecycles.test.mjs
+node --test tests/renderer/literature-list-layout.test.mjs
+```
+
+构建、分包、设计门禁和按钮定向检查通过：定向 **14/14**；eager JS **503800 bytes / 10 files**，比 P0 增加 411 bytes，分包预算未改变；设计扫描 270 文件。
+
+完整 renderer **895/898 通过**，耗时 1875 秒，3 个失败均为滚动断言：`lifecycles.test.mjs` 历史裁剪后原消息锚点不可见（1376 行），下一会话未到初始底部（1447 行）；`literature-list-layout.test.mjs` 滚到顶部后第 120 行仍挂载（135 行）。未修改测试的定向复跑中，文献完整文件 **3/3**，两项消息流测试 **1/2**（初始底部失败仍复现）。文献同类失败在 P0 已出现；消息流问题继续单独诊断，不把重跑结果写成全量通过，不改动断言容差或延长超时。
+
+本子项不代表 P1 的 tokens、输入/菜单、状态、列表与检视器全部完成。临时日志和截图在审阅、提取必要诊断后清理，正式组件夹具和验证记录保留。
+
 ## P0 工程基线（2026-11-20）
 
 macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启动当天既有 dist，窗口 1320×860，原生最小 1184×640。门户、默认写作、文献、发现（雷达）、知识（RAG）五面均成功加载，无 pageerror、无页面横向溢出，阴影审计均 `cut=0`。截图检查确认默认空写作页、重复文件列表，以及文献七标签带来的多层导航。

@@ -209,6 +209,10 @@ test('connectivity never reports a previous provider or tests an unsaved endpoin
   assert.equal(await page.getByTestId('settings-test-provider').isEnabled(), true);
   await page.getByTestId('settings-test-provider').click();
   await page.waitForFunction(() => typeof window.finishTest === 'function');
+  assert.equal(await page.getByTestId('settings-test-provider').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-test-provider').getAttribute('aria-busy'), 'true');
+  assert.equal(await page.getByTestId('settings-test-provider').textContent(), '测试中…');
+  assert.equal(await page.getByTestId('settings-test-provider').locator('svg[aria-hidden="true"]').isVisible(), true);
   await page.getByTestId('settings-provider-select').selectOption('second');
   await page.evaluate(() => window.finishTest());
   assert.equal(await page.getByTestId('settings-test-result').count(), 0);

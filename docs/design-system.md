@@ -214,6 +214,16 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 
 `closeOnBackdrop={false}` 是本项目 `maskClosable={false}` 的等价契约；不为适配术语更换组件。Loading 仅说明已经发出的操作，不能自动认定成功。暗色主题由字号角色和字重 token 补偿；不在页面散写主题覆盖。
 
+### 受控操作按钮（2026-11-23 P1.1）
+
+`shared/form-ui.tsx` 的 `ActionButton` 复用现有三种按钮类：`primary` 为保存/提交，默认 `secondary` 与输入框同高，`compact` 用于紧凑工具栏。调用方传入真实 `loading` 和可选 `loadingLabel`；加载时显示 Lucide 指示图标、设置 `aria-busy` 并原生禁用，普通禁用不显示进行中。悬停、按下、禁用、键盘焦点沿用原样式，按下位移与转圈遵守 reduced motion。
+
+组件只渲染受控状态，防重锁、错误、成功回执和焦点恢复仍属于业务流程。默认 `type="button"`；显式 `type="submit"`、`form`、`name/value`、`ref`、ARIA 和原生 disabled fieldset 语义完整透传。不要在此组件内另建异步任务状态、自动重试或审批决策。加载文案必须描述实际操作，不得提前显示“已保存”。
+
+首批用于模型设置的保存密钥、测试连通，以及设置保存栏。保存栏的 `busy` 锁住保存与放弃；只有 `saving` 显示“保存中”，两者不可合并。`ConfirmDialog` 继续保留其确认锁、取消初焦点和关闭保护。
+
+[永久组件夹具](../tests/renderer/fixtures/action-button-gallery.tsx)使用模型设置内容展示六态；[Electron 回归](../tests/renderer/action-button.test.mjs)编译当前 CSS，驱动真实 hover、press、Tab 和原生表单提交。它仅属于测试，不注册产品路由；截图可通过 `ROC_UI_AUDIT_DIR` 输出到临时目录供审阅。
+
 助手输入沿用 IME 守卫、草稿隔离和消息跟随控制。用户上滚时停止自动跟随，提供返回底部入口。附件过渡、骨架屏和流式反馈沿用共享动效方案；不绕过减少动效设置，不使用动效延迟伪造运行进度。
 
 ## 官方参考与组件复用
