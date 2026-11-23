@@ -1,6 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import electronPath from 'electron';
@@ -15,14 +15,18 @@ before(async () => {
     import React from 'react'; import {createRoot} from 'react-dom/client';
     import DiscoverySearch from './src/renderer/literature/DiscoverySearch';
     import {useLiteratureImportActions} from './src/renderer/literature/use-literature-import-actions';
-    const record=id=>({id,title:'Paper '+id,authors:['Author'],publishedYear:2026,openAccessUrl:null});
+    const record=id=>({id,title:'Paper '+id,authors:['Author'],publishedYear:2026,openAccessUrl:null,
+      abstract:'Abstract for '+id+'. '.repeat(160),doi:'10.1234/'+id,url:'https://example.invalid/'+id});
     const candidate=id=>({candidateId:id,identity:id,record:record(id),archived:false,
       matchedLibraryItemId:id==='known'?'existing':null,conflicts:[],identityConflicts:[],versionRelations:[],
       origins:[{source:'crossref',rank:1,externalId:id,record:record(id),review:{publicationType:null,copies:[],updates:[],retraction:{status:'unknown'}}}]});
     window.searches=[]; window.imports=[];
     const client={api:{research:{
-      searchLiterature:async input=>{window.searches.push(input);if(window.holdSearch)await new Promise(resolve=>{window.finishSearch=resolve;});return {ok:true,data:{searchId:'search-one',status:'partial',total:3,
-        candidates:['known','first','second'].map(candidate),warnings:[],truncated:false,
+      searchLiterature:async input=>{window.searches.push(input);if(window.holdSearch)await new Promise(resolve=>{window.finishSearch=resolve;});
+        if(window.failSearch)return {ok:false,error:{message:'Synthetic search unavailable'}};
+        const ids=window.largeResults?['known','first','second',...Array.from({length:40},(_,i)=>'extra-'+i)]:['known','first','second'];
+        return {ok:true,data:{searchId:'search-one',status:'partial',total:ids.length,
+        candidates:ids.map(candidate),warnings:[],truncated:false,
         sources:[{source:'crossref',status:'ok',returnedCount:3,errorCode:null,retryAfterMs:null},
           {source:'semantic_scholar',status:'rate_limited',returnedCount:0,errorCode:'rate_limit',retryAfterMs:30000}]}};},
       addLiterature:async input=>{window.imports.push(input);return {ok:true,data:{operationId:'import-one',status:'partial',
@@ -40,6 +44,52 @@ before(async () => {
   app = await _electron.launch({ executablePath: electronPath, args: [join(directory, 'main.cjs')] });
   page = await app.firstWindow(); page.setDefaultTimeout(6000);
   page.on('pageerror', error => errors.push(error.message));
+});
+
+test('wide search has a separate candidate preview and narrow return keeps query, selection and scroll', async () => {
+  await page.reload();
+  await page.setViewportSize({width: 1200, height: 900});
+  await page.evaluate(() => {window.largeResults = true;});
+  await page.getByLabel('研究主题或关键词').fill('retained search');
+  await page.getByTestId('discovery-submit').click();
+  await expect(page.getByTestId('discovery-preview')).toContainText('Abstract for known');
+  const geometry = await page.locator('.discovery-result-workspace').evaluate(element => {
+    const list = element.querySelector('.discovery-result-list').getBoundingClientRect();
+    const preview = element.querySelector('.discovery-preview').getBoundingClientRect();
+    return {ratio: list.width / (list.width + preview.width), beside: preview.left >= list.right - 1};
+  });
+  assert.ok(geometry.beside && Math.abs(geometry.ratio - .65) < .02, JSON.stringify(geometry));
+  await page.getByLabel('选择 Paper first', {exact: true}).check();
+  await page.getByTestId('discovery-preview-first').focus(); await page.keyboard.press('Enter');
+  await expect(page.getByTestId('discovery-preview')).toContainText('Abstract for first');
+  await expect(page.getByTestId('discovery-preview')).toContainText('10.1234/first');
+
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({width: 420, height: 900});
+    await page.evaluate(theme => {document.documentElement.dataset.theme = theme;}, theme);
+    await page.getByRole('button', {name: '返回搜索结果'}).click();
+    await expect(page.getByTestId('discovery-preview-first')).toBeFocused();
+    await page.getByTestId('discovery-preview-extra-30').click();
+    const scroll = await page.locator('.discovery-result-list').evaluate(element => element.scrollTop);
+    assert.ok(scroll > 0);
+    await expect(page.getByTestId('discovery-preview')).toContainText('Abstract for extra-30');
+    const clipping = await page.evaluate(source => (0,eval)(source)({root:'#root', viewport:true}), audit);
+    assert.equal(clipping.cut, 0, JSON.stringify(clipping.issues));
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('discovery-preview-extra-30')).toBeFocused();
+    assert.equal(await page.locator('.discovery-result-list').evaluate(element => element.scrollTop), scroll);
+    await expect(page.getByLabel('研究主题或关键词')).toHaveValue('retained search');
+    await expect(page.getByLabel('选择 Paper first', {exact: true})).toBeChecked();
+    // Reopen before the next viewport/theme iteration.
+    await page.getByTestId('discovery-preview-first').click();
+  }
+  await page.getByRole('button', {name: '返回搜索结果'}).click();
+  await page.evaluate(() => {window.failSearch = true;});
+  await page.getByTestId('discovery-submit').click();
+  await expect(page.getByRole('alert')).toContainText('Synthetic search unavailable');
+  await expect(page.getByTestId('discovery-preview-first')).toBeVisible();
+  await expect(page.getByLabel('选择 Paper first', {exact: true})).toBeChecked();
 });
 
 test('discovery keeps a real loading state and accepts one request during same-turn repeat submits', async () => {

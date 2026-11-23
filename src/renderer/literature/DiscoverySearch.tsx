@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import type { LiteratureImportResult, LiteratureSearchResult } from '../../shared/schemas/literature-import';
 import { formButtonClass, formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
@@ -8,6 +8,8 @@ import { LiteratureCandidateReview } from './LiteratureCandidateReview';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 import type { LiteratureImportActions } from './use-literature-import-actions';
+import {DiscoveryCandidatePreview} from './DiscoveryCandidatePreview';
+import './discovery-search.css';
 
 const SOURCES: { id: LiteratureSearchSource; label: string }[] = [
   { id: 'openalex', label: 'OpenAlex' }, { id: 'crossref', label: 'Crossref' },
@@ -32,12 +34,26 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
   const [resultQuery, setResultQuery] = useState('');
   const [result, setResult] = useState<LiteratureSearchResult | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewCandidate = result?.candidates.find(candidate => candidate.candidateId === previewId) ?? result?.candidates[0] ?? null;
+  const resultList = useRef<HTMLDivElement>(null);
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<'search' | 'add' | null>(null);
   const operationInFlight = useRef(false);
   const [addingIds, setAddingIds] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ result: LiteratureImportResult; titles: string[] } | null>(null);
+  const receiptRef = useRef<HTMLElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (receipt !== null) {receiptRef.current?.focus(); receiptRef.current?.scrollIntoView({block: 'nearest'});}
+  }, [receipt]);
+  useEffect(() => {
+    if (error === null) return;
+    setPreviewOpen(false);
+    requestAnimationFrame(() => {errorRef.current?.focus(); errorRef.current?.scrollIntoView({block: 'nearest'});});
+  }, [error]);
   const ime = useImeGuard();
   const inLibrary = (candidate: LiteratureSearchResult['candidates'][number]): boolean => added.has(candidate.candidateId) ||
     (candidate.matchedLibraryItemId !== null && store.items.some(item => item.id === candidate.matchedLibraryItemId));
@@ -53,6 +69,8 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
         years === 0 ? undefined : { yearFrom: year - years + 1, yearTo: year });
       if (!response.ok) { setError(response.message); return; }
       setResult(response.result); setResultQuery(query.trim()); setSelected(new Set()); setAdded(new Set());
+      setPreviewId(response.result.candidates[0]?.candidateId ?? null); setPreviewOpen(false);
+      resultList.current?.scrollTo({top: 0});
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { operationInFlight.current = false; setPending(null); }
   };
@@ -69,11 +87,12 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       setAdded(current => new Set([...current, ...successful]));
       setSelected(current => new Set([...current].filter(id => !successful.includes(id))));
       setReceipt({ result: response.result, titles: ids.map(id => result.candidates.find(candidate => candidate.candidateId === id)!.record.title) });
+      setPreviewOpen(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { operationInFlight.current = false; setPending(null); setAddingIds(new Set()); }
   };
 
-  return <section className="flex h-full min-h-0 flex-col" aria-label="学术搜索" data-testid="discovery-search">
+  return <section className="discovery-search flex h-full min-h-0 flex-col" aria-label="学术搜索" data-testid="discovery-search">
     <form className="ui-scroll-region flex max-h-[48%] shrink-0 flex-col gap-3 border-b-[0.5px] border-line p-4" onSubmit={event => { event.preventDefault(); void search(); }}>
       <label htmlFor="discovery-query" className="font-medium text-ink">研究主题或关键词</label>
       <div className="flex items-center gap-2">
@@ -104,8 +123,9 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       </details>
     </form>
 
-    <div className="ui-scroll-region flex-1 p-4" aria-busy={pending === 'search'}>
-      {error === null ? null : <p role="alert" className="mb-3 text-[var(--st-bad)]">{error}</p>}
+    <div className="discovery-result-workspace" data-preview-open={previewOpen}>
+    <div ref={resultList} className="discovery-result-list" aria-busy={pending === 'search'}>
+      {error === null ? null : <p ref={errorRef} tabIndex={-1} role="alert" className="mb-3 text-[var(--st-bad)]">{error}</p>}
       {result === null ? <EmptyState compact tone={pending === 'search' ? 'loading' : 'empty'}
         icon={pending === 'search' ? Loader2 : Search} title={pending === 'search' ? '正在检索论文…' : '搜索论文后选择加入项目'} /> : <>
         <div role="status" className="flex flex-col gap-2" data-testid="discovery-source-report">
@@ -135,13 +155,15 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
             <span className="tabular-nums text-muted">已选 {selected.size} 篇</span>
           </div>
           <ul>{result.candidates.map(candidate => <LiteratureCandidateReview key={candidate.candidateId} candidate={candidate}
+            compact active={candidate.candidateId === previewCandidate?.candidateId}
+            onPreview={() => {setPreviewId(candidate.candidateId); setPreviewOpen(true);}}
             inLibrary={inLibrary(candidate)} adding={addingIds.has(candidate.candidateId)} selected={selected.has(candidate.candidateId)} pending={pending !== null || !writable}
             onSelectionChange={checked => setSelected(current => {
               const next = new Set(current); if (checked) next.add(candidate.candidateId); else next.delete(candidate.candidateId); return next;
             })} onAdd={() => void add([candidate.candidateId])} />)}</ul>
         </>}
       </>}
-      {receipt === null ? null : <section aria-label="添加结果" data-testid="discovery-receipt" className="mt-4 border-t-[0.5px] border-line pt-4">
+      {receipt === null ? null : <section ref={receiptRef} tabIndex={-1} aria-label="添加结果" data-testid="discovery-receipt" className="mt-4 border-t-[0.5px] border-line pt-4">
         <p role="status" className="tabular-nums">已收录 {receipt.result.counts.created + receipt.result.counts.linked} 篇，重复 {receipt.result.counts.alreadyPresent} 篇，
           需处理 {receipt.result.counts.skippedArchived + receipt.result.counts.cancelled + receipt.result.counts.notProcessed} 篇，失败 {receipt.result.counts.failed} 篇</p>
         <p className="mt-2 text-muted">全文、解析与索引进度见文献库。</p>
@@ -151,6 +173,13 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
         <button type="button" className={`${formButtonClass} mt-3`} onClick={onOpenLibrary}>查看文献库</button>
       </section>}
       {!writable ? <p role="note" className="mt-3 text-muted">项目已归档，可搜索和查看，恢复项目后可添加文献。</p> : null}
+    </div>
+    {previewCandidate ? <DiscoveryCandidatePreview key={previewCandidate.candidateId} candidate={previewCandidate} revealed={previewOpen}
+      pending={pending !== null || !writable} adding={addingIds.has(previewCandidate.candidateId)} inLibrary={inLibrary(previewCandidate)}
+      onAdd={() => void add([previewCandidate.candidateId])}
+      onBack={() => {setPreviewOpen(false); requestAnimationFrame(() => {
+        resultList.current?.querySelector<HTMLButtonElement>(`[data-testid="discovery-preview-${CSS.escape(previewCandidate.candidateId)}"]`)?.focus({preventScroll: true});
+      });}}/> : null}
     </div>
     {selected.size === 0 ? null : <div className="flex shrink-0 items-center justify-end gap-2 border-t-[0.5px] border-line p-3">
       <button type="button" className={formPrimaryButtonClass} disabled={pending !== null || !writable} aria-busy={pending === 'add'}

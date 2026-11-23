@@ -13,9 +13,11 @@ function retractionText(status: LiteratureCandidate['origins'][number]['review']
   return status === 'retracted' ? '来源标记已撤稿' : status === 'not_reported' ? '来源未报告撤稿' : '撤稿状态未知';
 }
 
-export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary = false, adding = false, selected, onSelectionChange}: {
+export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary = false, adding = false, selected, onSelectionChange,
+  compact = false, preview = false, active = false, onPreview}: {
   candidate: LiteratureCandidate; pending: boolean; onAdd: () => void;
-  inLibrary?: boolean; adding?: boolean; selected?: boolean; onSelectionChange?: (selected: boolean) => void
+  inLibrary?: boolean; adding?: boolean; selected?: boolean; onSelectionChange?: (selected: boolean) => void;
+  compact?: boolean; preview?: boolean; active?: boolean; onPreview?: () => void;
 }): React.JSX.Element {
   const publicationTypes = [...new Set(candidate.origins.flatMap(origin => origin.review.publicationType === null ? [] :
     [types[origin.review.publicationType] ?? origin.review.publicationType]))];
@@ -26,14 +28,18 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
   const reported = candidate.origins.some(origin => origin.review.retraction.status === 'not_reported');
   const hasConflicts = candidate.conflicts.length + candidate.identityConflicts.length > 0;
   const updates = candidate.origins.flatMap(origin => origin.review.updates);
-  return <li className="min-w-0 border-b-[0.5px] border-line py-2" data-testid="literature-candidate">
+  const Container = preview ? 'article' : 'li';
+  return <Container className={`min-w-0 border-b-[0.5px] border-line py-2${compact ? ' discovery-candidate-row' : ''}`}
+    data-active={active} data-testid={preview ? 'discovery-preview-review' : 'literature-candidate'}>
     <div className="flex items-start gap-2">
       {onSelectionChange === undefined ? null : <label className="flex min-h-6 min-w-6 shrink-0 items-center justify-center">
         <input type="checkbox" checked={selected} disabled={pending || inLibrary || candidate.archived}
           onChange={event => onSelectionChange(event.target.checked)} aria-label={`选择 ${candidate.record.title}`} />
       </label>}
       <div className="min-w-0 flex-1">
-        <p className="break-words text-ink text-[length:var(--font-body-size)]">{candidate.record.title}</p>
+        {onPreview ? <button type="button" onClick={onPreview} aria-current={active ? 'true' : undefined}
+          data-testid={`discovery-preview-${candidate.candidateId}`} className="discovery-candidate-title">{candidate.record.title}</button>
+          : <p className="break-words text-ink text-[length:var(--font-body-size)]">{candidate.record.title}</p>}
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted text-[length:var(--font-meta-size)]">
           <span>{[...new Set(candidate.origins.map(origin => origin.source))].join(' / ')}</span>
           <span>{candidate.record.publishedYear ?? '年份未知'}</span>
@@ -41,19 +47,19 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
           <span>{candidate.record.openAccessUrl === null ? '未提供全文链接' : '提供全文链接'}</span>
         </div>
       </div>
-      <button type="button" disabled={pending || inLibrary || candidate.archived} onClick={onAdd} aria-busy={adding}
+      {preview ? null : <button type="button" disabled={pending || inLibrary || candidate.archived} onClick={onAdd} aria-busy={adding}
         title={candidate.archived ? '文献已归档，请先在文献库恢复' : inLibrary ? '已在当前项目文献库' : '加入文献库并提交后台全文处理'}
         data-testid={`literature-import-hit-${candidate.record.id}`}
         className="inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] disabled:opacity-40">
         {adding ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
         {adding ? '添加中' : candidate.archived ? '已归档' : inLibrary ? '已在文献库' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
-      </button>
+      </button>}
     </div>
     {hasConflicts || retracted || updates.length > 0 ? <p className="mt-2 flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
       <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
       {retracted ? '来源标记已撤稿，请核对来源。' : hasConflicts ? '来源信息存在冲突，请核对后收录。' : '有更正/更新关系，请核对对象。'}
     </p> : null}
-    <details className="mt-2 text-[length:var(--font-meta-size)]">
+    {compact ? null : <details className="mt-2 text-[length:var(--font-meta-size)]">
       <summary className="min-h-7 cursor-pointer py-1 text-muted hover:text-ink" data-testid="literature-candidate-review-toggle">核对来源与冲突</summary>
       <div className="mt-2 flex min-w-0 flex-col gap-4" data-testid="literature-candidate-review">
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-[length:var(--font-meta-size)]">
@@ -99,6 +105,6 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
         </p>)}
         <p className="text-muted">引用量不代表可信度。</p>
       </div>
-    </details>
-  </li>;
+    </details>}
+  </Container>;
 }
