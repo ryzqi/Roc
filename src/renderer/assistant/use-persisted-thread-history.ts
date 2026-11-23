@@ -52,6 +52,7 @@ export function usePersistedThreadHistory(input: {
   client: RocClient;
   threadId: string | null;
   latestPersistedThreadEventId: string | null;
+  scope?: object;
 }): PersistedThreadHistory {
   const generationRef = useRef(0);
   const latestSignalRef = useRef<string | null>(input.latestPersistedThreadEventId);
@@ -114,7 +115,7 @@ export function usePersistedThreadHistory(input: {
         });
       });
     return () => { generationRef.current += 1; };
-  }, [input.client, input.threadId, replaceState]);
+  }, [input.client, input.threadId, input.scope, replaceState]);
 
   useEffect(() => {
     if (latestSignalRef.current === input.latestPersistedThreadEventId) {

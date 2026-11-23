@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-24 P7.7：长回复交接与虚拟列表跟随
+
+状态：**Verified passing**（消息生命周期定向范围）。生产长流预检曾在下一轮收流时停留旧长回复，先复现上一轮实时终态被替换后、持久历史稍后重新插入的高度突变；有界保留一条终态回答至持久投影接管。进一步用5,000条增量、100条分页和400条保留窗口复现测高期间短暂离底，外部状态反向关闭Virtuoso跟随。现由 `followOutput="auto"` 使用虚拟器自身的底部/滚动判断，保留主动上滚阅读，不逐增量强制滚动。
+
+缓存随client/项目/目录/thread隔离，在头尾裁剪或重窗时释放；最终持久正文接管保留历史独有活动，取消/失败部分回答及无正文的新失败运行不会提前丢失旧回答。工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test tests/unit/renderer-transcript-cache.test.mjs tests/unit/persisted-thread-history.test.mjs tests/unit/performance-sustained-stream.test.mjs` **18/18**；`node --test tests/renderer/lifecycles.test.mjs` **91/91**，覆盖真实hook、Virtuoso、分页、上滚与同thread作用域切换。`pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design`及`git diff --check`通过，eager 517717 bytes / 11 files，277个组件通过已实现规则。
+
+后续preflight7在10,000历史启动时遭遇独立主进程文件校验取消异常，未进入UI场景；不作为此修复或正式性能通过证据。原生弹窗已读取精确AbortError来源，隔离进程及资料根已清理，该问题另行修复记录。之前preflight6的失败仍保留；完整生产流与正式五轮另记。
+
 ## 2026-11-23 P7.6：文献侧栏派生计算
 
 状态：**Verified passing**（侧栏行为定向范围）。Profiler短预检发现隐藏文献侧栏仍随store状态更新渲染；分类/Zotero统计、多选条目和键盘索引现按实际数据依赖缓存。保留搜索、排序、分类、多选和虚拟列表状态，隐藏期间继续处理查询和项目变化，不冻结权限与动作状态；此改动不等于释放全部隐藏列表DOM，正式性能收益另验。

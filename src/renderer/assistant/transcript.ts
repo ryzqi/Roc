@@ -731,6 +731,8 @@ type ChatTranscriptInput = {
   liveRun: ChatRunState | null;
   pendingUserInput: string | null;
   threadId: string | null;
+  historyTailTrimmed?: boolean;
+  historyWindowEpoch?: number;
 };
 
 function activeTranscriptThread(input: ChatTranscriptInput): string | null {
@@ -772,18 +774,73 @@ export function createChatTranscriptProjector(): (input: ChatTranscriptInput) =>
   let persisted: ChatTranscriptMessage[] = [];
   let previousKey: readonly unknown[] | undefined;
   let previousMessages: ChatTranscriptMessage[] = [];
+  // The next run can arrive before the pager catches up with the previous run.
+  // Keep one terminal answer across that handoff so a tall row never disappears
+  // and gets inserted again above the new live output. This is not a history cache.
+  let terminalAnswer: {runId: string; message: ChatTranscriptMessage; oldestSequence: number | undefined} | null = null;
+  let capturedTerminalRunId: string | null = null;
+  let historyWindowEpoch: number | undefined;
   return (input) => {
     const key = readChatTranscriptMemoKey(input);
     if (previousKey !== undefined && key.every((value, index) => Object.is(value, previousKey?.[index]))) {
       return previousMessages;
     }
     const activeThreadId = activeTranscriptThread(input);
+    let checkTerminalCoverage = events !== input.events;
+    if (threadId !== activeThreadId || historyWindowEpoch !== input.historyWindowEpoch) {
+      terminalAnswer = null;
+      capturedTerminalRunId = null;
+    }
+    historyWindowEpoch = input.historyWindowEpoch;
     if (events !== input.events || threadId !== activeThreadId) {
       persisted = activeThreadId === null ? [] : buildPersistedTranscriptMessages(input.events, activeThreadId);
       events = input.events;
       threadId = activeThreadId;
     }
-    const messages = projectTranscript(input, persisted);
+    const live = input.liveRun;
+    if (live !== null && live.threadId === activeThreadId && live.runId !== null) {
+      if (live.status === 'completed' || live.status === 'cancelled' || live.status === 'failed') {
+        if (capturedTerminalRunId !== live.runId || terminalAnswer?.runId === live.runId) {
+          const message = buildLiveAssistantMessage(live);
+          if (message !== null) terminalAnswer = {runId: live.runId, message,
+            oldestSequence: terminalAnswer?.runId === live.runId ? terminalAnswer.oldestSequence : input.events[0]?.sequence};
+          capturedTerminalRunId = live.runId;
+          checkTerminalCoverage = true;
+        }
+      } else {
+        capturedTerminalRunId = null;
+      }
+    }
+    if (input.historyTailTrimmed) terminalAnswer = null;
+    let history = persisted;
+    if (terminalAnswer !== null) {
+      const answer = terminalAnswer;
+      const index = persisted.findIndex(message => message.key === answer.message.key);
+      const stored = persisted[index];
+      // A final message is authoritative, including historical-only activity.
+      // Cancelled/failed runs can lack that message: reaching the next run in the
+      // ordered after-pages also establishes that the old run was fully replayed.
+      const reachedNextRun = checkTerminalCoverage && live?.runId !== answer.runId &&
+        input.events.some(event => event.runId === live?.runId);
+      const covered = checkTerminalCoverage && (input.events.some(event => event.runId === answer.runId &&
+        event.type === 'message' && event.payload.role === 'assistant' &&
+        stripHookDisplayText(event.payload.content, answer.message.blocks) === answer.message.content) || (stored !== undefined && reachedNextRun));
+      // After-pages are merged in global sequence order. A newer run present
+      // after the retained head advanced proves this absent answer was evicted,
+      // rather than still waiting for a page in the same catch-up pass.
+      const oldestSequence = input.events[0]?.sequence;
+      const outsideWindow = stored === undefined && reachedNextRun &&
+        answer.oldestSequence !== undefined && oldestSequence !== undefined && oldestSequence > answer.oldestSequence &&
+        input.events.length > 0;
+      if (covered || outsideWindow) {
+        terminalAnswer = null;
+      } else {
+        history = persisted.slice();
+        if (index === -1) history.push(answer.message);
+        else history[index] = answer.message;
+      }
+    }
+    const messages = projectTranscript(input, history);
     previousKey = key;
     previousMessages = messages;
     return messages;
@@ -799,6 +856,8 @@ export function readChatTranscriptMemoKey(input: {
   liveRun: ChatRunState | null;
   pendingUserInput: string | null;
   threadId: string | null;
+  historyTailTrimmed?: boolean;
+  historyWindowEpoch?: number;
 }): readonly unknown[] {
   const liveRun = input.liveRun;
   return [
@@ -811,6 +870,8 @@ export function readChatTranscriptMemoKey(input: {
     liveRun === null ? null : liveRun.subagents,
     liveRun === null ? null : liveRun.threadId,
     input.pendingUserInput,
-    input.threadId
+    input.threadId,
+    input.historyTailTrimmed,
+    input.historyWindowEpoch
   ];
 }

@@ -94,6 +94,16 @@ Contract 2 要求来源/chunk 与实际上下文 embedding 输入哈希、向量
 | 资源治理 | [准入](research-admission-performance.json)、[网络](research-network-performance.json)、[存储](research-storage-performance.json) |
 | 旧冻结 fixture | [输入](../tests/fixtures/local-retrieval-quality.json)、[结果](research-local-quality-fixture.json)，用于保留来源与输入漂移对照 |
 
+## 消息交接与滚动
+
+持久历史按事件分页，每页 100 条、窗口最多 400 条；这与消息行数不同。新 run 的实时事件可以先于上一轮历史追平到达，转录投影最多暂存一条已完成、已取消或失败的可见回答，保持长消息在交接期间的身份与高度。收到匹配最终正文的持久消息，或按序追平至下一轮事件后，转交给持久投影，保留历史独有的 guardrail 等活动。新一轮在产生正文前失败不清除仍待交接的旧回答。
+
+交接缓存不是额外历史窗口：确认旧回答已被窗口头裁剪、向前分页裁尾、窗口重置或会话作用域变更时释放；后续终态最多替换这一条，不随运行次数累积。作用域包括 client、项目、工作目录与 thread，新作用域首帧不捕获旧 run，历史请求也随作用域重置。持久覆盖检查只在历史或终态快照变化时进行，下一轮文本增量不重复深比较旧工具块。
+
+消息列表使用 Virtuoso 的 `followOutput="auto"`，由虚拟器按原底部状态及正在进行的滚动决定跟随；`atBottomStateChange` 仅控制“滚动到最新”按钮。不能将高度测量期间短暂的非底部状态反向设为 `followOutput=false`，否则保留窗口裁剪与长回复高度变化会关闭内部补偿。用户主动上滚阅读时保持位置，不以每个增量的强制 `scrollTo` 修补视口。
+
+回归入口为 `node --test tests/unit/renderer-transcript-cache.test.mjs tests/unit/persisted-thread-history.test.mjs` 和 `node --test tests/renderer/lifecycles.test.mjs`。覆盖异步交接、5,000 条持久增量追平及 400 事件窗口裁剪、取消/失败部分回复、空新终态、历史扩展活动、同 thread 作用域切换、主动上滚和分页锚点；测试通过不替代持续流式正式测量。
+
 ## 画布宿主保留预算
 
 `app/view-retention.ts` 按项目内的宿主身份决定组件保留，模块缓存与组件挂载分别管理。`discover`、`knowledge`、`library` 共享一个文献宿主；切换项目时整个 `ViewContent` 按项目键重建，缓存的组件状态不跨项目。

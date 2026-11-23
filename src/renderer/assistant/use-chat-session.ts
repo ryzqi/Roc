@@ -84,6 +84,7 @@ export function useChatSession(input: {
     scopeRef.current = { client, threadId, projectId, workspacePath, active: true, mutating: false, stopRunId: null };
   }
   const scope = scopeRef.current;
+  const [projectionScope, setProjectionScope] = useState(scope);
   const run = useChatRun(client, { threadId, acceptUnboundEvents: sending });
   const { reset, setError, applyReplay, getCurrentState } = run;
   const cancellable = run.state.status === 'running' || run.state.status === 'recovering';
@@ -92,14 +93,19 @@ export function useChatSession(input: {
   const history = usePersistedThreadHistory({
     client,
     threadId,
+    scope,
     // Opaque "something changed" signal for the pager's catch-up pass. The run id is the
     // right one: a new run is exactly when new events get persisted for this thread.
     latestPersistedThreadEventId: run.state.runId
   });
 
   const liveRun = run.state.status === 'idle' ? null : run.state;
-  const projectTranscript = useMemo(createChatTranscriptProjector, []);
-  const messages = projectTranscript({ events: history.events, liveRun, pendingUserInput: sending ? pendingUserInput : null, threadId });
+  const projectTranscript = useMemo(createChatTranscriptProjector, [scope]);
+  // Reset effects own the first frame of a new scope. Do not let its new
+  // projector capture the previous client's/thread's still-rendered run state.
+  const messages = projectionScope !== scope ? [] : projectTranscript({ events: history.events, liveRun,
+    pendingUserInput: sending ? pendingUserInput : null, threadId,
+    historyTailTrimmed: history.tailTrimmed, historyWindowEpoch: history.windowEpoch });
   const latestHistoryEvent = history.events.at(-1);
   const inputsRunId = run.state.threadId === threadId && run.state.runId !== null
     ? run.state.runId : latestHistoryEvent?.threadId === threadId ? latestHistoryEvent.runId : null;
@@ -359,6 +365,7 @@ export function useChatSession(input: {
     setSending(false);
     setStopRunId(null);
     setInputReceipts(null);
+    setProjectionScope(scope);
     return () => { scope.active = false; };
   }, [client, threadId, projectId, workspacePath, reset]);
 

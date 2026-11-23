@@ -105,6 +105,22 @@ before(async () => {
         }, React.createElement(ChatTranscriptPanel, props));
       }
       window.mountTranscript = props => flushSync(() => root.render(React.createElement(TranscriptHarness, props)));
+      function SessionTranscriptHarness(props) {
+        const session = useChatSession(props);
+        window.latest = session;
+        const history = session.history;
+        // AssistantPanel mounts the transcript only after it has messages.
+        if (session.messages.length === 0) return null;
+        return React.createElement(TranscriptHarness, {
+          threadId: props.threadId, messages: session.messages,
+          prependRevision: history.prependRevision, trimRevision: history.trimRevision,
+          windowEpoch: history.windowEpoch, tailTrimmed: history.tailTrimmed,
+          hasMoreBefore: history.hasMoreBefore, loadingOlder: history.loadingOlder,
+          loadOlder: history.loadOlder, onJumpToLatest: history.reloadLatest,
+          onOpenArtifact: () => {}, onReadGateContext: async () => null
+        });
+      }
+      window.mountSessionTranscript = props => flushSync(() => root.render(React.createElement(SessionTranscriptHarness, props)));
       window.clearHook = () => flushSync(() => root.render(null));
       let serial = 0;
       window.mount = (kind, props, fresh = false) => {
@@ -113,7 +129,11 @@ before(async () => {
         // Keep the same React identity on updates, so switches exercise lifecycle cleanup.
         window.capture ??= {};
         const cacheKey = kind + serial;
-        window.capture[cacheKey] ??= p => { window.latest = Hook(p); return null; };
+        window.capture[cacheKey] ??= p => {
+          window.latest = Hook(p);
+          window.chatMessageSnapshots?.push(window.latest.messages?.map(message => message.content) ?? []);
+          return null;
+        };
         const child = React.createElement(window.capture[cacheKey], props);
         flushSync(() => root.render(props.strictMode ? React.createElement(React.StrictMode, null, child) : child));
       };
@@ -659,6 +679,34 @@ async function chatSendFixture() {
     };
     window.sendInput = {text: ' Search once ', mode: 'chat', skillIds: ['reader'], attachments: []};
     window.selected = null;
+  });
+}
+
+for (const boundary of ['client', 'projectId', 'workspacePath']) {
+  test(`terminal transcript handoff does not cross a same-thread ${boundary} change`, async () => {
+    await chatFixture();
+    await page.evaluate(() => {
+      live({type: 'run_started', runId: 'old-scope', threadId: 'a', providerId: 'p', modelId: 'm', mode: 'chat', createdAt: 'now'});
+      live({type: 'run_completed', runId: 'old-scope', threadId: 'a', providerId: 'p', modelId: 'm', createdAt: 'now',
+        assistantMessage: 'Previous scope private answer', durationMs: 1, summary: null});
+    });
+    await page.waitForFunction(() => latest.messages.some(message => message.content === 'Previous scope private answer'));
+    await page.evaluate(boundary => {
+      window.newScopeHistory = deferred();
+      client.api.tasks.getThreadMessages = () => newScopeHistory.promise;
+      const replacement = boundary === 'client' ? {...client, api: {...client.api}} : boundary === 'projectId' ? 'new-project' : '/new-workspace';
+      window.chatMessageSnapshots = [];
+      mount('chat', {...props, [boundary]: replacement});
+    }, boundary);
+    await page.waitForFunction(() => latest.history.loadingInitial);
+    const snapshots = await page.evaluate(() => chatMessageSnapshots);
+    assert.ok(snapshots.length > 0);
+    assert.ok(snapshots.every(messages => !messages.includes('Previous scope private answer')), JSON.stringify(snapshots));
+    await page.evaluate(() => {
+      newScopeHistory.resolve(ok({items: [], hasMoreBefore: false, hasMoreAfter: false, oldestSequence: null, newestSequence: null}));
+      delete window.chatMessageSnapshots;
+    });
+    await page.waitForFunction(() => !latest.history.loadingInitial && latest.messages.length === 0);
   });
 }
 
@@ -1348,6 +1396,10 @@ async function transcriptMetrics() {
       mountedCount: rows.length, firstMounted: describe(rows[0]), lastMounted: describe(rows.at(-1)),
       firstVisible: describe(visible[0]), lastVisible: describe(visible.at(-1)),
       list: parent.querySelector('[data-testid="virtuoso-item-list"]')?.getAttribute('style'),
+      session: window.latest?.history ? {runId: latest.runState.runId, status: latest.runState.status,
+        events: latest.history.events.length, firstSequence: latest.history.events[0]?.sequence,
+        lastSequence: latest.history.events.at(-1)?.sequence, historyError: latest.history.error,
+        messages: latest.messages.map(message => ({key: message.key, length: message.content.length}))} : null,
       visibility: document.visibilityState};
   });
 }
@@ -1526,6 +1578,83 @@ test('transcript follows a live review gate after opening a message taller than 
     return gate.top < parent.bottom && gate.bottom > parent.top;
   });
 });
+
+for (const historyEventCount of [0, 5000]) {
+test(`transcript follows the next run while a completed long answer transfers through ${historyEventCount} persisted deltas`, async () => {
+  await page.evaluate(() => {
+    clearHook();
+    window.catchup = deferred();
+    window.catchupRequested = false;
+    window.catchupReleased = false;
+    window.longAnswer = Array.from({length: 5000}, (_, index) => `SCALE5000-${String(index + 1).padStart(4, '0')}`).join(' ');
+    window.historyRows = Array.from({length: 100}, (_, index) => ({
+      id: `history-${index}`, threadId: 'long-turns', runId: `history-${index}`, sequence: index + 1,
+      type: 'message', payload: {role: 'user', content: `History ${index}`}, createdAt: '2026-11-23T00:00:00.000Z'
+    }));
+    window.allStreamEvents = historyRows;
+    window.historyPage = (items, hasMoreAfter = false) => ({items, hasMoreBefore: false, hasMoreAfter,
+      oldestSequence: items[0]?.sequence ?? null, newestSequence: items.at(-1)?.sequence ?? null});
+    window.client = {api: {
+      window: {onHidden: () => () => {}},
+      chat: {onRunEvent: callback => {window.live = callback; return () => {window.live = null;};},
+        getActiveRun: async () => ok(null), runInputs: async ({runId, threadId}) => ok({runId, threadId, items: []})},
+      tasks: {getThreadMessages: async request => {
+        if (request.cursor === null) return ok(historyPage(historyRows));
+        if (request.cursor.direction === 'before') {
+          const earlier = allStreamEvents.filter(event => event.sequence < request.cursor.sequence);
+          return ok({...historyPage(earlier.slice(-100)), hasMoreBefore: earlier.length > 100});
+        }
+        if (latest.runState.runId !== 'next-turn') return ok(historyPage([]));
+        catchupRequested = true;
+        if (!catchupReleased) return catchup.promise;
+        const later = allStreamEvents.filter(event => event.sequence > request.cursor.sequence);
+        return ok(historyPage(later.slice(0, 100), later.length > 100));
+      }}
+    }};
+    mountSessionTranscript({client, threadId: 'long-turns', projectId: 'p', workspacePath: '/p', onThreadId: () => {}});
+    window.startTurn = runId => live({type: 'run_started', runId, threadId: 'long-turns',
+      providerId: 'p', modelId: 'm', mode: 'chat', createdAt: '2026-11-23T00:00:01.000Z'});
+    window.textDelta = (runId, text) => live({type: 'assistant_block', runId,
+      block: {kind: 'text', phase: 'delta', blockId: `${runId}-text`, text}});
+  });
+  const atBottom = () => page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node?.scrollTop > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  }).catch(async error => {throw new Error(`Transcript position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});});
+  await atBottom();
+  await page.evaluate(() => {startTurn('long-turn'); textDelta('long-turn', longAnswer);});
+  await page.getByTestId('assistant-message-assistant').waitFor();
+  await atBottom();
+  await page.evaluate(() => live({type: 'run_completed', runId: 'long-turn', threadId: 'long-turns',
+    providerId: 'p', modelId: 'm', createdAt: '2026-11-23T00:00:01.000Z', assistantMessage: longAnswer,
+    durationMs: 1000, summary: null}));
+  await page.waitForFunction(() => latest.runState.status === 'completed');
+  await atBottom();
+  await page.evaluate(() => {startTurn('next-turn'); textDelta('next-turn', 'SUSTAINED-0001');});
+  await page.waitForFunction(() => catchupRequested && latest.runState.assistantMessage === 'SUSTAINED-0001');
+  // Let Virtuoso measure the new live state before the async persisted page arrives.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.evaluate(historyEventCount => {
+    const deltas = Array.from({length: historyEventCount}, (_, index) => ({
+      ...historyRows[0], id: `long-delta-${index}`, runId: 'long-turn', sequence: 101 + index,
+      type: 'assistant_block', payload: {kind: 'text', phase: 'delta', blockId: 'long-turn-text',
+        text: `SCALE5000-${String(index + 1).padStart(4, '0')} `}, createdAt: '2026-11-23T00:00:01.000Z'
+    }));
+    const events = [...deltas, {...historyRows[0], id: 'long-answer', runId: 'long-turn', sequence: 101 + historyEventCount,
+      payload: {role: 'assistant', content: longAnswer}, createdAt: '2026-11-23T00:00:01.000Z'},
+    {...historyRows[0], id: 'next-prompt', runId: 'next-turn', sequence: 102 + historyEventCount,
+      payload: {role: 'user', content: 'Continue'}, createdAt: '2026-11-23T00:00:02.000Z'}
+    ];
+    allStreamEvents = [...historyRows, ...events];
+    catchupReleased = true;
+    catchup.resolve(ok(historyPage(events.slice(0, 100), events.length > 100)));
+  }, historyEventCount);
+  await page.waitForFunction(() => latest.history.events.some(event => event.id === 'long-answer'));
+  await page.waitForFunction(() => document.querySelector('[data-testid="assistant-transcript"]')?.textContent.includes('SUSTAINED-0001'))
+    .catch(async error => {throw new Error(`Next turn is offscreen: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});});
+  await atBottom();
+});
+}
 
 test('transcript preserves an intentional scroll away from the bottom when new output arrives', async () => {
   await page.evaluate(() => {

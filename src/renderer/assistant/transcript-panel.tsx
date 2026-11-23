@@ -173,7 +173,10 @@ export function ChatTranscriptPanel({
           : {index: initialWindowRef.current.initialTopMostItemIndex, align: 'end'}}
         computeItemKey={(_index, message) => message.key}
         increaseViewportBy={240}
-        followOutput={isAtBottom ? 'auto' : false}
+        // Virtuoso owns the bottom/scroll-in-progress decision. Feeding its
+        // transient resize notification back as `false` cancels tail following
+        // while a retained history window is being measured.
+        followOutput="auto"
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (
           <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext}
