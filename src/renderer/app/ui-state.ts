@@ -12,6 +12,7 @@
 export const UI_STATE_PREFIX = 'roc.ui.';
 
 export const uiStateKeys = {
+  workspaceLayouts: `${UI_STATE_PREFIX}workspace.layouts`,
   sidebarWidth: `${UI_STATE_PREFIX}sidebar.width`,
   sidebarCollapsed: `${UI_STATE_PREFIX}sidebar.collapsed`,
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
@@ -125,23 +126,15 @@ function readStringList(key: UiStateKey): string[] {
 /* ------------------------------------------------------------------ */
 
 export const SIDEBAR_WIDTH = { min: 200, max: 340, default: 232 } as const;
-export const ASSISTANT_WIDTH = { min: 280, default: 344 } as const;
+export const ASSISTANT_WIDTH = { min: 280, max: 520, default: 344 } as const;
 
-export function readSidebarWidth(): number {
+function readSidebarWidth(): number {
   const value = readNumber(uiStateKeys.sidebarWidth);
   return value === null ? SIDEBAR_WIDTH.default : clampi(value, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
 }
 
-export function writeSidebarWidth(width: number): void {
-  writeRaw(uiStateKeys.sidebarWidth, String(Math.round(clampi(width, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max))));
-}
-
-export function readSidebarCollapsed(): boolean {
+function readSidebarCollapsed(): boolean {
   return readBoolean(uiStateKeys.sidebarCollapsed, false);
-}
-
-export function writeSidebarCollapsed(collapsed: boolean): void {
-  writeRaw(uiStateKeys.sidebarCollapsed, collapsed ? '1' : '0');
 }
 
 export function readMemoryCategory(): string | null {
@@ -163,13 +156,45 @@ export function dismissOnboarding(): void {
   writeRaw(uiStateKeys.onboardingDismissed, 'v1');
 }
 
-export function readAssistantWidth(): number {
+function readAssistantWidth(): number {
   const value = readNumber(uiStateKeys.assistantWidth);
   return value === null ? ASSISTANT_WIDTH.default : Math.max(value, ASSISTANT_WIDTH.min);
 }
 
-export function writeAssistantWidth(width: number): void {
-  writeRaw(uiStateKeys.assistantWidth, String(Math.round(Math.max(width, ASSISTANT_WIDTH.min))));
+export type WorkspaceLayoutPreference = {sidebarWidth: number; assistantWidth: number; collapsed: boolean};
+export type WorkspaceLayoutMode = 'research' | 'writing' | 'review';
+export function defaultWorkspaceLayout(mode: WorkspaceLayoutMode): WorkspaceLayoutPreference {
+  return {sidebarWidth: SIDEBAR_WIDTH.default, assistantWidth: ASSISTANT_WIDTH.default, collapsed: mode !== 'research'};
+}
+function layoutRecords(): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(readRaw(uiStateKeys.workspaceLayouts) ?? '{}');
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  } catch {return {};}
+}
+export function readWorkspaceLayout(projectId: string | null, mode: WorkspaceLayoutMode): WorkspaceLayoutPreference {
+  const value = layoutRecords()[JSON.stringify([projectId, mode])];
+  if (value === undefined) return {
+    sidebarWidth: readSidebarWidth(),
+    assistantWidth: clampi(readAssistantWidth(), ASSISTANT_WIDTH.min, ASSISTANT_WIDTH.max),
+    collapsed: mode === 'research' ? readSidebarCollapsed() : true
+  };
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return defaultWorkspaceLayout(mode);
+  const record = value as Record<string, unknown>;
+  const fallback = defaultWorkspaceLayout(mode);
+  return {
+    sidebarWidth: typeof record.sidebarWidth === 'number' && Number.isFinite(record.sidebarWidth)
+      ? clampi(record.sidebarWidth, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max) : fallback.sidebarWidth,
+    assistantWidth: typeof record.assistantWidth === 'number' && Number.isFinite(record.assistantWidth)
+      ? clampi(record.assistantWidth, ASSISTANT_WIDTH.min, ASSISTANT_WIDTH.max) : fallback.assistantWidth,
+    collapsed: typeof record.collapsed === 'boolean' ? record.collapsed : fallback.collapsed
+  };
+}
+/** Bounded presentation preferences, never object content or a second copy of the route. */
+export function writeWorkspaceLayout(projectId: string | null, mode: WorkspaceLayoutMode, value: WorkspaceLayoutPreference): void {
+  const key = JSON.stringify([projectId, mode]);
+  const entries = Object.entries(layoutRecords()).filter(([id]) => id !== key).slice(-59);
+  writeRaw(uiStateKeys.workspaceLayouts, JSON.stringify(Object.fromEntries([...entries, [key, value]])));
 }
 
 /* ------------------------------------------------------------------ */

@@ -173,7 +173,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
   const openReviewInspector = useCallback<OpenReviewInspector>((request): void => {
     showArtifactSelection({kind: 'review', request});
   }, [showArtifactSelection]);
-  const layout = useLayoutPersistence(route.layoutPreset ?? 'research');
+  const layout = useLayoutPersistence(route.layoutPreset ?? 'research', route.projectId);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   useContentPreferenceSync();
@@ -661,7 +661,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
     if (inProject) layout.toggleDrawer();
   };
   const resetLayout = (): void => {
-    navigate({ ...route, layoutPreset: null }, { onNavigated: layout.reset });
+    navigate({ ...route, assistantOpen: layout.preset === 'review' }, { onNavigated: layout.reset });
   };
   useKeyboardShortcuts({
     onToggleSidebar: toggleDrawer, onToggleAssistant: toggleAssistant, onOpenSearch: openSearch,

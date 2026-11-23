@@ -20,7 +20,11 @@ before(async()=>{
     clearUiState();
     function Harness(){
       const [assistant,setAssistant]=useState(false);
-      const layout=useLayoutPersistence('research');
+      const [project,setProject]=useState('project-a');
+      const [preset,setPreset]=useState('research');
+      const layout=useLayoutPersistence(preset,project);
+      window.setWorkspace=({project,preset})=>{setProject(project);setPreset(preset);};
+      window.resetLayout=layout.reset;
       window.resizeContext=layout.resizeDrawer;
       return <div className="flex h-full flex-col">
         <header><button data-testid="titlebar-toggle-sidebar" onClick={layout.toggleDrawer}>上下文</button>
@@ -103,4 +107,30 @@ test('wide context cannot squeeze the canvas below its inline dock budget',async
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('assistant-drawer')).toHaveCount(0);
   await expect(page.getByTestId('context-action')).toBeEnabled();
+});
+
+test('manual widths and context visibility remain isolated by project and mode',async()=>{
+  await page.evaluate(()=>window.resizeContext(300));
+  await page.getByTestId('titlebar-toggle-sidebar').click();
+  await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
+  await page.evaluate(()=>window.setWorkspace({project:'project-a',preset:'writing'}));
+  await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
+  await page.getByTestId('titlebar-toggle-sidebar').click();
+  await page.evaluate(()=>window.resizeContext(220));
+  await expect(page.getByTestId('sidebar-column')).toHaveCSS('width','220px');
+  await page.evaluate(()=>window.setWorkspace({project:'project-b',preset:'research'}));
+  await expect(page.getByTestId('sidebar-column')).toHaveCSS('width','232px');
+  await page.evaluate(()=>window.setWorkspace({project:'project-a',preset:'research'}));
+  await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
+  await page.getByTestId('titlebar-toggle-sidebar').click();
+  await expect(page.getByTestId('sidebar-column')).toHaveCSS('width','300px');
+  await page.evaluate(()=>window.setWorkspace({project:'project-a',preset:'writing'}));
+  await expect(page.getByTestId('sidebar-column')).toHaveCSS('width','220px');
+  await page.evaluate(()=>window.resetLayout());
+  await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
+  await page.getByTestId('titlebar-toggle-sidebar').click();
+  await expect(page.getByTestId('sidebar-column')).toHaveCSS('width','232px');
+  await expect(page.getByTestId('canvas-draft')).toHaveValue('修改后正文');
+  await page.getByTestId('titlebar-toggle-assistant').click();
+  await expect(page.getByTestId('assistant-draft')).toHaveValue('修改后问题');
 });

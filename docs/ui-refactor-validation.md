@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P2.2：按项目和模式恢复布局
+
+状态：**Verified passing**。探索/专注/运行保留兼容URL标识，宽度与左栏折叠分别按项目/模式保存，最多60组；首次沿用旧全局宽度，新模式独立修改。当前模式重置恢复232/344px，侧栏200–340px、Dock280–520px；缩放覆盖状态不持久化，助手开关继续来自URL。ADR0023和工作台合同已同步。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test tests/unit/renderer-layout-preferences.test.mjs` **3/3**，覆盖损坏/不可用存储、旧宽度兼容、独立重置和60组保留；`pnpm typecheck`通过。串行组合 `node --test --test-concurrency=1 tests/renderer/artifact-dock.test.mjs tests/renderer/workspace-frame.test.mjs tests/renderer/desktop-interactions.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/review-protocol-inspector.test.mjs tests/renderer/shell-management-guards.test.mjs tests/renderer/canvas-view-loading.test.mjs` 为107/108，其中工作区 **4/4**，拖拽取消、左右分隔条、断点草稿和项目/模式隔离通过；唯一失败是旧工件迁移用例在阅读位置恢复期间选择目标超时，P2.3继续定位。没有把该组合记作全绿。
+
 ## 2026-11-23 P6.2：运行任务列表与详情
 
 状态：**Verified passing**。运行画布以260px任务列表配合既有TaskDetail，700px以下堆叠；管理抽屉保留原选择器。任务每页25条并去重，未加载的深链目标仍可打开独立详情，列表失败显式重试。任务事实、审批、恢复、回执与诊断沿用同一权威数据和草稿守卫；高级诊断按需展开。

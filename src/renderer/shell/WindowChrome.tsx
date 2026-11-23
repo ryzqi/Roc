@@ -26,9 +26,9 @@ export type WindowChromeProps = {
 };
 
 const presets = [
-  { id: 'research', label: '研究布局', icon: Telescope },
-  { id: 'writing', label: '写作布局', icon: PencilLine },
-  { id: 'review', label: '审阅布局', icon: Columns2 }
+  { id: 'research', label: '探索布局', icon: Telescope },
+  { id: 'writing', label: '专注布局', icon: PencilLine },
+  { id: 'review', label: '运行布局', icon: Columns2 }
 ] as const;
 
 export function WindowChrome({
