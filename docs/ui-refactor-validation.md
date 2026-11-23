@@ -1,5 +1,15 @@
 # UI 重构验证记录
 
+## 2026-11-23 P7.5：性能工具与短预检
+
+状态：**Verified passing**（测量工具与短预检；正式五轮另记）。普通UI、PDF、长流/空闲和独立React profiling入口均使用隔离资料根，按独立进程轮次汇总并校验源码、构建、fixture和主机身份。专用profiling构建保护普通dist，计数器不保留正文；失败状态、完成轮数和损坏子报告证据进入最终报告。子进程清除继承的测量参数与开发Renderer URL，避免测到不同应用。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/performance-profile-seed.test.mjs tests/unit/performance-profiling.test.mjs tests/unit/performance-repeated-workloads.test.mjs tests/unit/performance-sustained-stream.test.mjs tests/unit/performance-ui-runs.test.mjs tests/unit/renderer-workload-metrics.test.mjs tests/unit/performance-child-environment.test.mjs tests/unit/performance-child-report.test.mjs tests/unit/performance-report.test.mjs` **37/37**。
+
+`ROC_PERF_UI_WORKLOADS=1 ROC_PERF_STREAM_MINUTES=1 node scripts/performance/bench-macos-app.mjs /tmp/roc-ui-p7-preflight5-20261123.json --samples 1 --idle-minutes 0`七个短场景及一分钟长流通过：210个delta、实际首尾75.48秒、正常完成、终帧已渲染。此前同场景偶发旧长回复遮住新运行，已另建真实hook/Virtuoso回归稳定复现，生产交接修复另记；本次通过不能撤销此前失败证据。
+
+`node scripts/performance/bench-repeated-workloads.mjs /tmp/roc-ui-pdf-preflight3-20261123.json --workload pdf --samples 1`通过：400页PDF连续200次翻页，每次验证页码、新canvas分配及可见栅格，页内P50/P95为39.69/45.38ms，并完成后台解析。首次旧脚本匹配到重复刷新按钮、随后点击未解析PDF的禁用对照控件；现限定画布并使用真实原文模式。`node scripts/performance/bench-react-profiler.mjs /tmp/roc-ui-profile-preflight-20261123.json --samples 1`七场景与IPC计数通过，专用临时构建已清理。上述数字仅为预检，不是正式五轮成绩；RAF、输入代理和React包含式render耗时的限制见[性能测量](research-performance.md)。
+
 ## 2026-11-23 P8.2：高缩放短视口与确认操作
 
 状态：**Verified passing**（短视口与原生缩放定向范围）。真实400%缩放留下360×225 CSS视口，活动栏原固定高度溢出，设置表单可用区过低；共用ConfirmDialog的取消按钮另复现垂直裁切和遮挡。活动栏改为独立滚动，短视口模态壳收减外留白并由面板承接滚动，设置的分区/表单/保存栏共享滚动区域。保留字号、目标尺寸、取消初焦点与草稿守卫。

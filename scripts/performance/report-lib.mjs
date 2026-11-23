@@ -52,10 +52,17 @@ export function saveReport(path, report) {
   writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
   const rows = report.scenarios.flatMap(scene => Object.entries(scene.summary ?? {}).map(([metric, summary]) =>
     `| ${scene.id} | ${metric} | ${summary.count} | ${summary.p50.toFixed(3)} | ${summary.p95.toFixed(3)} | ${summary.max.toFixed(3)} |`));
+  const execution = report.status === undefined ? [] : [
+    `Status: ${report.status}.` + (Number.isSafeInteger(report.completedRuns) && Number.isSafeInteger(report.fixture?.independentRuns)
+      ? ` Completed independent rounds: ${report.completedRuns}/${report.fixture.independentRuns}.` : ''),
+    ...(report.failure === undefined ? [] : [
+      `Failure${report.failure.iteration === undefined ? '' : ` at round ${report.failure.iteration}`}: ${String(report.failure.error)}`
+    ]), ''
+  ];
   const markdown = [
     `# ${report.kind}`, '', `Source: ${report.source.gitSha}. Fixture: ${report.fixtureSha256}.`,
     `Host: ${report.host.chip}, ${report.host.totalMemoryBytes} bytes, macOS ${report.host.macOS}, Node ${report.host.node}.`, '',
-    '| Scenario | Metric | Samples | P50 | P95 | Maximum |', '| --- | --- | ---: | ---: | ---: | ---: |',
+    ...execution, '| Scenario | Metric | Samples | P50 | P95 | Maximum |', '| --- | --- | ---: | ---: | ---: | ---: |',
     ...rows, '', ...report.limitations.map(value => `- ${value}`), ''
   ].join('\n');
   writeFileSync(output.replace(/\.json$/u, '') + '.md', markdown);

@@ -705,7 +705,11 @@ async function writeP4SlowModeResponse(response, turn) {
     if (!wrote) {
       return;
     }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, stepMs));
+    await new Promise((resolveDelay) => {
+      const finish = () => {clearTimeout(timer); response.off('close', finish); resolveDelay();};
+      const timer = setTimeout(finish, stepMs);
+      response.once('close', finish);
+    });
   }
   safeWriteSseFinish(response, 'stop', { prompt_tokens: 40, completion_tokens: totalChunks, total_tokens: 40 + totalChunks });
 }
@@ -986,7 +990,7 @@ export async function startSmokeProvider(input = {}) {
   return {
     endpoint: `http://127.0.0.1:${address.port}/v1`,
     requests,
-    close: () =>
+    close: ({force = false} = {}) =>
       new Promise((resolveClose, rejectClose) => {
         server.close((error) => {
           if (error !== undefined) {
@@ -995,6 +999,7 @@ export async function startSmokeProvider(input = {}) {
           }
           resolveClose();
         });
+        if (force) server.closeAllConnections();
       })
   };
 }

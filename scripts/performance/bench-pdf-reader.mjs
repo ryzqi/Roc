@@ -9,11 +9,14 @@ import { createPerformancePdf } from '../lib/research-pdf-performance-fixture.mj
 import { waitForAppReady } from '../../tests/smoke/lib/assertions.mjs';
 import { observeElectronLoop, sampleElectronProcesses } from './electron-metrics.mjs';
 import { makeReport, readArguments, saveReport, sha256, summarizeRows } from './report-lib.mjs';
+import {measureRendererWorkload} from './renderer-workload-metrics.mjs';
 
 const options = readArguments('.artifacts/mac-performance/reader-before.json');
 const nativeReopen = process.env.ROC_PERF_PDF_BACKGROUND_REOPEN === '1';
 const nativeReopenHiddenMs = Number(process.env.ROC_PERF_PDF_HIDDEN_MS ?? 0);
 assert.ok(Number.isFinite(nativeReopenHiddenMs) && nativeReopenHiddenMs >= 0, 'hidden_duration_invalid');
+const pageTurns = Number(process.env.ROC_PERF_PDF_PAGE_TURNS ?? 0);
+assert.ok(Number.isSafeInteger(pageTurns) && pageTurns >= 0 && pageTurns < 400, 'pdf_page_turns_invalid');
 const referenceRenderer = process.env.ROC_PERF_PDF_REFERENCE_RENDERER;
 const rendererRoot = resolve(referenceRenderer ?? 'dist/renderer');
 assert.ok(referenceRenderer === undefined || nativeReopen, 'reference_renderer_requires_reopen_scenario');
@@ -22,8 +25,9 @@ const nativeReopenViewport = nativeReopen ? { width: 1400, height: 900 } : null;
 const bytes = createPerformancePdf();
 const report = makeReport('pdf-reader', { pdfSha256: sha256(bytes), pages: 400, samples: options.samples,
   viewport, nativeReopenViewport, backgroundOperation: 'parseDocument', ipcOperation: 'app.getStatus',
-  nativeReopen, nativeReopenHiddenMs, nativeReopenInputProbe: nativeReopen ? 'shell-and-pdf' : null },
+  nativeReopen, nativeReopenHiddenMs, ...(pageTurns > 0 ? {pageTurns} : {}), nativeReopenInputProbe: nativeReopen ? 'shell-and-pdf' : null },
 ['src/renderer/literature/PaperPdfView.tsx', 'src/main/pdf-preview-protocol.ts',
+  'scripts/performance/bench-pdf-reader.mjs', 'scripts/performance/renderer-workload-metrics.mjs',
   'src/main/plugins/research/document-service.ts', 'dist/main/index.js', 'dist/preload/index.cjs']);
 report.rendererBuild = {
   variant: referenceRenderer === undefined ? 'current' : 'frozen-pr-10-reader',
@@ -34,8 +38,10 @@ report.rendererBuild = {
 };
 const root = mkdtempSync(join(tmpdir(), 'roc-reader-performance-'));
 mkdirSync(dirname(resolve(options.outputPath)), { recursive: true });
-const artifactRoot = mkdtempSync(join(dirname(resolve(options.outputPath)), 'reader-artifacts-'));
-report.artifactRoot = artifactRoot;
+const artifactRoot = process.env.ROC_PERF_KEEP_ARTIFACTS === '1'
+  ? mkdtempSync(join(dirname(resolve(options.outputPath)), 'reader-artifacts-')) : join(root, 'diagnostics');
+mkdirSync(artifactRoot, {recursive: true});
+if (process.env.ROC_PERF_KEEP_ARTIFACTS === '1') report.artifactRoot = artifactRoot;
 let app, page;
 try {
   const { seedPerformanceProfiles } = await importTypeScriptModule('tests/smoke/lib/performance-profile-seed.ts',
@@ -91,10 +97,15 @@ try {
     const canvas = document.querySelector('[data-testid="reader-pdf-canvas"]');
     return canvas?.width > 0 && canvas.height > 0 && canvas.parentElement.style.visibility === 'visible';
   }, null, { timeout: 30_000 });
+  const showSourcePdf = async () => {
+    const control = page.getByTestId(referenceRenderer === undefined ? 'reader-original-pdf' : 'reader-compare-pdf');
+    if (await control.getAttribute('aria-pressed') !== 'true') await control.click();
+  };
   const rows = [], processSamples = [], requests = [];
   await navigate('literature');
   await page.getByTestId('literature-hub').waitFor();
-  await page.getByTestId('literature-refresh').click();
+  if (await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  await page.getByTestId('literature-hub').getByTestId('literature-refresh').click();
   await page.setViewportSize(viewport);
   const picker = page.getByRole('combobox', { name: '选择当前文献', exact: true });
   await picker.waitFor({ state: 'visible' });
@@ -121,9 +132,9 @@ try {
     await navigate('literature');
     await picker.selectOption(document.libraryItemId);
     await page.getByTestId('paper-reader').waitFor();
-    // The reader shows source pixels automatically before parsing. Keep the
-    // comparison control active so the same workload also opens parsed sources.
-    await page.getByTestId('reader-compare-pdf').click();
+    // Original source mode is available before parsing; comparison requires a
+    // parsed document and is only used by the frozen legacy renderer fixture.
+    await showSourcePdf();
     await waitForPdf();
     const firstRasterMs = performance.now() - started;
     const metrics = await sampleElectronProcesses(app);
@@ -149,6 +160,42 @@ try {
     report.limitations.push('Alternating legacy/verified Main source reads share the final Renderer and one application; this refines source-path cost, not every earlier Renderer change.');
     await app.evaluate(() => {process.env.ROC_PERF_PDF_RANGE_READER = '1';});
   } else report.scenarios.push({ id: '400-page-open-close', samples: rows, summary: summarizeRows(rows) });
+  if (pageTurns > 0) {
+    await navigate('literature');
+    await picker.selectOption(document.libraryItemId);
+    await page.getByTestId('paper-reader').waitFor();
+    await showSourcePdf();
+    await waitForPdf();
+    const pageInput = page.getByRole('spinbutton', {name: 'PDF 页码'});
+    await pageInput.fill('1');
+    await pageInput.press('Enter');
+    await waitForPdf();
+    const measurement = await measureRendererWorkload(page, async () => {
+      const samples = [];
+      for (let index = 0; index < pageTurns; index++) {
+        const allocations = await page.evaluate(() => window.__rocRasterAllocations);
+        const started = performance.now();
+        await page.getByTestId('reader-pdf').getByRole('button', {name: '下一页', exact: true}).click();
+        // A positive canvas alone could be the old page. Require both selected page and
+        // a new allocation before waiting for the production visibility-on-raster latch.
+        await page.waitForFunction(({target, allocations}) =>
+          document.querySelector('input[aria-label="PDF 页码"]')?.value === String(target) &&
+          window.__rocRasterAllocations > allocations, {target: index + 2, allocations});
+        await waitForPdf();
+        samples.push({page: index + 2, rasterReadyMs: performance.now() - started,
+          rasterAllocations: await page.evaluate(() => window.__rocRasterAllocations) - allocations,
+          ...(await readerOwnership())});
+      }
+      return samples;
+    }, {rawTracePath: process.env.ROC_PERF_RAW_TRACE_DIR === undefined ? null :
+      join(resolve(process.env.ROC_PERF_RAW_TRACE_DIR), `pdf-${pageTurns}-page-turns.trace.json`)});
+    report.scenarios.push({id: `400-page-${pageTurns}-continuous-turns`, samples: measurement.result,
+      summary: summarizeRows(measurement.result), measurement});
+    processSamples.push(await sampleElectronProcesses(app));
+    saveReport(options.outputPath, report);
+    await picker.selectOption('');
+    await page.getByTestId('reader-pdf').waitFor({state: 'detached'});
+  }
   const started = performance.now();
   const parsePromise = page.evaluate(async documentId => await window.roc.research.parseDocument({ documentId, tier: 'compact' }), document.id);
   await closeWindow();
@@ -175,9 +222,7 @@ try {
     const openAssistant = page.getByRole('button', {name: '打开助手', exact: true});
     if (await openAssistant.isVisible()) await openAssistant.click();
     await page.getByTestId('assistant-composer-input').waitFor({state: 'visible'});
-    if (await page.getByTestId('reader-compare-pdf').getAttribute('aria-pressed') !== 'true') {
-      await page.getByTestId('reader-compare-pdf').click();
-    }
+    await showSourcePdf();
     await waitForPdf();
     const reopenRows = [];
     for (let iteration = 0; iteration < options.samples; iteration++) {
@@ -233,6 +278,7 @@ try {
     'Native close-to-hide and second-instance reopen assert production Renderer hidden notifications. Playwright disables Chromium occlusion/backgrounding.',
     'Native reopen shell-input-ready tests the actual assistant composer before PDF readiness; input-ready is the actual page-number edit. Selected PDFs remain warm during the 30-second hidden grace; longer hiding measures verified source loading and fresh PDF Worker creation.',
     'Working-set sums include shared pages. No exclusive macOS footprint or IOSurface estimate.');
+  if (pageTurns > 0) report.limitations.push('Continuous PDF turns use the real Next page control from page 1 and require the requested page, a fresh canvas allocation and completed visible raster for every step. Tracing/RAF observers add overhead; RAF cadence is not compositor FPS.');
   if (referenceRenderer !== undefined) report.limitations.push(
     'Reference replaces only PaperPdfView.tsx with the exact PR-10 source in a separately built production Renderer. Main, preload, source protocol, shell and dependencies are current; reference intentionally retains the hidden Worker/canvas.');
   console.log(saveReport(options.outputPath, report));
@@ -243,8 +289,8 @@ try {
   }
   throw error;
 } finally {
-  if (app) await app.close();
-  rmSync(root, { recursive: true, force: true });
+  try {if (app) await app.close();}
+  finally {rmSync(root, { recursive: true, force: true });}
 }
 
 async function closeWindow() {

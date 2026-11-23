@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { DatabasePool } from '../../../src/main/infrastructure/database-pool';
-import { researchStageSchema } from '../../../src/shared/schemas/research';
+import { researchLiteratureSchema, researchStageSchema } from '../../../src/shared/schemas/research';
+import {researchBibliographyEntrySchema} from '../../../src/shared/schemas/research-library';
 import { defaultResearchIndexOptions } from '../../../src/shared/schemas/research-index';
 import {
   applyAgentDatabaseSchema,
@@ -31,6 +32,51 @@ export function seedPerformanceProfiles(roots: PerformanceProfileRoots): void {
   if (countEvents(roots.profile10000) !== 10_000) {
     throw new Error('performance_profile_10000_seed_mismatch');
   }
+}
+
+/** Optional, isolated UI workload corpus. Startup baselines retain their original seed. */
+export function seedUiPerformanceProfile(dataRoot: string): void {
+  seedProfile(dataRoot, 0, 'thread-profile-empty');
+  const pool = new DatabasePool(join(dataRoot, 'plugin-data'));
+  try {
+    const db = pool.getConnection('@roc/plugin-research');
+    const timestamp = '2026-07-10T00:00:00.000Z';
+    db.transaction(() => {
+      for (let index = 1; index < 100; index++) seedResearchProject(pool, join(dataRoot, 'projects', String(index)), index);
+      const insert = db.prepare(`INSERT INTO research_library
+        (id,identity_key,metadata_json,bibliography_json,sources_json,revision,archived,created_at,updated_at)
+        VALUES (?,?,?,?,?,1,0,?,?)`);
+      const link = db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?)');
+      const alias = db.prepare('INSERT INTO research_library_aliases (item_id,identity) VALUES (?,?)');
+      for (const count of [100, 2_000, 10_000]) {
+        for (let index = 1; index <= count; index++) {
+          const id = `performance-paper-${count}-${String(index).padStart(5, '0')}`;
+          const title = `Scale${count} literature ${String(index).padStart(5, '0')}`;
+          const metadata = researchLiteratureSchema.parse({id, source: 'local', externalId: id, doi: null,
+            title, authors: ['Benchmark Author'], abstract: 'Generated isolated UI workload record.',
+            publishedYear: 2026, citationCount: null, url: null, openAccessUrl: null,
+            importedAt: timestamp, updatedAt: timestamp});
+          const bibliography = researchBibliographyEntrySchema.parse({citationKey: `scale${count}_${index}`,
+            entryType: 'article', fields: {title}, preambles: [], csl: null,
+            title, authors: metadata.authors, doi: null, publishedYear: 2026, abstract: metadata.abstract, url: null});
+          insert.run(id, `local:${id}`, JSON.stringify(metadata), JSON.stringify(bibliography),
+            JSON.stringify([{metadata, bibliography, providerRecord: null}]), timestamp, timestamp);
+          alias.run(id, `local:${id}`);
+          link.run(id, 'project-performance-0');
+        }
+      }
+    })();
+    for (const count of [500, 5_000]) seedHistory(pool, count, `thread-profile-${count}`);
+    const projects = db.prepare('SELECT COUNT(*) FROM research_projects').pluck().get();
+    const papers = db.prepare('SELECT COUNT(*) FROM research_library').pluck().get();
+    const histories = pool.getConnection('@roc/plugin-agent').prepare('SELECT thread_id, COUNT(*) AS count FROM agent_events GROUP BY thread_id')
+      .all() as Array<{thread_id: string; count: number}>;
+    if (projects !== 100 || papers !== 12_100 || histories.length !== 2 ||
+        !histories.some(row => row.thread_id === 'thread-profile-500' && row.count === 500) ||
+        !histories.some(row => row.thread_id === 'thread-profile-5000' && row.count === 5_000)) {
+      throw new Error('ui_performance_seed_mismatch');
+    }
+  } finally {pool.closeAll();}
 }
 
 function readProfileRoots(): PerformanceProfileRoots {
@@ -66,41 +112,50 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
     if (eventCount === 0) {
       return;
     }
-    agentDb
-      .prepare(
-        `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
-         VALUES (?, 'chat', ?, ?, 'completed', ?, ?)`
-      )
-      .run(threadId, `Profile ${eventCount}`, `Profile ${eventCount}`, '2026-07-10T00:00:00.000Z', '2026-07-10T00:00:00.000Z');
-    // Each user turn belongs to a distinct run, as in a normal conversation.
-    // A single run with 10k prompts reuses occurrence-based keys after paging.
-    const insertRun = agentDb.prepare(
-      `INSERT INTO agent_runs
-       (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
-        enabled_capabilities_json, workspace_path, task_source, workflow_hint)
-       VALUES (?, ?, ?, 'profile', 'completed', ?, ?, NULL, NULL, ?, NULL, NULL, NULL)`
-    );
-    const insert = agentDb.prepare(
-      `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
-       VALUES (?, ?, ?, ?, 'message', ?, ?)`
-    );
-    agentDb.transaction(() => {
-      for (let sequence = 1; sequence <= eventCount; sequence += 1) {
-        const runId = `run-${threadId}-${sequence}`;
-        insertRun.run(runId, threadId, sequence, '2026-07-10T00:00:00.000Z', '2026-07-10T00:10:00.000Z', JSON.stringify({ mcpServers: [], skills: [] }));
-        insert.run(
-          `event-${threadId}-${sequence}`,
-          threadId,
-          runId,
-          sequence,
-          JSON.stringify({ role: 'user', content: `profile-marker-${eventCount}-${sequence}` }),
-          new Date(Date.UTC(2026, 6, 10, 0, 0, 0, sequence)).toISOString()
-        );
-      }
-    })();
+    seedHistory(pool, eventCount, threadId);
   } finally {
     pool.closeAll();
   }
+}
+
+function seedHistory(pool: DatabasePool, eventCount: number, threadId: string): void {
+  const agentDb = pool.getConnection('@roc/plugin-agent');
+  agentDb
+    .prepare(
+      `INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
+       VALUES (?, 'chat', ?, ?, 'completed', ?, ?)`
+    )
+    .run(threadId, `Profile ${eventCount}`, `Profile ${eventCount}`, '2026-07-10T00:00:00.000Z', '2026-07-10T00:00:00.000Z');
+  // Each user turn belongs to a distinct run, as in a normal conversation.
+  // A single run with 10k prompts reuses occurrence-based keys after paging.
+  const insertRun = agentDb.prepare(
+    `INSERT INTO agent_runs
+     (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
+      enabled_capabilities_json, workspace_path, task_source, workflow_hint)
+     VALUES (?, ?, ?, 'profile', 'completed', ?, ?, NULL, NULL, ?, NULL, NULL, NULL)`
+  );
+  const insert = agentDb.prepare(
+    `INSERT INTO agent_events (id, thread_id, run_id, sequence, type, payload_json, created_at)
+     VALUES (?, ?, ?, ?, 'message', ?, ?)`
+  );
+  agentDb.transaction(() => {
+    for (let sequence = 1; sequence <= eventCount; sequence += 1) {
+      const runId = `run-${threadId}-${sequence}`;
+      insertRun.run(runId, threadId, sequence, '2026-07-10T00:00:00.000Z', '2026-07-10T00:10:00.000Z', JSON.stringify({ mcpServers: [], skills: [] }));
+      insert.run(
+        `event-${threadId}-${sequence}`,
+        threadId,
+        runId,
+        sequence,
+        JSON.stringify({ role: 'user', content: `profile-marker-${eventCount}-${sequence}` }),
+        new Date(Date.UTC(2026, 6, 10, 0, 0, 0, sequence)).toISOString()
+      );
+    }
+    // Raw event insertion must advance the production append cursor too. Without
+    // it, the first real user message retries sequence 1 and violates uniqueness.
+    agentDb.prepare('INSERT INTO agent_thread_event_cursors (thread_id, next_sequence) VALUES (?, ?)')
+      .run(threadId, eventCount + 1);
+  })();
 }
 
 /**

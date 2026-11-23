@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import { compareReports } from '../../scripts/performance/compare-reports.mjs';
-import { summarize } from '../../scripts/performance/report-lib.mjs';
+import { saveReport, summarize } from '../../scripts/performance/report-lib.mjs';
 
 const report = () => ({ schemaVersion: 1, kind: 'fixture', protocolSha256: 'protocol', fixtureSha256: 'corpus',
   source: { gitSha: 'before' }, host: { identitySha256: 'host', platform: 'darwin', arch: 'arm64', node: 'node',
@@ -56,4 +59,28 @@ test('memory results and parser outcomes remain part of the comparison contract'
     after.scenarios[0][field] = 'changed';
     assert.throws(() => compareReports(before, after), /performance_correctness_changed/u);
   }
+});
+
+test('saved Markdown exposes failed partial rounds alongside retained measurements', () => {
+  const root=mkdtempSync(join(tmpdir(),'roc-report-status-'));
+  try {
+    const value={...report(),fixture:{independentRuns:5},limitations:[],status:'failed',completedRuns:2,
+      failure:{iteration:3,error:'sample_failed'}};
+    const output=join(root,'failed.json');
+    saveReport(output,value);
+    const markdown=readFileSync(join(root,'failed.md'),'utf8');
+    assert.ok(markdown.includes('Status: failed. Completed independent rounds: 2/5.'));
+    assert.ok(markdown.includes('Failure at round 3: sample_failed'));
+    assert.ok(markdown.includes('| query | durationMs |'));
+    assert.ok(markdown.indexOf('Status: failed.') < markdown.indexOf('| Scenario |'));
+    assert.deepEqual(JSON.parse(readFileSync(output,'utf8')),value);
+    value.status='complete'; value.completedRuns=5; delete value.failure;
+    saveReport(output,value);
+    const complete=readFileSync(join(root,'failed.md'),'utf8');
+    assert.ok(complete.includes('Status: complete. Completed independent rounds: 5/5.'));
+    assert.ok(!complete.includes('Failure at round'));
+    delete value.status;
+    saveReport(output,value);
+    assert.ok(!readFileSync(join(root,'failed.md'),'utf8').includes('Status:'));
+  } finally {rmSync(root,{recursive:true,force:true});}
 });
