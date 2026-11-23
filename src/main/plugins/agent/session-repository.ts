@@ -536,6 +536,7 @@ export class AgentSessionRepository {
 
   completeRunAtomically(input: {
     assistantMessage: string;
+    validatedResponse?: string;
     durationMs: number;
     endedAt: string;
     modelId: string;
@@ -647,7 +648,8 @@ export class AgentSessionRepository {
         createdAt: input.runStartedAt,
         durationMs: input.durationMs,
         summary: input.summary,
-        assistantMessage: input.assistantMessage
+        assistantMessage: input.assistantMessage,
+        ...(input.validatedResponse === undefined ? {} : { validatedResponse: input.validatedResponse })
       };
       this.runEventLog.recordRunEvent(runCompletedEvent, input.endedAt);
 
@@ -663,6 +665,7 @@ export class AgentSessionRepository {
           transition.run.threadId,
           JSON.stringify({
             assistantMessage: input.assistantMessage,
+            ...(input.validatedResponse === undefined ? {} : { validatedResponse: input.validatedResponse }),
             durationMs: input.durationMs,
             finishReason: 'stop',
             modelId: input.modelId,

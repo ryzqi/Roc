@@ -360,6 +360,7 @@ function mapAgentOutboxEvent(row: AgentOutboxRow): AgentOutboxEvent {
   }
   const record = requireOutboxPayloadRecord(payload);
   if (row.event_type === 'run_completed') {
+    const validatedResponse = readOptionalOutboxString(record, 'validatedResponse');
     const finishReason = requireOutboxString(record, 'finishReason');
     if (finishReason !== 'stop') {
       throw new Error('agent_outbox_payload_invalid');
@@ -372,6 +373,7 @@ function mapAgentOutboxEvent(row: AgentOutboxRow): AgentOutboxEvent {
       threadId: row.thread_id,
       payload: {
         assistantMessage: requireOutboxString(record, 'assistantMessage'),
+        ...(validatedResponse === undefined ? {} : { validatedResponse }),
         durationMs: requireOutboxNumber(record, 'durationMs'),
         finishReason,
         modelId: requireOutboxString(record, 'modelId'),

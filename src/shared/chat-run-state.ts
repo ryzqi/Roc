@@ -73,6 +73,7 @@ export type ChatRunState = {
   status: 'idle' | 'running' | 'recovering' | 'waiting_user' | 'completed' | 'cancelled' | 'failed';
   historyComplete: boolean;
   assistantMessage: string;
+  validatedResponse?: string | undefined;
   activityBlocks: ChatRunActivityBlock[];
   durationMs: number | null;
   summary: string | null;
@@ -196,6 +197,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       createdAt: completedEvent.createdAt,
       status: 'completed',
       assistantMessage: completedEvent.assistantMessage,
+      validatedResponse: completedEvent.validatedResponse,
       durationMs: completedEvent.durationMs,
       summary: completedEvent.summary,
       pendingInterrupts: [],
@@ -306,6 +308,7 @@ function resetStreamingAssistantOutput(state: ChatRunState): ChatRunState {
   return {
     ...state,
     assistantMessage: '',
+    validatedResponse: undefined,
     activityBlocks: state.activityBlocks.filter((block) => block.kind !== 'reasoning'),
     subagents: state.subagents.map((node) => resetSubagentStreamingOutput(node))
   };

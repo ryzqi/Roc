@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, drawSelection, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -8,16 +8,18 @@ import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { useContentPreferences } from '../app/use-content-preferences';
 import { tags } from '@lezer/highlight';
 import type { InlineSelectionAnchor } from '../canvas/InlineCommandBar';
+import {useViewSelected} from '../shared/view-activity';
 
 export type SourceSelection = {
   text: string;
+  truncated: boolean;
   from: number;
   to: number;
   lineRange: { start: number; end: number };
   anchor: InlineSelectionAnchor | null;
 };
 
-export type SourceReplacement = { from: number; to: number; text: string; nonce: number };
+export type SourceReplacement = { from: number; to: number; text: string; expectedDocument: string; nonce: number };
 
 const sourceHighlight = HighlightStyle.define([
   { tag: [tags.keyword, tags.tagName], color: 'var(--syntax-keyword)' },
@@ -51,6 +53,9 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
   replacement?: SourceReplacement | null;
 }): React.JSX.Element {
   const { preferences } = useContentPreferences();
+  const selected = useViewSelected();
+  const [composing, setComposing] = useState(false);
+  const display = selected || composing;
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -59,12 +64,18 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
   onSelectionRef.current = onSelectionChange;
   const readOnlyConfig = useRef(new Compartment());
   const initial = useRef(value);
+  const retainedState = useRef<EditorState | null>(null);
+  const retainedScroll = useRef<ReturnType<EditorView['scrollSnapshot']> | undefined>(undefined);
+  const appliedReplacement = useRef<number | null>(null);
+  const appliedFocus = useRef<number | null>(null);
+  const compositionEndTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    if (host.current === null) return;
+  useLayoutEffect(() => {
+    if (!display || host.current === null) return;
     const editor = new EditorView({
       parent: host.current,
-      state: EditorState.create({
+      scrollTo: retainedScroll.current,
+      state: retainedState.current ?? EditorState.create({
         doc: initial.current,
         extensions: [
           lineNumbers(), history(), drawSelection(), highlightActiveLine(), EditorView.lineWrapping,
@@ -72,6 +83,14 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
           search({ top: true }), keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
           EditorView.contentAttributes.of({ 'aria-label': '文稿源码', 'data-testid': 'production-latex-content', spellcheck: 'false' }),
           readOnlyConfig.current.of(EditorState.readOnly.of(false)),
+          EditorView.domEventHandlers({
+            compositionstart: () => {clearTimeout(compositionEndTimer.current); setComposing(true);},
+            // CodeMirror flushes the final DOM mutation in a microtask after
+            // compositionend. Keep its view through that flush before suspending.
+            compositionend: () => {
+              compositionEndTimer.current = setTimeout(() => {setComposing(false);}, 0);
+            }
+          }),
           EditorView.updateListener.of(update => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
             if (update.selectionSet || update.docChanged) {
@@ -82,9 +101,9 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
                 const end = Math.min(to, from + 10_000);
                 const startLine = update.state.doc.lineAt(from).number;
                 const endLine = update.state.doc.lineAt(to).number;
-                const coords = editor.coordsAtPos(from);
+                const coords = update.view.coordsAtPos(from);
                 onSelectionRef.current?.({
-                  text: update.state.sliceDoc(from, end), from, to: end,
+                  text: update.state.sliceDoc(from, end), truncated: end < to, from, to: end,
                   lineRange: { start: startLine, end: endLine },
                   anchor: coords === null ? null : { x: coords.left, y: Math.max(12, coords.top - 48) }
                 });
@@ -95,33 +114,50 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
       })
     });
     view.current = editor;
-    return () => { view.current = null; editor.destroy(); };
-  }, []);
+    const saveScroll = (): void => {
+      if (editor.dom.getClientRects().length > 0) retainedScroll.current = editor.scrollSnapshot();
+    };
+    editor.scrollDOM.addEventListener('scroll', saveScroll, {passive: true});
+    return () => {
+      saveScroll();
+      retainedState.current = editor.state;
+      clearTimeout(compositionEndTimer.current);
+      editor.scrollDOM.removeEventListener('scroll', saveScroll);
+      view.current = null;
+      editor.destroy();
+    };
+  }, [display]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const editor = view.current;
     if (editor !== null && editor.state.doc.toString() !== value) {
       editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
     }
-  }, [value]);
-  useEffect(() => {
+  }, [value, display]);
+  useLayoutEffect(() => {
     view.current?.dispatch({ effects: readOnlyConfig.current.reconfigure(EditorState.readOnly.of(readOnly)) });
-  }, [readOnly]);
+  }, [readOnly, display]);
 
   useEffect(() => {
     const editor = view.current;
-    if (editor === null || focusLine == null) return;
+    if (editor === null || focusLine == null || appliedFocus.current === focusLine.nonce) return;
+    appliedFocus.current = focusLine.nonce;
     const line = editor.state.doc.line(Math.max(1, Math.min(focusLine.line, editor.state.doc.lines)));
     editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) });
     editor.focus();
-  }, [focusLine]);
+  }, [focusLine, display]);
 
   useEffect(() => {
     const editor = view.current;
-    if (editor === null || replacement === null) return;
-    if (replacement.nonce < 1 || replacement.from < 0 || replacement.to < replacement.from || replacement.to > editor.state.doc.length) return;
+    if (editor === null || replacement === null || appliedReplacement.current === replacement.nonce) return;
+    // Rejected proposals are consumed too; returning to an old document must
+    // never revive an already refused application.
+    appliedReplacement.current = replacement.nonce;
+    if (editor.state.readOnly || editor.state.doc.toString() !== replacement.expectedDocument ||
+        editor.state.selection.main.from !== replacement.from || editor.state.selection.main.to !== replacement.to ||
+        replacement.nonce < 1 || replacement.from < 0 || replacement.to < replacement.from || replacement.to > editor.state.doc.length) return;
     editor.dispatch({ changes: { from: replacement.from, to: replacement.to, insert: replacement.text }, selection: { anchor: replacement.from + replacement.text.length } });
-  }, [replacement]);
+  }, [replacement, display]);
 
   useEffect(() => { view.current?.requestMeasure(); }, [preferences.codeSize]);
 

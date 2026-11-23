@@ -3,6 +3,7 @@ import type { AppViewTarget, WorkbenchTool } from './routes';
 import type { RocClient } from '../shared/roc-client';
 import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
 import type {OpenResearchArtifact, OpenReviewInspector} from '../artifacts/artifact-interactions';
+import type {ChatStartRunResult} from '../../shared/types';
 
 /**
  * The project/workspace scope a canvas view renders inside (P3).
@@ -36,6 +37,11 @@ export type LiteratureOpenRequest = {
   nonce: number;
   target: LiteratureOpenTarget;
 };
+
+/** Internal handoff from a current request after chat.startRun returns its receipt. */
+export type AdoptAcceptedRun = (input: {
+  projectId: string; workspacePath: string; receipt: ChatStartRunResult;
+}) => void;
 
 export type WorkspaceScope = {
   client: RocClient;
@@ -81,6 +87,7 @@ export type WorkspaceScope = {
   openTasks: (taskId?: string) => void;
   /** Open the current project's composer without starting a run. */
   openAssistant: () => void;
+  adoptAcceptedRun: AdoptAcceptedRun;
   openReviewInspector: OpenReviewInspector;
   openArtifact: OpenResearchArtifact;
 };

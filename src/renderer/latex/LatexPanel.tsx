@@ -8,7 +8,8 @@ import { ModalShell } from '../shell/ModalShell';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime, formatBytes } from '../shared/format';
-import {useViewActive} from '../shared/view-activity';
+import {useViewActive, useViewSelected} from '../shared/view-activity';
+import {ReadingViewBoundary} from '../literature/ReadingViewBoundary';
 import { fileName } from '../workspace/paths';
 import {previewFile, writeTextFile} from '../workspace/workspace-store';
 import {workspaceDirectoryIndex} from '../workspace/directory-index';
@@ -17,9 +18,9 @@ import type { SourceReplacement, SourceSelection } from './SourceEditor';
 import {
   InlineCommandBar,
   type InlineCommandAction,
-  type InlineReplacementProposal,
   type InlineSelectionContext
 } from '../canvas/InlineCommandBar';
+import {useInlinePolish} from './use-inline-polish';
 import { WorkspaceCompilePanel } from './WorkspaceCompilePanel';
 import { InlineHint, primaryButtonClass } from './panel-shell';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
@@ -65,6 +66,8 @@ export function LatexPanel(): React.JSX.Element {
    */
   const scope = useWorkspaceScope();
   const active = useViewActive();
+  const selected = useViewSelected();
+  const readingPreviewRef = useRef<HTMLElement>(null);
   const canWrite = scope.writable;
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -81,7 +84,6 @@ export function LatexPanel(): React.JSX.Element {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedFormula, setSelectedFormula] = useState('');
   const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
-  const [inlineProposal, setInlineProposal] = useState<InlineReplacementProposal | null>(null);
   const [replacement, setReplacement] = useState<SourceReplacement | null>(null);
   const replacementNonce = useRef(0);
   const liveDraft = useDeferredValue(draft ?? '');
@@ -160,6 +162,9 @@ export function LatexPanel(): React.JSX.Element {
   const visibleEntries = entries.filter(file => file.path.toLocaleLowerCase().includes(fileQuery.toLocaleLowerCase()));
   const markdownPreview = selectedPath?.toLowerCase().endsWith('.md') ?? false;
   const mathPreview = selectedPath?.toLowerCase().endsWith('.tex') ?? false;
+  const polish = useInlinePolish({scope,canEdit:canEdit && !save.pending && !compiling,filePath:selectedPath,
+    draft:draft ?? previewData?.content ?? '',baseline,selection:sourceSelection,note:setNote});
+  const invalidatePolish = polish.invalidate;
 
   /** Latch the loaded text into `draft` once per path, so typing does not fight the reload. */
   const loadedPathRef = useRef<string | null>(null);
@@ -188,9 +193,9 @@ export function LatexPanel(): React.JSX.Element {
     setSelectedFormula('');
     setFocusLine(null);
     setSourceSelection(null);
-    setInlineProposal(null);
+    invalidatePolish();
     setReplacement(null);
-  }, [save.reset]);
+  }, [save.reset,invalidatePolish]);
 
   const inlineSelection = sourceSelection === null || selectedPath === null ? null : {
     filePath: selectedPath,
@@ -207,24 +212,16 @@ export function LatexPanel(): React.JSX.Element {
       return false;
     }
     replacementNonce.current += 1;
-    setReplacement({ from: sourceSelection.from, to: sourceSelection.to, text: nextText, nonce: replacementNonce.current });
+    setReplacement({ from: sourceSelection.from, to: sourceSelection.to, text: nextText,
+      expectedDocument:draft ?? previewData?.content ?? '',nonce: replacementNonce.current });
     setSourceSelection(null);
     return true;
   }, [canEdit, draft, previewData?.content, selectedPath, sourceSelection]);
 
-  useEffect(() => {
-    const onProposal = (event: Event): void => {
-      const detail = (event as CustomEvent<Partial<InlineReplacementProposal> & { filePath?: string; selectionText?: string }>).detail;
-      if (selectedPath === null || sourceSelection === null || detail.filePath !== selectedPath || detail.selectionText !== sourceSelection.text || typeof detail.replacement !== 'string') return;
-      setInlineProposal({ original: sourceSelection.text, replacement: detail.replacement, requestId: detail.requestId });
-    };
-    window.addEventListener('roc:inline-selection-proposal', onProposal);
-    return () => window.removeEventListener('roc:inline-selection-proposal', onProposal);
-  }, [selectedPath, sourceSelection]);
-
   const handleInlineAction = (action: InlineCommandAction, selection: InlineSelectionContext): void => {
+    if (action === 'polish') {void polish.start();return;}
     window.dispatchEvent(new CustomEvent('roc:inline-selection-command', { detail: { action, context: selection } }));
-    setNote(action === 'polish' ? '润色请求已发送，结果需确认后应用。' : action === 'send-to-assistant' ? '已将选区发送到助手草稿。' : '已发送选区请求。');
+    setNote('已将选区放入助手草稿，发送后开始处理。');
   };
 
   useEffect(() => {
@@ -480,19 +477,23 @@ export function LatexPanel(): React.JSX.Element {
                 <div className="authoring-editor-layout" data-preview-open={pdfPreview !== null || previewOpen&&(markdownPreview||mathPreview)}>
                   <div className="authoring-source"><SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending || compiling} focusLine={focusLine}
                     replacement={replacement} onSelectionChange={selection => {
+                      if (selection?.from !== sourceSelection?.from || selection?.to !== sourceSelection?.to || selection?.text !== sourceSelection?.text) invalidatePolish();
                       setSourceSelection(selection);
-                      setInlineProposal(null);
+                      if (selection?.truncated) setNote('选区超过 10,000 字符，请缩小选区。');
                       setSelectedFormula(selection?.text ?? '');
-                    }} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} /></div>
+                    }} onChange={(value) => { invalidatePolish();setDraft(value); setNote(null); setRecovery(null); }} /></div>
                   {pdfPreview !== null ? <section className="authoring-live-preview" aria-label="编译 PDF 预览">
                     <LazyBoundary fallback={<p role="status">正在打开 PDF…</p>}><FilePreview client={scope.client} projectId={scope.projectId}
                       workspacePath={scope.workspacePath} relativePath={pdfPreview} writable={canWrite} onClose={() => setPdfPreview(null)} /></LazyBoundary>
-                  </section> : previewOpen&&(markdownPreview||mathPreview)?<section className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
+                  </section> : previewOpen&&(markdownPreview||mathPreview)?<ReadingViewBoundary selected={selected}
+                    identity={JSON.stringify([scope.projectId,scope.workspacePath,selectedPath])}
+                    containerRef={readingPreviewRef} scrollSelectors={['.authoring-preview-content']}>
+                    <section ref={readingPreviewRef} className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
                     <header>{markdownPreview?'实时预览':'所选公式预览'}</header>
-                    <div className="authoring-preview-content"><LazyBoundary fallback={<p role="status">正在加载预览…</p>}>
+                    <div className="authoring-preview-content">{selected?<LazyBoundary fallback={<p role="status">正在加载预览…</p>}>
                       {markdownPreview?<ScientificMarkdown text={liveDraft}/>:selectedFormula.trim()?<ReadingFormula text={selectedFormula.trim().replace(/^\\[[(]|\\[)\]]$/g,'')}/>:<p className="text-muted">选中源码中的公式以预览</p>}
-                    </LazyBoundary></div>
-                  </section>:null}
+                    </LazyBoundary>:null}</div>
+                  </section></ReadingViewBoundary>:null}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
                   <span className="text-subtle text-[length:var(--font-meta-size)]" role="status" data-testid="production-latex-state">
@@ -525,18 +526,18 @@ export function LatexPanel(): React.JSX.Element {
       </WorkspaceCompilePanel>
     </div>
     <InlineCommandBar
-      selection={inlineSelection}
+      selection={active ? inlineSelection : null}
       anchor={sourceSelection?.anchor ?? null}
       onAction={handleInlineAction}
-      onDismiss={() => { setSourceSelection(null); setInlineProposal(null); }}
-      onApplyReplacement={applyInlineReplacement}
-      proposal={inlineProposal}
-      onAcceptProposal={() => {
-        if (inlineSelection === null || inlineProposal === null) return;
-        applyInlineReplacement(inlineSelection, inlineProposal.replacement);
-        setInlineProposal(null);
-      }}
-      onRejectProposal={() => setInlineProposal(null)}
+      busy={polish.busy}
+      polishDisabled={!canEdit || save.pending || compiling || sourceSelection?.truncated === true}
+      onDismiss={() => { invalidatePolish();setSourceSelection(null); }}
+      onApplyReplacement={sourceSelection?.truncated ? undefined : applyInlineReplacement}
+      proposal={polish.proposal === null ? null : {original:polish.proposal.source.original,
+        replacement:polish.proposal.replacement,requestId:polish.proposal.source.requestId}}
+      onAcceptProposal={() => {void polish.accept((source,text) => applyInlineReplacement({filePath:source.filePath,
+        selectionText:source.original,lineRange:null,source:'workspace-file'},text));}}
+      onRejectProposal={() => {invalidatePolish();setNote('已放弃润色建议，草稿未修改。');}}
     />
     </>
   );

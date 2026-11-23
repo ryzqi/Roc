@@ -45,6 +45,7 @@ export type AgentOutboxEvent =
       threadId: string;
       payload: {
         assistantMessage: string;
+        validatedResponse?: string;
         durationMs: number;
         finishReason: 'stop';
         modelId: string;

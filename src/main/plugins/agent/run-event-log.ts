@@ -456,6 +456,14 @@ function createBoundedSnapshot(
     json = JSON.stringify(snapshot);
     bytes = byteLength(json);
   }
+  if (bytes > maxBytes && candidate.validatedResponse !== undefined) {
+    // A response contract cannot survive text truncation. Omit an oversized result
+    // so consumers fail closed; never advertise a sliced response as validated.
+    candidate = { ...candidate, validatedResponse: undefined };
+    snapshot = makeSnapshot(runId, throughSequence, candidate);
+    json = JSON.stringify(snapshot);
+    bytes = byteLength(json);
+  }
   if (bytes > maxBytes) throw new Error('agent_run_event_snapshot_too_large');
   return { json, bytes };
 }

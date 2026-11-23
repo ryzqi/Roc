@@ -293,3 +293,34 @@ test('event and snapshot storage faults fail closed and roll back sequence state
     assert.deepEqual(replay.events.map((item) => item.sequence), [3]);
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('validated terminal responses survive snapshot restart intact and are omitted instead of truncated under pressure', async () => {
+  const dir=mkdtempSync(join(tmpdir(),'roc-event-log-response-'));
+  const databasePath=join(dir,'events.db');
+  let db=new Database(databasePath);
+  try {
+    const outfile=join(dir,'log.mjs');
+    await build({entryPoints:['src/main/plugins/agent/run-event-log.ts'],outfile,bundle:true,format:'esm',platform:'node'});
+    const {AgentRunEventLog}=await import(outfile);
+    createEventLogSchema(db);
+    const options={maxEvents:1,maxPendingEvents:1,maxSnapshotBytes:4096};
+    const log=new AgentRunEventLog(db,options);
+    for(const [runId,validatedResponse] of [['valid','{"replacement":"终稿"}'],['oversized','{"replacement":"'+'文'.repeat(3000)+'"}'],['legacy',undefined]]) {
+      log.recordRunEvent({type:'run_started',runId,mode:'plan',threadId:'thread',providerId:'provider',modelId:'model',createdAt:'2026-11-23T00:00:00.000Z'});
+      log.recordRunEvent({type:'run_completed',runId,threadId:'thread',providerId:'provider',modelId:'model',createdAt:'2026-11-23T00:00:00.000Z',
+        durationMs:1,summary:'Done',assistantMessage:'Read-only tool narration.',...(validatedResponse===undefined?{}:{validatedResponse})});
+      // Later metadata forces the terminal event through the same snapshot compactor.
+      log.recordRunEvent({type:'todo_event',runId,todos:[]});
+      log.recordRunEvent({type:'todo_event',runId,todos:[]});
+    }
+    db.close();db=new Database(databasePath);
+    const reopened=new AgentRunEventLog(db,options);
+    for(const runId of ['valid','oversized','legacy']) {
+      const replay=reopened.replayRunEvents({runId,afterSequence:0});
+      assert.equal(replay.kind,'replay_gap');assert.equal(replay.snapshot.state.status,'completed');
+      assert.equal(replay.snapshot.state.assistantMessage,'Read-only tool narration.');
+      assert.equal(replay.snapshot.state.validatedResponse,runId==='valid'?'{"replacement":"终稿"}':undefined);
+      if(runId==='oversized')assert.equal(replay.snapshot.historyComplete,false);
+    }
+  } finally {if(db.open)db.close();rmSync(dir,{recursive:true,force:true});}
+});

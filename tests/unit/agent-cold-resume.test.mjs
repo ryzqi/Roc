@@ -279,7 +279,10 @@ test('response correction survives a crash and a new run on the same thread gets
 for(const scenario of [
   {name:'missing terminal response',finalMessage:'{"answer":"aggregate"}',verdict:'failed'},
   {name:'invalid terminal response',finalMessage:'{"answer":"aggregate"}',finalResponse:'Preface. {"answer":"bad"}',verdict:'failed'},
-  {name:'valid terminal response with narration',finalMessage:'Reading. {"answer":"terminal"}',finalResponse:'{"answer":"terminal"}',verdict:'passed'}
+  {name:'valid terminal response with narration',finalMessage:'Reading. {"answer":"terminal"}',finalResponse:'{"answer":"terminal"}',verdict:'passed'},
+  {name:'valid response too large to duplicate in the event envelope',
+    finalMessage:JSON.stringify({answer:'文'.repeat(200_000)}),finalResponse:JSON.stringify({answer:'文'.repeat(200_000)}),
+    verdict:'passed',omitValidatedResponse:true}
 ]) test(`runtime acceptance uses ${scenario.name} independently of aggregate session text`,{timeout:10000},async()=>{
   const usage={callCount:0,inputTokens:0,outputTokens:0,totalTokens:0,cacheReadTokens:0,cacheCreationTokens:0};
   const fixture=open(':memory:',async()=>assert.fail('boundary fixture must not dispatch a model'),{
@@ -291,12 +294,28 @@ for(const scenario of [
   });
   try {
     const done=waitForCompletion(fixture);
+    const liveTerminal=new Promise(resolve=>fixture.eventBus.subscribe('agent.chat.run-event',event=>{
+      if(event.payload.type==='run_completed')resolve(event.payload);
+    }));
     const started=await fixture.runtime.startRun({input:'Return JSON with answer.',mode:'chat',
       enabledCapabilities:{mcpServers:[],skills:[]},responseContract});
-    assert.equal((await done).assistantMessage,scenario.finalMessage);
+    const completed=await done;
+    const expectedResponse=scenario.verdict==='passed'&&!scenario.omitValidatedResponse?scenario.finalResponse:undefined;
+    assert.equal(completed.assistantMessage,scenario.finalMessage);
+    assert.equal(completed.validatedResponse,expectedResponse);
+    assert.equal((await liveTerminal).validatedResponse,expectedResponse);
     const report=fixture.repository.taskContracts.readReport(started.runId);
     assert.equal(report.criteria[0].verdict,scenario.verdict);
     assert.equal(report.criteria[0].verifier,'response_json_schema');
+    const replay=await fixture.runtime.replayRunEvents({runId:started.runId,afterSequence:0});
+    const terminal=replay.events.find(item=>item.event.type==='run_completed').event;
+    assert.equal(terminal.assistantMessage,scenario.finalMessage);
+    assert.equal(terminal.validatedResponse,expectedResponse);
+    const outbox=new api.AgentTaskHistoryContract(fixture.db).listOutboxEventsAfter({afterSequence:0,limit:100});
+    const persisted=outbox.find(event=>event.runId===started.runId&&event.eventType==='run_completed');
+    assert.equal(persisted.payload.assistantMessage,scenario.finalMessage);
+    assert.equal(persisted.payload.validatedResponse,expectedResponse);
+    assert.equal(Object.hasOwn(persisted.payload,'validatedResponse'),expectedResponse!==undefined);
   } finally {await fixture.close();}
 });
 

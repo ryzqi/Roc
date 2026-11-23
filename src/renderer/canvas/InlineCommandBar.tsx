@@ -32,6 +32,8 @@ export type InlineCommandBarProps = {
   proposal?: InlineReplacementProposal | null;
   onAcceptProposal?: () => void;
   onRejectProposal?: () => void;
+  busy?: boolean;
+  polishDisabled?: boolean;
 };
 
 const actions: ReadonlyArray<{ id: InlineCommandAction; label: string; icon: LucideIcon }> = [
@@ -53,7 +55,9 @@ export function InlineCommandBar({
   onApplyReplacement,
   proposal = null,
   onAcceptProposal,
-  onRejectProposal
+  onRejectProposal,
+  busy = false,
+  polishDisabled = false
 }: InlineCommandBarProps): React.JSX.Element | null {
   const firstAction = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -116,12 +120,13 @@ export function InlineCommandBar({
               key={id}
               ref={index === 0 ? firstAction : undefined}
               type="button"
-              className="inline-flex min-h-8 items-center gap-1 rounded-control px-2 text-[length:var(--font-meta-size)] text-ink-secondary hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring"
+              disabled={busy || id === 'polish' && polishDisabled}
+              className="inline-flex min-h-8 items-center gap-1 rounded-control px-2 text-[length:var(--font-meta-size)] text-ink-secondary hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-50"
               onClick={() => onAction(id, selection)}
               data-testid={`inline-command-${id}`}
             >
               <Icon size={13} aria-hidden="true" />
-              {label}
+              {id === 'polish' && busy ? '润色处理中…' : label}
             </button>
           ))}
           {onApplyReplacement === undefined ? null : <button type="button" className="inline-flex min-h-8 items-center gap-1 rounded-control px-2 text-[length:var(--font-meta-size)] text-ink-secondary hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring"
@@ -146,7 +151,7 @@ export function InlineCommandBar({
           </div>
           <div className="mt-2 flex justify-end gap-2">
             <button type="button" className="min-h-8 rounded-control border-[0.5px] border-line-default px-2 text-[length:var(--font-meta-size)] text-ink-secondary hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onRejectProposal} data-testid="inline-command-reject">取消</button>
-            <button type="button" className="min-h-8 rounded-control border-[0.5px] border-line-default px-2 text-[length:var(--font-meta-size)] text-ink-primary hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onAcceptProposal} data-testid="inline-command-accept">应用到草稿</button>
+            <button type="button" disabled={busy} className="min-h-8 rounded-control border-[0.5px] border-line-default px-2 text-[length:var(--font-meta-size)] text-ink-primary hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-50" onClick={onAcceptProposal} data-testid="inline-command-accept">{busy ? '核对原文件…' : '应用到草稿'}</button>
           </div>
         </div>
       ) : (

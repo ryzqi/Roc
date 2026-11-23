@@ -4,6 +4,7 @@ export { EventBus } from '../../../src/main/kernel/event-bus';
 export { AgentPluginRuntime } from '../../../src/main/plugins/agent/runtime';
 export { AgentSessionRepository } from '../../../src/main/plugins/agent/session-repository';
 export { AgentRunEventLog } from '../../../src/main/plugins/agent/run-event-log';
+export { AgentTaskHistoryContract } from '../../../src/main/plugins/agent/agent-task-history-contract';
 export { createAgentDeepAgentExecutor } from '../../../src/main/plugins/agent/deep-agent-executor';
 export { createRunCapabilityManifestHash, compileRunCapabilityManifest } from '../../../src/main/plugins/agent/run-capability-manifest';
 export { parseRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';

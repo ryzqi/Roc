@@ -5,12 +5,14 @@ import {useTaskCenter} from '../management/use-task-center';
 import {clearAssistantComposerDraft} from '../assistant/composer-draft';
 import type {AppRouteController} from './use-app-route';
 import {recordUxEvent} from './ux-metrics';
+import type {AdoptAcceptedRun} from './workspace-scope';
 
-/** Selects existing runs and hands drafts to the assistant; never starts or resumes a run. */
+/** Selects accepted runs and hands drafts to the assistant; never starts or resumes a run. */
 export function useRunAttentionController(client: RocClient, {route, navigate}: AppRouteController,
   workspacePath: string | null, literature: LiteratureStore) {
   const routeRef = useRef(route);
   routeRef.current = route;
+  const workspacePathRef = useRef(workspacePath); workspacePathRef.current = workspacePath;
   const taskCenter = useTaskCenter(client, route.projectId, workspacePath);
   const [researchTaskSelection, setResearchTaskSelection] = useState<{projectId: string; taskId: string} | null>(null);
   const [taskCenterRequestId, setTaskCenterRequestId] = useState(0);
@@ -34,6 +36,12 @@ export function useRunAttentionController(client: RocClient, {route, navigate}: 
     clearAssistantComposerDraft(routeRef.current.projectId, threadId);
     setAssistantThreadId(current => current === threadId ? null : current);
   }, []);
+  const adoptAcceptedRun = useCallback<AdoptAcceptedRun>(({projectId,workspacePath,receipt}) => {
+    if (projectId !== routeRef.current.projectId || workspacePath !== workspacePathRef.current || receipt.threadId === null) return;
+    setAssistantThreadId(receipt.threadId);
+    navigate({...routeRef.current,assistantOpen:true});
+  },[navigate]);
+
   useEffect(() => {
     setAssistantThreadId(null);
     setAssistantRunning(false);
@@ -68,7 +76,7 @@ export function useRunAttentionController(client: RocClient, {route, navigate}: 
   }, [navigate, seedAssistant]);
 
   return {taskCenter, taskCenterRequestId, assistantThreadId, setAssistantThreadId, assistantRunning, setAssistantRunning,
-    assistantMounted, assistantSeed, setAssistantSeed, seedAssistant, selectTask, showAllTasks, deleteThread,
+    assistantMounted, assistantSeed, setAssistantSeed, seedAssistant, selectTask, showAllTasks, deleteThread, adoptAcceptedRun,
     researchTaskId: researchTaskSelection?.projectId === route.projectId ? researchTaskSelection.taskId : null};
 }
 

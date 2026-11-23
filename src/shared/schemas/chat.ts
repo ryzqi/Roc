@@ -243,7 +243,9 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       createdAt: z.string(),
       durationMs: z.number(),
       summary: z.string(),
-      assistantMessage: z.string()
+      assistantMessage: z.string(),
+      // Only the terminal response accepted by the frozen JSON response contract.
+      validatedResponse: z.string().optional()
     })
     .strict(),
   z
@@ -371,6 +373,7 @@ export const chatRunStateSnapshotSchema: z.ZodType<ChatRunState> = z
     status: z.enum(['idle', 'running', 'recovering', 'waiting_user', 'completed', 'cancelled', 'failed']),
     historyComplete: z.boolean(),
     assistantMessage: z.string(),
+    validatedResponse: z.string().optional(),
     activityBlocks: z.array(chatRunActivityBlockSchema),
     durationMs: z.number().nullable(),
     summary: z.string().nullable(),

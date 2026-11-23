@@ -32,7 +32,7 @@ export function usePanelController(client: RocClient, {route, navigate}: AppRout
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const {projectName, projectWritable, boundWorkspace, literature, conceptRows} = workspace;
-  const {taskCenter, taskCenterRequestId, researchTaskId, setAssistantThreadId, seedAssistant, selectTask, showAllTasks} = attention;
+  const {taskCenter, taskCenterRequestId, researchTaskId, setAssistantThreadId, seedAssistant, selectTask, showAllTasks, adoptAcceptedRun} = attention;
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchToken, setSearchToken] = useState(0);
@@ -255,7 +255,8 @@ export function usePanelController(client: RocClient, {route, navigate}: AppRout
       },
       openReviewInspector,
       openArtifact,
-      openAssistant
+      openAssistant,
+      adoptAcceptedRun
     }),
     [
       client,
@@ -284,7 +285,8 @@ export function usePanelController(client: RocClient, {route, navigate}: AppRout
       dismissFirstSteps,
       openReviewInspector,
       openArtifact,
-      openAssistant
+      openAssistant,
+      adoptAcceptedRun
     ]
   );
 

@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import type { ChatResumeDecision } from '../../../shared/types';
 import type { ChatCorrectRunRequest, ChatRunInputsRequest } from '../../../shared/schemas/chat';
 
@@ -54,7 +55,7 @@ import { AgentActiveRunLifecycle } from './active-run-lifecycle';
 import type { AgentModelFactoryAdapter, AgentModelHandle } from './model-factory-adapter';
 import type { AgentDeepAgentExecution, RunOutcome } from './agent-execution';
 import { createRunInterruptedEvents, type PendingInterrupt } from './interrupt-projection';
-import type { AgentRunEventLog } from './run-event-log';
+import { agentRunEventLogMaxEventBytes, type AgentRunEventLog } from './run-event-log';
 import { bindMcpToolContracts, compileRunCapabilityManifest } from './run-capability-manifest';
 import {
   createChatStartRunRequestFromSnapshot,
@@ -930,8 +931,22 @@ export class AgentPluginRuntime {
       workspacePath: snapshot.workspace?.path ?? (input.workspacePath === undefined ? null : input.workspacePath),
       researchProjectId: snapshot.researchProjectId ?? null
     }));
+    const completedRunEvent: Extract<ChatRunEvent, { type: 'run_completed' }> = {
+      type: 'run_completed', runId: currentRun.id, threadId: currentRun.threadId,
+      providerId: input.providerId, modelId: input.modelId, createdAt: currentRun.startedAt,
+      durationMs: input.durationMs, summary: input.summary, assistantMessage: input.assistantMessage
+    };
+    // Optional structured output must not make a previously admissible terminal
+    // event exceed its byte limit. Reserve 8 KiB for the execution envelope.
+    const validatedResponse = snapshot.taskContract.responseContract !== undefined &&
+      typeof input.finalResponse === 'string' && taskAcceptance?.criteria.some(criterion =>
+        criterion.verifier === 'response_json_schema' && criterion.verdict === 'passed') &&
+      Buffer.byteLength(JSON.stringify({ ...completedRunEvent, validatedResponse: input.finalResponse }), 'utf8') <=
+        agentRunEventLogMaxEventBytes - 8 * 1024
+      ? { validatedResponse: input.finalResponse } : {};
     const terminal = this.options.repository.completeRunAtomically({
       assistantMessage: input.assistantMessage,
+      ...validatedResponse,
       durationMs: input.durationMs,
       endedAt: input.endedAt,
       modelId: input.modelId,
@@ -958,6 +973,7 @@ export class AgentPluginRuntime {
       durationMs: number;
       summary: string;
       assistantMessage: string;
+      validatedResponse?: string;
       finishReason: 'stop';
       workspacePath?: string | null;
     } = {
@@ -968,6 +984,7 @@ export class AgentPluginRuntime {
       durationMs: input.durationMs,
       summary: input.summary,
       assistantMessage: input.assistantMessage,
+      ...validatedResponse,
       finishReason: 'stop'
     };
     if (input.workspacePath !== undefined) {
@@ -975,15 +992,8 @@ export class AgentPluginRuntime {
     }
     await this.publish('agent.run.completed', completedPayload);
     await this.publishChatRunEventBestEffort({
-      type: 'run_completed',
-      runId: run.id,
-      threadId: run.threadId,
-      providerId: input.providerId,
-      modelId: input.modelId,
-      createdAt: currentRun.startedAt,
-      durationMs: input.durationMs,
-      summary: input.summary,
-      assistantMessage: input.assistantMessage
+      ...completedRunEvent,
+      ...validatedResponse
     }, false);
     return terminal;
   }

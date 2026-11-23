@@ -19,6 +19,7 @@ before(async () => {
     import React, {useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
+    import {EditorView} from '@codemirror/view';
     import {LazyMotion, domMax, MotionConfig} from 'motion/react';
     import {LatexPanel} from './src/renderer/latex/LatexPanel';
     import {FilePreview} from './src/renderer/canvas/files/FilePreview';
@@ -28,6 +29,7 @@ before(async () => {
     import {useFileTree} from './src/renderer/workspace/use-file-tree';
     import {ViewActivity} from './src/renderer/shared/view-activity';
     const ok = data => ({ok: true, data});
+    window.readManuscript=()=>EditorView.findFromDOM(document.querySelector('.authoring-source .cm-content'))?.state.doc.toString();
     const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}, 'chapters/intro.tex':'Introduction'};
     window.setWorkspaceFile=(path,content)=>{if(content===null)delete contents[path];else contents[path]=content;};
     const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'ready', exitCode: null};
@@ -39,9 +41,24 @@ before(async () => {
     window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
     window.fileListMode = 'ready'; window.fileScans = 0; window.fileReads=[]; window.includeNested=false;
     const workspaceListeners=new Set();
+    const polishListeners=new Set();window.polishStarts=[];window.polishMode='pending';window.polishAccepted=[];
+    window.emitPolish=(message,kind='run_completed',runId=window.polishReceipt?.runId)=>{
+      const event={type:kind,runId,threadId:window.polishReceipt.threadId,
+        assistantMessage:'Read-only reference checked. '+message,validatedResponse:message,message:'Provider unavailable'};
+      for(const listener of polishListeners)listener(event);
+    };
+    window.polishListenerCount=()=>polishListeners.size;
     window.emitWorkspace=relativePath=>{for(const listener of workspaceListeners)listener({workspacePath:'/synthetic',relativePath,eventType:'change'});};
     const client = {api: {
-      workspace: {onChanged: listener => {workspaceListeners.add(listener);return()=>workspaceListeners.delete(listener);}},
+      workspace: {getCurrent:async()=>ok({path:'/synthetic'}),onChanged: listener => {workspaceListeners.add(listener);return()=>workspaceListeners.delete(listener);}},
+      chat:{
+        onRunEvent:listener=>{polishListeners.add(listener);return()=>polishListeners.delete(listener);},
+        startRun:async request=>{window.polishStarts.push(request);
+          if(window.polishMode==='error')return {ok:false,error:{message:'Model not configured'}};
+          window.polishReceipt={runId:'polish-'+window.polishStarts.length,threadId:'polish-thread-'+window.polishStarts.length,mode:request.mode};
+          return ok(window.polishReceipt);},
+        replayRunEvents:async request=>ok({kind:'events',runId:request.runId,events:[]})
+      },
       files: {
         listTree: async ({relativePath}) => {window.fileScans++;window.fileReads.push(relativePath);
           const names=Object.keys(contents).filter(name=>relativePath==='chapters'?name.startsWith('chapters/'):!name.includes('/'));
@@ -92,7 +109,8 @@ before(async () => {
       }
     }};
     const scope = {client, projectId: 'fixture', workspacePath: '/synthetic', writable: true,
-      workspaceStatus: 'ready', workspaceError: null, openFileInCanvas: () => {}, rebindWorkspace: () => {}};
+      workspaceStatus: 'bound', workspaceError: null, openFileInCanvas: () => {}, rebindWorkspace: () => {},
+      adoptAcceptedRun:({receipt})=>window.polishAccepted.push(receipt)};
     const root = createRoot(document.getElementById('root'));
     function WritingFixture(){
       const tree=useFileTree(client,{workspacePathKey:'/synthetic',projectId:'fixture'});
@@ -229,13 +247,20 @@ test('hidden writing pauses directory scans and save shortcuts while the sidebar
     await expect(page.getByTestId('production-latex-file-chapters/intro.tex')).toBeVisible();
     await selectFile('notes.md');
     const editor=page.getByTestId('production-latex-content');
-    await editor.fill('# Retained draft');
+    const draft='# Retained draft\n\n'+Array.from({length:80},(_,index)=>'Reading paragraph '+index+' with $F=ma$.').join('\n\n');
+    await editor.fill(draft);
     await page.getByTestId('latex-toggle-preview').click();
     await expect(page.getByRole('heading',{name:'Retained draft'})).toBeVisible();
+    const reading=page.locator('.authoring-preview-content');
+    await expect(reading.locator('.katex')).toHaveCount(80);
+    await reading.evaluate(node=>{node.scrollTop=720;});
+    const readingTop=await reading.evaluate(node=>node.scrollTop);
+    assert(readingTop>500);
     const writes=await page.evaluate(()=>window.writes.length);
     await page.evaluate(()=>window.setWritingActive(false));
     await expect(editor).toBeHidden();
-    await expect(editor).toHaveCount(1);
+    await expect(editor).toHaveCount(0);
+    await expect(page.locator('.scientific-markdown,.authoring-preview-content .katex')).toHaveCount(0);
     await page.evaluate(()=>{
       window.fileReads=[];
       window.setWorkspaceFile('sidebar-new.md','Sidebar change');
@@ -249,15 +274,33 @@ test('hidden writing pauses directory scans and save shortcuts while the sidebar
     await page.evaluate(()=>window.setWritingActive(true));
     await expect(page.getByTestId('production-latex-file-chapters/new.tex')).toBeVisible();
     assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters'],'resuming reads only invalidated metadata');
-    await expect(editor).toHaveText('# Retained draft');
+    assert.equal(await page.evaluate(()=>window.readManuscript()),draft);
     await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');
-    await expect(page.getByRole('heading',{name:'Retained draft'})).toBeVisible();
+    await expect(page.getByTestId('latex-toggle-preview')).toHaveAttribute('aria-pressed','true');
+    await expect(reading.locator('.katex')).toHaveCount(80);
+    await expect.poll(()=>reading.evaluate(node=>node.scrollTop)).toBe(readingTop);
   } finally {
     await page.evaluate(()=>{
       window.setWorkspaceFile('sidebar-new.md',null);window.setWorkspaceFile('chapters/new.tex',null);
       window.collapseDirectories();window.includeNested=false;window.mount('latex');
     });
   }
+});
+
+test('hidden writing releases formula rendering and restores the selected formula on return',async()=>{
+  await page.evaluate(formula=>{window.setWorkspaceFile('main.tex',formula);window.mount('latex');},formula);
+  await selectFile('main.tex');
+  const toggle=page.getByTestId('latex-toggle-preview');
+  if(await toggle.getAttribute('aria-pressed')!=='true')await toggle.click();
+  const editor=page.getByTestId('production-latex-content');
+  await editor.focus();await page.keyboard.press('Meta+a');
+  const preview=page.getByRole('region',{name:'所选公式预览'});
+  await expect(preview.locator('.katex')).toHaveCount(1);
+  await page.evaluate(()=>window.setWritingActive(false));
+  await expect(page.locator('.authoring-preview-content .katex')).toHaveCount(0);
+  await page.evaluate(()=>window.setWritingActive(true));
+  await expect(toggle).toHaveAttribute('aria-pressed','true');
+  await expect(preview.locator('.katex')).toHaveCount(1);
 });
 
 test('selected LaTeX exposes scoped commands and applies a confirmed replacement to the saveable draft', async () => {
@@ -270,9 +313,9 @@ test('selected LaTeX exposes scoped commands and applies a confirmed replacement
   const commands = page.getByTestId('inline-command-bar');
   await expect(commands).toBeVisible();
   const writesBeforeCommand = await page.evaluate(() => window.writes.length);
-  await page.getByTestId('inline-command-polish').click();
+  await page.getByTestId('inline-command-explain').click();
   const dispatched = await page.evaluate(() => window.inlineCommands.at(-1));
-  assert.equal(dispatched.action, 'polish');
+  assert.equal(dispatched.action, 'explain');
   assert.deepEqual(dispatched.context, {
     filePath: 'main.tex',
     selectionText: formula,
@@ -310,6 +353,79 @@ test('selected LaTeX exposes scoped commands and applies a confirmed replacement
   await page.getByTestId('production-latex-save').click();
   await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('已保存');
   assert.equal(await page.evaluate(() => window.writes.at(-1).content), replacement);
+});
+
+test('polish consumes a real run receipt and matching terminal result, previews the diff, then changes only the draft', async () => {
+  await page.evaluate(() => {window.setWorkspaceFile('main.tex','Original paragraph');window.polishMode='pending';window.mount('latex');});
+  await selectFile('main.tex');
+  const editor=page.getByTestId('production-latex-content');
+  await editor.click();await page.keyboard.press('Meta+a');
+  const starts=await page.evaluate(()=>window.polishStarts.length);
+  const writes=await page.evaluate(()=>window.writes.length);
+  await page.getByTestId('inline-command-polish').click();
+  await expect.poll(()=>page.evaluate(()=>window.polishStarts.length)).toBe(starts+1);
+  await expect(page.getByTestId('inline-command-polish')).toBeDisabled();
+  const request=await page.evaluate(()=>window.polishStarts.at(-1));
+  assert.equal(request.mode,'plan');assert.equal(request.researchProjectId,'fixture');
+  assert.equal((await page.evaluate(()=>window.polishAccepted.at(-1))).runId,'polish-'+(starts+1));
+  await page.evaluate(()=>window.emitPolish(JSON.stringify({requestId:window.polishStarts.at(-1).dispatchKey,replacement:'Reviewed paragraph'}),'run_completed','unrelated-run'));
+  await expect(page.getByTestId('inline-command-proposal')).toHaveCount(0);
+  await page.evaluate(()=>window.emitPolish(JSON.stringify({requestId:window.polishStarts.at(-1).dispatchKey,replacement:'Reviewed paragraph'})));
+  await expect(page.getByTestId('inline-command-original')).toHaveText('- Original paragraph');
+  await expect(page.getByTestId('inline-command-replacement')).toHaveText('+ Reviewed paragraph');
+  await expect(editor).toHaveText('Original paragraph');
+  assert.equal(await page.evaluate(()=>window.polishListenerCount()),0);
+  await page.getByTestId('inline-command-accept').click();
+  await expect(editor).toHaveText('Reviewed paragraph');
+  assert.equal(await page.evaluate(()=>window.writes.length),writes);
+  await page.getByTestId('production-latex-save').click();
+  await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('已保存');
+  assert.equal(await page.evaluate(()=>window.writes.at(-1).content),'Reviewed paragraph');
+});
+
+test('polish rejects a changed disk version and invalidates requests after editing even if the draft is restored', async () => {
+  await page.evaluate(() => {window.setWorkspaceFile('main.tex','Version one');window.mount('latex');});
+  await selectFile('main.tex');
+  const editor=page.getByTestId('production-latex-content');
+  await editor.click();await page.keyboard.press('Meta+a');
+  await page.getByTestId('inline-command-polish').click();
+  await expect.poll(()=>page.evaluate(()=>window.polishListenerCount())).toBe(1);
+  await page.evaluate(()=>window.emitPolish(JSON.stringify({requestId:window.polishStarts.at(-1).dispatchKey,replacement:'Version two'})));
+  await expect(page.getByTestId('inline-command-proposal')).toBeVisible();
+  await page.evaluate(()=>window.setWorkspaceFile('main.tex','External edit'));
+  await page.getByTestId('inline-command-accept').click();
+  await expect(page.getByTestId('production-latex-save-note')).toContainText('原文件已变化');
+  await expect(editor).toHaveText('Version one');
+  await expect(page.getByTestId('inline-command-proposal')).toHaveCount(0);
+  await page.evaluate(()=>window.setWorkspaceFile('main.tex','Version one'));
+  await page.getByTestId('inline-command-polish').click();
+  await expect.poll(()=>page.evaluate(()=>window.polishListenerCount())).toBe(1);
+  const requestId=await page.evaluate(()=>window.polishStarts.at(-1).dispatchKey);
+  await editor.click();await page.keyboard.press('Meta+a');await page.keyboard.type('Changed locally');
+  await expect.poll(()=>page.evaluate(()=>window.polishListenerCount())).toBe(0);
+  await page.keyboard.press('Meta+z');await page.keyboard.press('Meta+a');
+  await page.evaluate(requestId=>window.emitPolish(JSON.stringify({requestId,replacement:'Stale replacement'})),requestId);
+  await expect(page.getByTestId('inline-command-proposal')).toHaveCount(0);
+  await expect(editor).toHaveText('Version one');
+  await page.evaluate(()=>window.mount('latex'));
+});
+
+test('polish dispatch errors and cancellation remain truthful and never change text', async () => {
+  await page.evaluate(()=>{window.polishMode='error';window.mount('latex');});
+  await selectFile('main.tex');
+  const editor=page.getByTestId('production-latex-content');
+  await editor.click();await page.keyboard.press('Meta+a');
+  await page.getByTestId('inline-command-polish').click();
+  await expect(page.getByTestId('production-latex-save-note')).toContainText('Model not configured');
+  assert.equal(await page.evaluate(()=>window.polishListenerCount()),0);
+  await page.evaluate(()=>{window.polishMode='pending';});
+  await page.getByTestId('inline-command-polish').click();
+  await expect.poll(()=>page.evaluate(()=>window.polishListenerCount())).toBe(1);
+  await page.evaluate(()=>window.emitPolish('','run_cancelled'));
+  await expect(page.getByTestId('production-latex-save-note')).toContainText('润色已取消');
+  await expect(page.getByTestId('inline-command-proposal')).toHaveCount(0);
+  await expect(editor).toHaveText('Version one');
+  assert.equal(await page.evaluate(()=>window.polishListenerCount()),0);
 });
 
 test('file reading view retains unsaved Markdown drafts and line wrapping state', async () => {
