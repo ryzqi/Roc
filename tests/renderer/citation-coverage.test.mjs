@@ -390,7 +390,7 @@ test('long citation source and native disclosures fit both narrow themes with re
   await openReview();
   await editor().getByRole('combobox', {name: '引用直接性', exact: true}).selectOption('indirect');
   await editor().getByRole('textbox', {name: '引用直接性审核理由'}).fill('完整原文与当前段落存在推断差距，需要逐项说明。'.repeat(30));
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   await page.setViewportSize({width: 650, height: 900}); await page.emulateMedia({reducedMotion: 'reduce'});
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

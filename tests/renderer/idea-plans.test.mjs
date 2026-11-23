@@ -299,7 +299,7 @@ test('real narrow drawer in light/dark and reduced motion preserves focus, visib
   const f = await scene();
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(650, 900));
   await page.emulateMedia({reducedMotion: 'reduce'}); await fillPlan();
-  const auditSource = await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8'), audits = [];
+  const auditSource = await readFile(resolve('scripts/ui-audit/clip-audit.js'), 'utf8'), audits = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
     await page.getByLabel('可证伪条件', {exact: true}).focus();

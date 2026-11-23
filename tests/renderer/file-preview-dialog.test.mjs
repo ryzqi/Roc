@@ -10,7 +10,7 @@ import { buildViteRenderer } from './fixtures/build-vite-renderer.mjs';
 let directory, app, page;
 const errors = [];
 const artifactDirectory = join(process.cwd(), '.artifacts/file-preview-dialog');
-const clipSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
 const receipts = [];
 
 before(async () => {

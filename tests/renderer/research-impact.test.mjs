@@ -99,7 +99,7 @@ test('keyboard impact repair retains independent artifacts and an exact lost-rep
   await page.keyboard.press('Escape');
   await page.getByTestId('artifact-draft-discard-cancel').click();
   await expect(panel.getByRole('checkbox', {name: 'Change source（阅读）', exact: true})).toBeChecked();
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 800));
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

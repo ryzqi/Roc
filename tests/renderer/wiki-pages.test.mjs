@@ -133,7 +133,7 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   assert.match(await comparison.innerText(),/Dataset Y/);
   assert.equal(f.db.prepare("SELECT COUNT(*) FROM research_evidence_relations WHERE status='confirmed'").pluck().get(),0);
   await page.getByTestId('wiki-page-row').filter({hasText:'跨文献比较草稿'}).click();
-  const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
   for(const theme of ['light','dark'])for(const width of [380,560,800,1100]){
     await page.setViewportSize({width,height:800});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     const audit=await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);writeFileSync(join(artifacts,`pages-${theme}-${width}.json`),JSON.stringify(audit));

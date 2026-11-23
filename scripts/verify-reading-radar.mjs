@@ -27,7 +27,7 @@ const launch=()=>electron.launch({executablePath:target.executablePath,args:targ
 let app=await launch();
 const results=[],errors=[];let page;
 const check=(name,detail='')=>{results.push({name,detail});console.log(`PASS ${name} ${detail}`);};
-const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+const auditSource=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
 const layouts=async(name)=>{
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setMinimumSize(800,640));
  for(const width of [800,1000,1099,1100]){

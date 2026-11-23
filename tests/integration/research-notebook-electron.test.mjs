@@ -29,7 +29,7 @@ test('production file preview freezes untrusted notebook bytes through keyboard 
     await writeFile(join(workspace, 'notes.txt'), 'original notes\n');
     let app;
     const errors = [], requests = [], audits = [];
-    const auditSource = await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+    const auditSource = await readFile(resolve('scripts/ui-audit/clip-audit.js'), 'utf8');
     async function launch() {
       app = await electron.launch({ args: [resolve('dist/main/index.js')], env: {
         ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot

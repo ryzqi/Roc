@@ -299,7 +299,7 @@ test('actual repeat is comparable, changed parameters are explicit and both sign
   assert.deepEqual(spec.data.values.map(({metricId,value,unit,sampleSize})=>({metricId,value,unit,sampleSize})),
     [{metricId:'mean',value:-2,unit:'ms',sampleSize:3}]);
   assert.equal(spec.usermeta.roc.expectedHash,a.snapshotHash);
-  const auditSource=await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const auditSource=await readFile(resolve('scripts/ui-audit/clip-audit.js'),'utf8');
   for(const theme of ['light','dark']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(650,820));
@@ -453,7 +453,7 @@ test('keyboard metric capture survives reply loss and opens the exact result and
   await actual.waitFor();
   assert.equal(JSON.parse(await actual.innerText()).metrics[0].value,-2);
   assert.deepEqual(calls.map(value=>value.method),['getExperimentResultEvidence','readExperimentFile']);
-  const auditSource=await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const auditSource=await readFile(resolve('scripts/ui-audit/clip-audit.js'),'utf8');
   const outputDirectory=resolve('.artifacts/research-optimization/xexp-a3-ui');await mkdir(outputDirectory,{recursive:true});
   const receipts=[];
   for(const theme of ['light','dark']) {

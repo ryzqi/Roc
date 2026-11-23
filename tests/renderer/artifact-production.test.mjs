@@ -347,7 +347,7 @@ test('actual production drawer remains readable in light dark 1100 1099 and 800,
     const layout=await page.getByTestId('artifact-inspector-panel').evaluate(panel=>({scroll:panel.scrollTop,
       overflow:panel.scrollWidth>panel.clientWidth,title:panel.querySelector('h2').getBoundingClientRect().top}));
     assert.equal(layout.scroll,0);assert.equal(layout.overflow,false);assert.ok(layout.title>=0&&layout.title<100);
-    const script=readFileSync(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+    const script=readFileSync(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');
     const audit=await page.evaluate(`(${script})({root:'[data-testid="artifact-inspector"]',viewport:true})`);
     assert.equal(audit.cut,0);
     assert.deepEqual(audit.issues.filter(issue=>issue.level==='hidden').map(issue=>issue.side).sort(),['bottom','right','top']);

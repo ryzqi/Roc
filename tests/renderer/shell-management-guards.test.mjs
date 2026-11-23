@@ -286,7 +286,7 @@ test('new session has one reachable action when context and assistant share the 
 });
 
 test('titlebar actions remain distinct and keyboard reachable across desktop sizes and themes', async () => {
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   const captureDir = process.env.ROC_ACTION_CAPTURE;
   if (captureDir) await mkdir(captureDir, {recursive: true});
   const auditChrome = async () => {

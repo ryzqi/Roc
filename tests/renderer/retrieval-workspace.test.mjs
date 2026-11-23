@@ -135,7 +135,7 @@ test('question submission stays locked until assistant handoff and preserves evi
 });
 
 test('search results retain usable space in narrow and wide canvases with both themes',async()=>{
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   await page.emulateMedia({reducedMotion:'reduce'});
   for(const theme of ['light','dark']){
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

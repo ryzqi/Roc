@@ -135,7 +135,7 @@ test('real scanned table classified as figure still exposes its captured image a
   assert.equal(await page.getByTestId('reader-pdf-canvas').getAttribute('aria-label'),'原 PDF 第 2 页');
   await page.getByTestId('reader-pdf-region').waitFor();
   const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),
-    await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'));
+    await readFile('scripts/ui-audit/clip-audit.js','utf8'));
   assert.equal(audit.cut,0);assert.equal(changes(),before);
   await page.screenshot({path:join(root,'actual-scanned-table-reader.png')});
   const layouts=[];
@@ -145,7 +145,7 @@ test('real scanned table classified as figure still exposes its captured image a
     await waitForPdf();await image.scrollIntoViewIfNeeded();
     await row.getByTestId('reader-block-asset-toggle').hover();
     const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),
-      await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'));
+      await readFile('scripts/ui-audit/clip-audit.js','utf8'));
     assert.equal(audit.cut,0);assert.equal(audit.hidden,0);
     await page.screenshot({path:join(root,`actual-scanned-table-${width}-${theme}.png`)});
     layouts.push({width,theme,audit});

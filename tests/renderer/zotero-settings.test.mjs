@@ -86,7 +86,7 @@ async function probe(value) {
   await page.getByTestId('settings-zotero-status').waitFor();
 }
 async function inspect(label) {
-  const source = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const source = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const audit = await page.evaluate(`(${source})({root:'body',viewport:true})`);
   writeFileSync(join(artifacts, `${label}-audit.json`), JSON.stringify(audit, null, 2));
   assert.equal(audit.cut, 0);

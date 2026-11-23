@@ -364,7 +364,7 @@ test('late scoped reads cannot show another project and metadata cancel uses the
 
 test('650px light/dark keyboard focus and8 clip states pass inside the shared bounded reader scroller', async () => {
   const f = await scene(); await mount(f); await open(); await capture(); await page.setViewportSize({width: 650, height: 900});
-  const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8'), receipts = [];
+  const audit = await readFile(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8'), receipts = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
     const access = page.getByTestId('reader-hf-access'); if (await access.getAttribute('open') !== null) await access.locator('summary').click();

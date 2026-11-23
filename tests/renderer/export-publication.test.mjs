@@ -294,7 +294,7 @@ test('late capture preview submit and history replies never populate a different
 test('narrow light/dark fields and preview support keyboard focus and exact clipping audit',async()=>{
   await scene();await open();await capture();await complete();
   await text('出版说明','长公开说明核对作者、许可与来源。'.repeat(70));await preview();
-  const auditSource=readFileSync(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const auditSource=readFileSync(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');
   await page.setViewportSize({width:650,height:900});await page.emulateMedia({reducedMotion:'reduce'});
   for(const theme of ['light','dark']) {
     await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);

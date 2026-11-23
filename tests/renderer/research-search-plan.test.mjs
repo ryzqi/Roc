@@ -111,7 +111,7 @@ test('long plan remains readable with keyboard scrolling in light and dark modes
   ]);
   await page.emulateMedia({reducedMotion: 'reduce'});
   await page.evaluate(plan => mount(plan, 'b'.repeat(64)), plan);
-  const shadowAudit = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const shadowAudit = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const audits = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

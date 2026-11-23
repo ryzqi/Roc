@@ -88,7 +88,7 @@ test('50k high-degree data paints bounded lists with first-frame evidence', asyn
   writeFileSync(join(artifacts, 'first-frame.json'), JSON.stringify({ claims: 50_000, samples, electron: process.versions.electron ?? null, fixture: 'research-graph-performance-fixture.mjs', note: 'Two real animation frames after mount; includes derivation and DOM paint, no provider/database IO.' }, null, 2) + '\n');
 });
 test('light/dark wide/narrow views retain visible details, controls, focus and unclipped states', async () => {
-  const clip = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const clip = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const evidence = [];
   for (const width of [1250, 1099, 650, 420]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: 900 }); await page.evaluate(value => document.documentElement.dataset.theme = value, theme); await mount(1000, true, 'c-0');

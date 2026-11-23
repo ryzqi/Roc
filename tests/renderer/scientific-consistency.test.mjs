@@ -350,7 +350,7 @@ test('long explicit conversion fields and draft mapping fit both narrow themes a
   await page.getByTestId('artifact-consistency-save').click();
   assert.match(await editor().getByRole('alert').innerText(), /先加入或清空待加入映射/u);
   assert.equal(calls.filter(call => call.method === 'saveConsistencyReview').length, 0);
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   await page.setViewportSize({width: 650, height: 900}); await page.emulateMedia({reducedMotion: 'reduce'});
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

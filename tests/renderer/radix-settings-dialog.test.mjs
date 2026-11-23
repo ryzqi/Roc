@@ -12,7 +12,7 @@ let app;
 let page;
 const rendererErrors = [];
 const artifacts = join(process.cwd(), '.artifacts/settings-ui');
-const clipAudit = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipAudit = readFileSync('scripts/ui-audit/clip-audit.js', 'utf8');
 
 for (const field of ['settings', 'providers', 'permissions', 'hooks']) {
   test(`settings import rejects incomplete ${field} before replacing the live draft`, async () => {

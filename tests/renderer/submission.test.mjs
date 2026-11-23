@@ -151,7 +151,7 @@ test('submission UI derives an anonymous bundle, keeps masked manual preflight a
   await expect(deliver).toBeEnabled();
   assert.equal(f.db.prepare('SELECT count(*) FROM research_submission_deliveries').pluck().get(), 0);
   f.pickDestination = f.destination;
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 800));
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme); await deliver.focus();

@@ -10,7 +10,7 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, app, page;
 const errors=[];
-const clipAudit=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+const clipAudit=await readFile('scripts/ui-audit/clip-audit.js','utf8');
 before(async()=>{
   directory=await mkdtemp(join(tmpdir(),'roc-task-center-'));
   await buildViteRenderer({directory,plugins:[tailwindcss()],style:'html,body,#root{height:100%;margin:0}#root{width:720px;padding:16px;box-sizing:border-box}',script:`

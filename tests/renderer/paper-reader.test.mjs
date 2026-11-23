@@ -659,7 +659,7 @@ test('uncaptured coordinate history provides page-only positioning; invalid page
 
 test('comparison remains readable at shell width boundaries and unload cancels pending preview before worker allocation', {timeout:10000}, async()=>{
   const f=await realPdfScene();
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   const audits=[];
   const audit=async state=>{
     const result=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
@@ -840,7 +840,7 @@ test('32-page original retains one visible bitmap across real page navigation an
 
 test('actual rotated PDF hit chooses a unique block while overlap and absent regions require explicit selection',async()=>{
   const f=await realPdfScene({pdfOptions:{crop:[20,30,500,700],rotation:90,userUnit:2}});
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'), audits=[];
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8'), audits=[];
   const audit=async state=>{
     const result=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
     audits.push({state,...result});assert.equal(result.cut,0);
@@ -1017,7 +1017,7 @@ test('captured Evidence opens its original parse and source even after a new par
     assert.equal(call.input.parseHash,source.sourceLocator.parseHash);assert.equal(call.input.projectId,f.project.id);
   }
   assert.ok(calls.some(call=>call.method==='source'));
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8'),audits=[];
   for(const [width,theme] of [[1100,'light'],[1099,'dark'],[800,'light']]) {
     await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,850),width);
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await waitForOriginal();
@@ -1154,7 +1154,7 @@ test('Claim relation opens its retained original source after reparse without ch
       sourceSummaryBottom:source.querySelector('summary').getBoundingClientRect().bottom,sourceMetadataTop:source.querySelector('dl').getBoundingClientRect().top};
   });
   assert.ok(geometry.recordTop>=geometry.groupSummaryBottom-1);assert.ok(geometry.sourceMetadataTop>=geometry.sourceSummaryBottom-1);
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8'),audits=[];
   for(const theme of ['light','dark']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
@@ -1705,7 +1705,7 @@ test('captured annotation reads exact historical parse and original after repars
 test('annotation form and long saved source facts fit light800 dark1099 with actual keyboard and clipping audits', async () => {
   const f=await realPdfScene(),audits=[];
   await openAnnotationReader(f);await pageNote();
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   await page.mouse.move(10,10);
   const defaultAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
   assert.equal(defaultAudit.cut,0);audits.push({width:1100,theme:'light',state:'form-default',...defaultAudit});
@@ -1893,7 +1893,7 @@ test('historical parsed asset disclosure reads fixed parse and late image metada
   const sourceLayout=await page.getByTestId('artifact-document-source-block').evaluate(block=>({overflow:block.scrollWidth-block.clientWidth}));
   assert.ok(sourceLayout.overflow<=1);
   const sourceAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),
-    await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'));
+    await readFile('scripts/ui-audit/clip-audit.js','utf8'));
   assert.equal(sourceAudit.cut,0);
   await page.screenshot({path:join(artifacts,'asset-fixed-evidence-source.png')});
   await writeFile(join(artifacts,'asset-source-clip-audit.json'),JSON.stringify({sourceLayout,...sourceAudit},null,2));
@@ -1918,7 +1918,7 @@ test('asset text comparison and original PDF fit light800 dark1099 with one PNG 
   await formula.getByTestId('reader-block-asset-toggle').click();await waitForAsset();
   await formula.getByText('公式 LaTeX 原文', {exact:true}).click();
   await formula.getByTestId('reader-block-source').click();await waitForOriginal();
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8'),audits=[];
   await page.mouse.move(10,10);
   const defaultAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
   assert.equal(defaultAudit.cut,0);audits.push({width:1100,theme:'light',state:'comparison-default',...defaultAudit});

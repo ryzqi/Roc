@@ -440,7 +440,7 @@ test('wide and narrow light/dark monitor layouts preserve drafts, keyboard and d
   const f = scene(); const monitor = f.save(); await f.check(monitor);
   await mount(f); await open(); await select();
   await page.getByText('检索范围', {exact: true}).click();
-  const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const audit = await readFile(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const receipts = [];
   await page.getByRole('textbox',{name:'监控名称',exact:true}).fill('Retained monitor draft');
   for (const theme of ['light', 'dark']) for(const width of [1100,650,420]) {

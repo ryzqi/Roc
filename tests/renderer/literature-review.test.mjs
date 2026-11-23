@@ -104,7 +104,7 @@ async function search(candidates) {
   });
 }
 async function inspectState(label) {
-  const source = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const source = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const audit = await page.evaluate(`(${source})({root:'body',viewport:true})`);
   writeFileSync(join(artifacts, `${label}-audit.json`), JSON.stringify(audit, null, 2));
   assert.equal(audit.cut, 0);
@@ -164,7 +164,7 @@ test('long review remains scrollable and readable at 1099 boundary with light da
   await search([paper]);
   await page.locator('[data-testid="literature-candidate-review-toggle"]').click();
   await page.getByTestId('literature-candidate-review').waitFor({state: 'visible'});
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const audits = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

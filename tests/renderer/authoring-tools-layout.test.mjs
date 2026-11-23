@@ -9,7 +9,7 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, app, page;
 const errors = [];
-const clipSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
 const markdown = '# Research notes\n\nEnergy is $E=mc^2$.\n\n## Findings\n\nA readable document with a live equation.';
 const formula = String.raw`\[\frac{a}{b}=c^2\]`;
 

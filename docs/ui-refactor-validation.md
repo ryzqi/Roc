@@ -1,5 +1,26 @@
 # UI 重构验证记录
 
+## 2026-11-23 重构计划 P0.1：可复现审计
+
+本轮执行[2026-11-23 重构计划](../Roc_UI_UX_重构计划_2026-11-23.md)，代码基线为 `85e92a4bf0bfccda1a4d77a65373067139da13ce`。下方 11 月 20–21 日记录属于历史轮次，与本计划 P0–P8 分开。
+
+状态：**Verified passing**（审计依赖和测试准备范围）。两套本机 Skill 审计脚本原先被 Git 忽略，布局与 renderer 测试无法在干净检出中找到它们。现统一读取 `scripts/ui-audit/`，包含 MIT 许可、原始/当前 SHA256 与修改说明；`pnpm audit:design` 为固定入口。
+
+新增阳性测试复现纯黑阴影漏报：原 `rgba?` 正则把 `rgb(0, 0, 0)` 的蓝通道零视为 alpha 零。修复只改变透明度识别，不改变裁切几何与容差；回归覆盖纯黑、零蓝通道、hover、足够留白、整边隐藏及显式透明。公共 Vite 夹具也在创建随机目录前建立 `.runtime/tmp/`，消除首次运行的 `ENOENT`。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+```sh
+node --test tests/renderer/ui-clip-audit.test.mjs tests/unit/ui-audit.test.mjs
+pnpm audit:design
+node --test tests/renderer/literature-list-layout.test.mjs
+git diff --check
+```
+
+结果：审计行为与来源校验 **3/3**；设计扫描 **270 文件**；文献列表完整回归 **3/3**；差异检查通过。首次 103 项基线因缺少临时目录在准备阶段失败；修复后 102/103，一项虚拟列表滚动断言失败，单项及完整文件随后通过。保留这次偶发记录，不把定向重跑写成整套一次通过。
+
+本部分不改变生产 UI。当前构建、全布局与性能数字在 P0.2 记录；T1/T2/T3 外部服务、人工输入法和 VoiceOver 仍需各自验证。临时日志与截图在本轮审阅后清理。
+
 ## P0 工程基线（2026-11-20）
 
 macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启动当天既有 dist，窗口 1320×860，原生最小 1184×640。门户、默认写作、文献、发现（雷达）、知识（RAG）五面均成功加载，无 pageerror、无页面横向溢出，阴影审计均 `cut=0`。截图检查确认默认空写作页、重复文件列表，以及文献七标签带来的多层导航。

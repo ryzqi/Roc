@@ -168,7 +168,7 @@ test('application session diagnostics copy only the bounded anonymous events and
   await page.evaluate(() => window.finishCopy());
   await expect(copy).toContainText('已复制诊断');
   await expect(disclosure.getByRole('alert')).toHaveCount(0);
-  const auditSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const auditSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   for (const theme of ['light','dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme=theme, theme);
     await page.setViewportSize({width:480,height:800});

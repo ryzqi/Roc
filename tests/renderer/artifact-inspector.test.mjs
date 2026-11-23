@@ -209,7 +209,7 @@ async function openArtifact() {
   });
 }
 async function audit(label) {
-  const code=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const code=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
   const result=await page.evaluate(`(${code})({root:'body',viewport:true})`);
   writeFileSync(join(artifacts,label+'-audit.json'),JSON.stringify(result,null,2));
   assert.equal(result.cut,0);

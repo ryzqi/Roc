@@ -1,11 +1,13 @@
-import {mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {build} from 'vite';
 import react from '@vitejs/plugin-react';
 
 /** Compile renderer fixtures with real lazy modules and Vite's emitted worker assets. */
 export async function buildViteRenderer({directory, script, style, setup = '', csp = '', plugins = []}) {
-  const input = await mkdtemp(join(process.cwd(), '.runtime/tmp/roc-vite-renderer-'));
+  const scratch = join(process.cwd(), '.runtime/tmp');
+  await mkdir(scratch, {recursive: true});
+  const input = await mkdtemp(join(scratch, 'roc-vite-renderer-'));
   try {
     const assets = join(process.cwd(), 'dist/renderer/assets');
     const styles = await Promise.all((await readdir(assets)).filter(file => file.endsWith('.css'))

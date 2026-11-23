@@ -108,7 +108,7 @@ test('long paper metadata leaves at least three quarters of a short column for r
   const title='Synthetic long title for a scientific paper about reproducible multi agent research and document understanding. '.repeat(3);
   const authors=Array.from({length:24},(_,index)=>`Fixture Author ${index+1}`);
   const rows=[];
-  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   for(const [width,theme] of [[420,'light'],[420,'dark'],[820,'light'],[1100,'dark']]){
     await page.setViewportSize({width,height:700});
     await page.emulateMedia({reducedMotion:'reduce'});

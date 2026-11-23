@@ -317,7 +317,7 @@ test('narrow light/dark drawer retains visible focus, local scrolling and unclip
   const c = await scene(); await choose(c); await fill();
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(650, 900));
   await page.emulateMedia({reducedMotion: 'reduce'});
-  const auditSource = await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8'), audits = [];
+  const auditSource = await readFile(resolve('scripts/ui-audit/clip-audit.js'), 'utf8'), audits = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
     const note = page.getByLabel('结果评估审核说明', {exact: true});

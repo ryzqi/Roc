@@ -266,7 +266,7 @@ test('history paging and narrow light/dark layout preserve keyboard access witho
   await page.getByRole('button', {name: new RegExp('文献版本')}).click();
   await page.getByTestId('reader-scholarly-relations').waitFor();
   await page.setViewportSize({width: 650, height: 850});
-  const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const audit = await readFile(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
     const observation = page.getByTestId('reader-scholarly-source-openalex');

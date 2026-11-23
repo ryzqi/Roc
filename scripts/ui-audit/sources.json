@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "description": "Pinned local skill snapshots with recorded fixes. No upstream revision was available in the installed skills. sourceSha256 identifies each original snapshot; sha256 identifies the tracked script used by runtime checks.",
+  "sources": [
+    {
+      "file": "clip-audit.js",
+      "source": ".agents/skills/desktop-agent-ui/scripts/clip-audit.js",
+      "sourceKind": "local skill snapshot",
+      "upstreamRevision": null,
+      "skillVersion": null,
+      "snapshotDate": "2026-11-23",
+      "sha256": "4cd82b98740726f241d7436b97e7c9309ce464e3d9f93e5da8b04cbbe67601b6",
+      "license": "MIT",
+      "licenseFile": "desktop-agent-ui.LICENSE",
+      "licenseSha256": "437a672a047cc10f008b031ce1214ff772b5fdcd0df75aeffbc2ce8f2da32c32",
+      "modifications": [
+        "Recognize explicit zero alpha in rgba() and modern rgb()/rgba() slash syntax, including decimal and percentage zero. Do not ignore opaque rgb() colors with a zero blue channel. Geometry and tolerance are unchanged. Covered by tests/renderer/ui-clip-audit.test.mjs."
+      ],
+      "sourceSha256": "a4b699f35cbbbe61671677b8ce35abcf01e90798cc6701bc279cad27ca63a98c"
+    },
+    {
+      "file": "audit-design-rules.py",
+      "source": ".agents/skills/b-end-design-system/scripts/audit-design-rules.py",
+      "sourceKind": "local skill snapshot",
+      "upstreamRevision": null,
+      "skillVersion": "1.0.0",
+      "snapshotDate": "2026-11-23",
+      "sha256": "2e4164efc076d16ecc4b02a1289f85ca7950d05d934b62338b8e629484b207e5",
+      "license": "MIT",
+      "licenseFile": "b-end-design-system.LICENSE",
+      "licenseSha256": "a19cb7a56b3f76c9febb48f4c92ad347a24f37599cae09dac04f12d3ac017e6d",
+      "modifications": [],
+      "sourceSha256": "2e4164efc076d16ecc4b02a1289f85ca7950d05d934b62338b8e629484b207e5"
+    }
+  ]
+}

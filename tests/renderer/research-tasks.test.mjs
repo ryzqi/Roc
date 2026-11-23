@@ -633,7 +633,7 @@ test('management tasks load without project model budget controls and retain tas
 });
 
 test('light and dark task layouts remain readable in narrow assistant and scrolling drawer', async () => {
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const receipts = [];
   for (const theme of ['light', 'dark']) {
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(380, 680));
@@ -829,7 +829,7 @@ test('diagnostic errors, pending exports and late replies stay within the select
 });
 
 test('expanded diagnostics and export receipts fit light/dark narrow desktop layouts without clipped shadows', async () => {
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const receipts = [];
   for (const theme of ['light', 'dark']) {
     for (const width of [720, 380]) {

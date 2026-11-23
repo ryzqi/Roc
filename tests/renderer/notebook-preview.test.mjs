@@ -10,7 +10,7 @@ import { _electron } from '@playwright/test';
 let directory, app, page;
 const errors = [], requests = [];
 const artifacts = resolve('.artifacts/research-optimization/xnb-a3-ui');
-const clipAudit = readFileSync(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+const clipAudit = readFileSync(resolve('scripts/ui-audit/clip-audit.js'), 'utf8');
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-notebook-ui-'));
   mkdirSync(artifacts, { recursive: true });

@@ -9,7 +9,7 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, artifacts, app, page;
 const errors = [];
-const clipAudit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipAudit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-management-draft-guards-'));
   artifacts = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');

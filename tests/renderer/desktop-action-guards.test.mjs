@@ -10,7 +10,7 @@ import { buildViteRenderer } from './fixtures/build-vite-renderer.mjs';
 let directory, app, page;
 const errors = [];
 const artifacts = join(process.cwd(), '.artifacts/desktop-action-guards');
-const clipSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
 const receipts = [];
 
 before(async () => {

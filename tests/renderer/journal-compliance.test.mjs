@@ -337,7 +337,7 @@ test('long rule fields fit narrow light and dark themes with keyboard focus redu
   await text('规则名称', '长规则名称用于验证原生桌面选择控件与边界。'.repeat(10));
   await text('规则原文', '逐项核对投稿结构、引用格式及材料来源。'.repeat(80));
   await text('投稿检查修订理由', '人工核对规则日期和真实材料。'.repeat(60));
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   await page.setViewportSize({width: 650, height: 900}); await page.emulateMedia({reducedMotion: 'reduce'});
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

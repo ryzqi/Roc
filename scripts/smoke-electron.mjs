@@ -398,7 +398,7 @@ try {
   // One real zoom pass supplements the renderer viewport matrix without repeating it.
   const browserWindow = await app.browserWindow(page);
   const originalWindow = await browserWindow.evaluate(window => ({bounds: window.getBounds(), zoom: window.webContents.getZoomFactor()}));
-  const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const clipSource = readFileSync('scripts/ui-audit/clip-audit.js', 'utf8');
   try {
     await browserWindow.evaluate(window => {
       window.setBounds({...window.getBounds(), width: 1184, height: 900});

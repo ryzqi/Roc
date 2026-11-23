@@ -12,6 +12,7 @@
 | IPC | `pnpm check:ipc`；合同改变后执行 `pnpm generate:ipc` 并检查调用方 |
 | 领域逻辑 | `pnpm test:unit`，或选择相关 `tests/unit/*.test.mjs` |
 | Renderer | `pnpm test:renderer`；构建后执行 `pnpm check:renderer-chunks`，界面变更检查实际尺寸、键盘和主题 |
+| UI 审计 | `pnpm audit:design`；`pnpm audit:layout` 使用仓库内审计脚本，不依赖本机 Skill。隔离夹具自动创建 `.runtime/tmp/` |
 | 文献获取 | `pnpm test:literature-acquisition`；完整入库接缝见[文献自动入库](research-literature-acquisition.md) |
 | 科研生产链 | `pnpm test:research-p0`，包含构建，要求真实[科研工具链](../resources/research-runtime/README.md) |
 | 系统性综述 | `pnpm test:review-workflow`，配合相关 renderer 测试 |

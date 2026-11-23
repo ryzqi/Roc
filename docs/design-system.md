@@ -243,9 +243,9 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 先做与改动直接相关的检查，不为静态样式增加镜像实现的单测。路由迁移、阶段事实、草稿保护和任务动作需要行为回归；正常路径通过后，只有新增风险或失败才扩大测试范围。
 
 - 静态与构建：`pnpm typecheck`、相关 renderer 测试、`pnpm check:renderer-chunks`，确认重模块仍懒加载。
-- 设计规则：运行 `.agents/skills/b-end-design-system/scripts/audit-design-rules.py` 扫描改动目录，并人工复核误报及未覆盖规则。
+- 设计规则：运行 `pnpm audit:design` 扫描 renderer；单独目录用 `python3 scripts/ui-audit/audit-design-rules.py <目录>`，并人工复核误报及未覆盖规则。审计脚本、来源摘要与 MIT 许可固定在 `scripts/ui-audit/`，干净检出不依赖本机 Skill 安装。
 - 实窗：1184/1280/1440px、浅/深主题、键盘、真实滚轮、IME、长标题、缩放；检查主内容无横向溢出，焦点可见且能返回。
-- 裁切：在透明 Electron 窗口执行 desktop-agent-ui 的 `clip-audit.js`，传 `{ viewport: true }`；默认、hover、展开及动效最终落点均要求 `cut === 0`，`hidden` 人工复核。
+- 裁切：在透明 Electron 窗口执行仓库内 `scripts/ui-audit/clip-audit.js`，传 `{ viewport: true }`；默认、hover、展开及动效最终落点均要求 `cut === 0`，`hidden` 人工复核。脚本只覆盖阴影，不替代焦点边界与实际截图检查。
 - 真实性：真实服务不具备下载、解析、索引或模型能力时记录限制；fixture 只能证明展示和交互，不能证明 T1–T3 的外部执行成功。
 - 用户研究：首次成功率、完成耗时、回退次数、状态识别率和 SUS 必须来自同意参与的目标用户。自动化检查不替代样本和录屏，也不自动达成灰度发布门槛。
 

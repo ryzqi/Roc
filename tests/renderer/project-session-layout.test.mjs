@@ -153,7 +153,7 @@ test('new session remains available while history loads or fails, and retry stil
 });
 
 test('project and search surfaces keep long content readable in narrow and wide themes',async()=>{
-  const audit=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const audit=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   for(const theme of ['light','dark']) for(const width of [380,820,1280]) {
     await page.evaluate(({theme,width})=>{document.documentElement.dataset.theme=theme;document.getElementById('root').style.width=width+'px';mount('portal');},{theme,width});
     await page.getByTestId('portal-card-first').waitFor();

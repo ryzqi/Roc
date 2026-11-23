@@ -410,7 +410,7 @@ test('explicit managed experiment selection stores full execution identity, and 
 test('narrow light/dark resource controls preserve keyboard focus and all disclosure states without overflow or clipped shadows', async () => {
   const f = scene(); await mount(f); await open(); await capture();
   await page.setViewportSize({width: 650, height: 900});
-  const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const audit = await readFile(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   const receipts = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

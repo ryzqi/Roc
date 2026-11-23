@@ -107,7 +107,7 @@ test('writing canvas preserves the editor draft while applying selected changes 
   await expect(dialog.getByRole('checkbox', {name: change.label})).toBeChecked();
 
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 740));
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
     await apply.focus();

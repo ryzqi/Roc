@@ -341,7 +341,7 @@ test('actual scene and long conversion controls fit both narrow themes with redu
   await page.getByTestId('artifact-figure-consistency-save').click();
   assert.match(await editor().getByRole('alert').innerText(), /先加入或清空待加入图稿映射/u);
   assert.equal(calls.filter(call => call.method === 'saveFigureConsistencyReview').length, 0);
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   await page.setViewportSize({width: 650, height: 900}); await page.emulateMedia({reducedMotion: 'reduce'});
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

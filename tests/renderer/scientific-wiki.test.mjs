@@ -392,7 +392,7 @@ test('existing claim Wiki opens an actual immutable Evidence source and rejects 
 test('light/dark, wide/narrow, keyboard focus and clip audit cover collapsed/expanded scientific surfaces', async () => {
   const f = await scene(); await page.getByRole('button', {name: '事实', exact: true}).click();
   await rows().filter({hasText: 'Reported F1'}).click(); await page.getByTestId('wiki-scientific-table').waitFor();
-  const auditSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const auditSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   for (const theme of ['light', 'dark']) for (const width of [380, 560, 1100]) {
     await page.setViewportSize({width, height: 850});
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

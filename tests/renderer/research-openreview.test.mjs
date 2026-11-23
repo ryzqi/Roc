@@ -317,7 +317,7 @@ test('late history/capture replies cannot cross project scope and cancel uses ac
 
 test('650px light/dark focus, source disclosure and eight clip states pass in the shared reader scroller', async () => {
   const f = await scene(); await mount(f); await open(); await query(); await page.setViewportSize({width: 650, height: 900});
-  const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8'), receipts = [];
+  const audit = await readFile(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8'), receipts = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
     const entry = page.getByTestId('reader-openreview-entry'); if (await entry.getAttribute('open') !== null) await entry.locator('summary').click();

@@ -129,7 +129,7 @@ test('real matrix and explicit outline produce one unapproved manuscript without
   assert.deepEqual(calls.filter(call => call.method === 'saveArgumentOutline').map(call => call.input), [saved.snapshot.request, saved.snapshot.request]);
   await panel.getByRole('button', {name: '从大纲生成正文', exact: true}).click();
   await panel.getByLabel('新正文标题', {exact: true}).fill('Evidence synthesis');
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 800));
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

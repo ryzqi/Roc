@@ -33,7 +33,7 @@ let app;
 let smokeProvider;
 const audits = [];
 const geometryProblems = [];
-const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+const clipSource = readFileSync('scripts/ui-audit/clip-audit.js', 'utf8');
 let failure = null;
 let nativeMinimum;
 let currentTheme;

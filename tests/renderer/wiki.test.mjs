@@ -149,7 +149,7 @@ test('Wiki renders current review and invalidation honestly, and refresh and gra
   await page.locator('[data-testid="wiki-page-graph-c1"]').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => window.opened), 'c1');
-  const auditSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const auditSource = readFileSync('scripts/ui-audit/clip-audit.js', 'utf8');
   for (const theme of ['light','dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
     for (const width of [1100, 800]) {
@@ -264,7 +264,7 @@ test('retrieval exposes optional reranking and sends the selected mode through I
 });
 
 test('indexed retrieval isolates table scrolling and keeps long paths, failure details and keyboard retry readable in narrow panes',async()=>{
-  const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const auditSource=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
   const measurements=[];
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.evaluate(()=>{window.unmount();window.mountIndexedRag();});

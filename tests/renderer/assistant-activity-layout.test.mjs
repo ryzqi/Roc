@@ -133,7 +133,7 @@ test('finishing a streamed message preserves the focused tool and expanded paylo
 
 test('compact header and layered composer fit both themes with no clipped shadows', async t => {
   await page.evaluate(() => window.setActivity([]));
-  const clipSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   for (const theme of ['light','dark']) {
     await page.evaluate(theme => {document.documentElement.dataset.theme = theme;}, theme);
     for (const width of [320,400]) {

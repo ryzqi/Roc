@@ -97,7 +97,7 @@ test('manual import keeps navigation visible and the unsaved draft across wide a
   const title='A retained scientific title with a long description of the research question';
   await page.getByTestId('literature-import-manual-title').fill(title);
   await page.getByTestId('literature-import-manual-abstract').fill('Long abstract with results and limitations. '.repeat(40));
-  const source=readFileSync(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const source=readFileSync(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');
   for(const theme of ['light','dark']) for(const width of [1100,420]) {
     await page.setViewportSize({width,height:800});
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

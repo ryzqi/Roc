@@ -193,7 +193,7 @@ test('Word originals merge explicitly and a waiting external experiment survives
   assert.deepEqual(f.repository.externalExperiments.getResult({projectId, ...last.latestResult}), frozen);
   assert.equal(f.repository.externalExperiments.list({projectId, offset: 0, limit: 10}).total, 1);
   assert.equal(f.db.prepare('SELECT count(*) FROM research_experiment_executions').pluck().get(), 0);
-  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const audit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 800));
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme); await path.scrollIntoViewIfNeeded();

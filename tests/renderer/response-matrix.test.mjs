@@ -334,7 +334,7 @@ test('candidate positions refuse whole save and long controls fit narrow themes 
   assert.match(await editor().getByRole('alert').innerText(), /先关联或清空/u);
   assert.equal(calls.some(call => call.method === 'saveResponseMatrix'), false);
   await editor().getByRole('textbox', {name: '矩阵修订理由', exact: true}).fill('保留原始审稿意见，逐项核对修改位置与当前证据。'.repeat(50));
-  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const auditSource = readFileSync(join(process.cwd(), 'scripts/ui-audit/clip-audit.js'), 'utf8');
   await page.setViewportSize({width: 650, height: 900}); await page.emulateMedia({reducedMotion: 'reduce'});
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => document.documentElement.dataset.theme = value, theme);

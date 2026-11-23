@@ -268,7 +268,7 @@ test('a correction racing with run completion never dispatches another run', asy
 test('running controls fit the minimum assistant width in light and dark themes', async t => {
   await mountRunning();
   await page.getByTestId('assistant-panel').evaluate(element => {element.parentElement.style.width = '320px';});
-  const clipAudit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const clipAudit = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
   const audit = async state => {
     for (const area of ['assistant-composer', 'assistant-run-inputs']) {
       const result = await page.evaluate(`(${clipAudit})({root:'[data-testid="${area}"]',viewport:true})`);

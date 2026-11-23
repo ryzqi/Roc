@@ -24,7 +24,7 @@ let app, page;
 let runId, threadId;
 
 async function audit(name) {
-  const source = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const source = readFileSync('scripts/ui-audit/clip-audit.js', 'utf8');
   const result = await page.evaluate(`(${source})({root:'[data-testid="assistant-diagnostics"]',viewport:true})`);
   audits.push({name, ...result});
   assertCheck('layout', `No clipped diagnostics shadows: ${name}`, result.cut === 0, result);

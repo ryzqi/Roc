@@ -75,7 +75,7 @@ test('empty and failed literature lists keep one import and one reload action',a
 test('narrow literature navigation contains its filters and leaves reader controls clickable',async()=>{
   await page.evaluate(()=>mount());
   await page.getByTestId('literature-row-paper-layout').waitFor();
-  const audit=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const audit=await readFile('scripts/ui-audit/clip-audit.js','utf8');
   for(const theme of ['light','dark']) for(const width of [170,240,420]) {
     await page.evaluate(({theme,width})=>{document.documentElement.dataset.theme=theme;
       document.querySelector('[data-testid="navigation"]').style.width=width+'px';},{theme,width});

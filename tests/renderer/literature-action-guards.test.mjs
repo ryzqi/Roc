@@ -369,7 +369,7 @@ test('radar detail uses the narrow workspace and returns keyboard focus without 
   await mount('radar');
   await page.getByLabel('订阅名称',{exact:true}).fill('Retained subscription');
   await page.locator('.radar-add-feed > summary').click();
-  const source=await readFile(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const source=await readFile(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');
   for(const theme of ['light','dark']) for(const width of [1100,420]) {
     await page.setViewportSize({width,height:850});
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

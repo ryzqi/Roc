@@ -228,7 +228,7 @@ test('Zenodo operation history rejects repeated selection in the same event and 
 });
 test('650px light and dark complete review remains readable with keyboard focus and no clipped action states',async()=>{
   const f=await scene();await prepare();await start();await page.setViewportSize({width:650,height:800});
-  const clip=readFileSync(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');const evidence=[];
+  const clip=readFileSync(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');const evidence=[];
   for(const theme of['light','dark']){
     await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
     for(const state of['static','hover','expanded','focus']){

@@ -9,7 +9,7 @@ import { _electron, expect } from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
-const clipAudit = readFileSync(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+const clipAudit = readFileSync(resolve('scripts/ui-audit/clip-audit.js'), 'utf8');
 
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-python-ui-'));

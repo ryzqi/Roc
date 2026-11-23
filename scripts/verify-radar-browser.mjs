@@ -50,7 +50,7 @@ try{
  await expect(page.getByRole('heading',{name:'Native card title',exact:true})).toHaveCount(1);
  await page.getByRole('button',{name:'返回浏览',exact:true}).click();await expect.poll(nativeState).toMatchObject([{visible:true}]);
  check('ModelScope card title excludes abstract and tags');
- const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+ const auditSource=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
  // Exercise shell breakpoints below the production window's native minimum.
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setMinimumSize(800,640));
  for(const width of [800,1000,1099,1100]){
