@@ -238,6 +238,16 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 
 [表单组件夹具](../tests/renderer/fixtures/form-fields-gallery.tsx)与[Electron 回归](../tests/renderer/form-fields.test.mjs)使用当前 CSS；覆盖浅深主题、两种密度、桌面与窄容器、键盘和错误关联。截图仅在设置 `ROC_UI_AUDIT_DIR` 时输出，审阅后清理。合成 composition 事件验证守卫逻辑，系统中文输入法和 VoiceOver 仍需要人工实机验收。
 
+### 页头、数据区与标准条目（2026-11-23 P1.3）
+
+`shared/page-ui.tsx` 只提供页面组合：`PageHeader` 展示一级标题、真实摘要和一个主要动作；`PageSection` 用唯一标题关联数据区，次操作放在区块标题旁；`PageListRow` 是完整的原生按钮，分为标题、说明、装饰图标和尾部状态。窄容器自动换行，长中文标题和连续字符均可断行，使用现有字号、间距与状态 token。
+
+列表拥有者仍负责稳定对象 ID、选中状态、方向键导航和虚拟化；条目透传 `ref`、`tabIndex`、ARIA、`disabled` 与原生表单属性，默认 `type="button"`。不要在条目内部嵌套按钮、链接或表单控件。列表行的 hover、active 和可见焦点不依赖颜色传达当前对象；选中语义由调用方使用 `aria-current` 等实际语义提供。
+
+信息状态继续使用 `EmptyState` 与 `ErrorBar`，无需第二套异步状态组件。每个区块根据自身真实数据展示正常、空、加载、错误或受限状态；保留可用内容和对应恢复入口，不把局部错误升级为整页不可用。
+
+[页面组件夹具](../tests/renderer/fixtures/page-ui-gallery.tsx)与[Electron 回归](../tests/renderer/page-ui.test.mjs)使用同一套组件和当前 CSS，覆盖页面语义、原生键盘、禁用条目、恢复动作、浅深主题、两种密度与长标题。截图仅在 `ROC_UI_AUDIT_DIR` 存在时输出，审阅后清理。
+
 ## 官方参考与组件复用
 
 本轮核对以下官方指南，采用其信息层级和组件职责；颜色、几何和动效仍以 Roc token 为准。

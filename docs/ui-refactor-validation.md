@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P1.3：页头、信息区与标准条目
+
+状态：**Verified passing**。`shared/page-ui.tsx` 提供 PageHeader、PageSection、原生 PageListRow，复用 EmptyState/ErrorBar；导航、选择与异步状态仍归业务所有。永久夹具覆盖正常、空、加载、错误、受限状态。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm build`、`pnpm check:renderer-chunks`、`pnpm audit:design` 通过；`ROC_UI_AUDIT_DIR=/tmp/roc-ui-p1-p2-captures-20261123 node --test --test-concurrency=1 tests/renderer/workspace-frame.test.mjs tests/renderer/page-ui.test.mjs tests/renderer/shell-management-guards.test.mjs` 最终 **19/19**，其中页面组件 **2/2**。浅深主题、紧凑/舒适、1184/1280/1440px、320px 长标题无横溢出，裁切为零；原生 Enter/Space、禁用与焦点检查通过。已查看浅色紧凑1184px、深色舒适1440px截图，截图审阅后清理。壳体部分见独立 P2.1 记录。
+
 ## 2026-11-23 重构计划 P0.1：可复现审计
 
 本轮执行[2026-11-23 重构计划](../Roc_UI_UX_重构计划_2026-11-23.md)，代码基线为 `85e92a4bf0bfccda1a4d77a65373067139da13ce`。下方 11 月 20–21 日记录属于历史轮次，与本计划 P0–P8 分开。
