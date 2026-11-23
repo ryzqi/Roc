@@ -23,6 +23,7 @@ before(async () => {
     window.mount=()=>{
       window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[],questions:[]};
       window.emptyResults=false;
+      window.failSearch=false;
       window.holdAssistant=false;
       const status={phase:'idle',generation:2,workspacePath:'/tmp/synthetic-retrieval',error:null,lastScanAt:null,
         counts:{total:2,ready:2,queued:0,running:0,failed:0},
@@ -33,7 +34,7 @@ before(async () => {
         listIndexJobs:async()=>{window.calls.jobs++;return {ok:true,data:[]};},
         knowledgeJobs:async()=>{window.calls.sourceJobs++;return {ok:true,data:[]};},
         controlIndex:async input=>{window.calls.controls.push(input);return {ok:true,data:status};},
-        searchKnowledge:async input=>{window.calls.search.push(input);return {ok:true,data:researchKnowledgeSearchResultSchema.parse({
+        searchKnowledge:async input=>{window.calls.search.push(input);if(window.failSearch)return {ok:false,error:{message:'Synthetic retrieval failure'}};return {ok:true,data:researchKnowledgeSearchResultSchema.parse({
           query:input.query,hits:window.emptyResults?[]:[
             {chunkId:'paper-hit',documentId:'document:parse-one',sourceId:'paper-one',sourceType:'literature',
               title:'Attention methods: '+ 'A long scientific title '.repeat(5),
@@ -132,6 +133,43 @@ test('question submission stays locked until assistant handoff and preserves evi
   await expect(page.getByTestId('rag-ask')).toBeEnabled();
   await expect(page.getByTestId('rag-query')).toHaveValue('attention energy');
   await expect(page.getByTestId('rag-hit-paper-hit')).toBeVisible();
+});
+
+test('evidence directory follows keyboard selection, preserves the question and never assigns support', async () => {
+  const sidebar = page.getByTestId('rag-evidence-sidebar');
+  await expect(sidebar).toContainText('检索命中，支持关系待核验');
+  const bounds = await sidebar.boundingBox();
+  const results = await page.getByTestId('rag-results').boundingBox();
+  assert.ok(bounds.x >= results.x + results.width - 1);
+  assert.ok(bounds.width / (bounds.width + results.width) >= 0.29);
+  await page.getByTestId('rag-evidence-file-hit').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('rag-hit-file-hit')).toBeFocused();
+  await expect(page.getByTestId('rag-evidence-file-hit')).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByTestId('rag-query')).toHaveValue('attention energy');
+  await page.setViewportSize({width: 420, height: 720});
+  const toggle = sidebar.getByRole('button', {name: '证据目录（3 条）', exact: true});
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('rag-evidence-paper-hit')).toBeHidden();
+  await toggle.click();
+  await page.getByTestId('rag-evidence-paper-hit').click();
+  await expect(page.getByTestId('rag-hit-paper-hit')).toBeFocused();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await page.setViewportSize({width: 1100, height: 760});
+});
+
+test('failed retrieval keeps the last evidence and its original query visible', async () => {
+  await page.evaluate(() => {window.failSearch = true;});
+  await page.getByTestId('rag-query').fill('a different question');
+  await page.getByTestId('rag-search').click();
+  await expect(page.getByTestId('rag-search-error')).toContainText('Synthetic retrieval failure');
+  await expect(page.getByTestId('rag-results')).toContainText('attention energy');
+  await expect(page.getByTestId('rag-hit-paper-hit')).toBeVisible();
+  await expect(page.getByTestId('rag-evidence-paper-hit')).toHaveAttribute('aria-current', 'true');
+  await page.evaluate(() => {window.failSearch = false;});
+  await page.getByTestId('rag-query').fill('attention energy');
+  await page.getByTestId('rag-search').click();
+  await expect(page.getByTestId('rag-search-error')).toHaveCount(0);
 });
 
 test('search results retain usable space in narrow and wide canvases with both themes',async()=>{

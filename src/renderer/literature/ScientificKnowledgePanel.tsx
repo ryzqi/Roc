@@ -13,6 +13,7 @@ import {ErrorBar} from '../shell/ErrorBar';
 import {scientificEntityLabels, scientificFactLabels, scientificRelationLabels, scientificHitKey} from './scientific-wiki';
 import {scientificConceptRows} from './wiki-concepts';
 import {ScientificPaperKnowledge} from './ScientificPaperKnowledge';
+import {useViewActive} from '../shared/view-activity';
 
 type Props = {client: RocClient; projectId: string; documentIds?: readonly string[]; graph?: boolean};
 const kinds = {entity: '实体', fact: '事实', relation: '关系'} as const;
@@ -76,16 +77,19 @@ function KnowledgeScope({client, projectId, documentIds = noDocuments, graph = f
 
 function KnowledgePage({client, request, graph, onFactFilter}: {
   client: RocClient; request: ScientificKnowledgeSearchRequest; graph: boolean; onFactFilter: (entity: ScientificEntity) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  const active = useViewActive();
   const [paging, setPaging] = useState<{offset: number; basisDigest: string | null}>({offset: 0, basisDigest: null});
   const [attempt, setAttempt] = useState(0), [selected, setSelected] = useState<ScientificKnowledgeSearchHit | null>(null);
-  const read = useAsyncResource(JSON.stringify([request, paging, attempt]), () =>
+  const read = useAsyncResource(active ? JSON.stringify([request, paging, attempt]) : null, () =>
     client.api.research.searchWikiKnowledge({...request, ...paging}), {label: '搜索结构化科研知识'});
   const data = read.status === 'ready' ? read.data : null;
   const rows = scientificConceptRows(data?.hits ?? []);
   const restart = (): void => {setSelected(null); setPaging({offset: 0, basisDigest: null}); setAttempt(value => value + 1);};
   const selectEntity = (entity: ScientificEntity, source: WikiPaperKnowledgeSource): void =>
     setSelected({kind: 'entity', value: entity, source, exactMatch: false});
+  // Readonly details own source previews and object renderers; hidden panels release them.
+  if (!active) return null;
   return <div className="knowledge-scientific-results flex min-h-0 min-w-0 flex-1 flex-col" data-browsing={selected === null}>
     {read.status === 'loading' ? <p role="status" className="p-4 text-xs">核对科研知识与原始来源…</p> : null}
     {read.error ? <ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/> : null}

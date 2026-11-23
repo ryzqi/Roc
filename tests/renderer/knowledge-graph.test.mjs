@@ -9,9 +9,9 @@ import { buildViteRenderer } from './fixtures/build-vite-renderer.mjs';
 import { graphPerformanceFixture } from '../../scripts/lib/research-graph-performance-fixture.mjs';
 let directory, app, page;
 const errors = [];
-const artifacts = join(process.cwd(), '.artifacts/research-optimization/graph-ui');
+let artifacts;
 before(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'roc-graph-ui-')); mkdirSync(artifacts, { recursive: true });
+  directory = mkdtempSync(join(tmpdir(), 'roc-graph-ui-')); artifacts = join(directory, 'captures'); mkdirSync(artifacts, { recursive: true });
   await buildViteRenderer({ directory, script: `
     import React from 'react'; import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom';
     import {KnowledgeGraphView} from './src/renderer/literature/KnowledgeGraphView';

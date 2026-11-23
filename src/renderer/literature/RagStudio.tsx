@@ -1,4 +1,4 @@
-import { useVisiblePolling } from '../shared/view-activity';
+import { useViewSelected, useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeft, Bookmark, Check, ChevronDown, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
@@ -13,6 +13,7 @@ import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
+import {RagEvidenceSidebar} from './RagEvidenceSidebar';
 import './rag-studio.css';
 
 const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
@@ -96,6 +97,11 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const [query, setQuery] = useState('');
   const [indexOpen, setIndexOpen] = useState(false);
   const [expandedHits, setExpandedHits] = useState<ReadonlySet<string>>(() => new Set());
+  const [selectedHitId, setSelectedHitId] = useState<string | null>(null);
+  const hitRefs = useRef(new Map<string, HTMLLIElement>());
+  const lastOpenedHit = useRef<string | null>(null);
+  const viewSelected = useViewSelected();
+  const wasSelected = useRef(viewSelected);
   const queryRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const indexVisited = useRef(false);
@@ -137,6 +143,14 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+
+  useEffect(() => {
+    const resumed = viewSelected && !wasSelected.current;
+    wasSelected.current = viewSelected;
+    if (!resumed || lastOpenedHit.current === null) return;
+    hitRefs.current.get(lastOpenedHit.current)?.querySelector<HTMLButtonElement>('[data-testid^="rag-hit-open-"]')?.focus({preventScroll: true});
+    lastOpenedHit.current = null;
+  }, [viewSelected]);
 
   useEffect(() => {
     if (indexOpen) {
@@ -231,8 +245,12 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     });
     searchInFlight.current = false;
     if (!mounted.current) return null;
-    setResult(result.ok ? result.data : null);
-    setExpandedHits(new Set());
+    if (result.ok) {
+      setResult(result.data);
+      setExpandedHits(new Set());
+      setSelectedHitId(result.data.hits[0]?.chunkId ?? null);
+      lastOpenedHit.current = null;
+    }
     return result.ok ? result.data : null;
   };
 
@@ -274,6 +292,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
    */
   const openHit = (hit: ResearchKnowledgeSearchHit): void => {
     setNote(null);
+    setSelectedHitId(hit.chunkId);
+    lastOpenedHit.current = hit.chunkId;
     if (hit.documentId.startsWith('document:')) {
       onOpenInReader({
         parseId: hit.documentId.slice('document:'.length),
@@ -579,6 +599,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             {hitCopy.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</p> : null}
           </section>
 
+          <div className="rag-results-layout" data-has-evidence={Boolean(result?.hits.length)}>
           <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
             {result === null ? (
               <EmptyState tone={searching ? 'loading' : 'empty'} icon={searching ? Loader2 : Search}
@@ -603,7 +624,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                   {result.hits.map((hit, index) => {
                     const expanded = expandedHits.has(hit.chunkId);
                     const longContent = hit.content.length > 300 || hit.content.split('\n').length > 5;
-                    return <li key={hit.chunkId} className="rag-hit" data-testid={`rag-hit-${hit.chunkId}`}>
+                    return <li key={hit.chunkId} className="rag-hit" data-testid={`rag-hit-${hit.chunkId}`} tabIndex={-1}
+                      ref={element => {if (element) hitRefs.current.set(hit.chunkId, element); else hitRefs.current.delete(hit.chunkId);}}>
                       <div className="rag-hit-title">
                         <span className="rag-hit-number" aria-hidden="true">{index + 1}</span>
                         <h3>{hit.title}</h3>
@@ -640,6 +662,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
               )}
             </>}
           </section>
+          {result?.hits.length ? <RagEvidenceSidebar hits={result.hits} selectedId={selectedHitId} onSelect={hit => {
+            setSelectedHitId(hit.chunkId);
+            const element = hitRefs.current.get(hit.chunkId);
+            element?.scrollIntoView({block: 'start'});
+            element?.focus({preventScroll: true});
+          }}/> : null}
+          </div>
         </>
       )}
     </div>

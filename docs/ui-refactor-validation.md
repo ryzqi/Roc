@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P5.2：知识证据与隐藏资源
+
+状态：**Verified passing**。RAG宽容器采用70:30原文/证据导航，窄窗折叠目录；支持关系明确标为待核验，唯一回答仍在实际助手中。打开来源沿用parse/source/locator身份，返回保留问题并恢复源按钮焦点；检索失败保留上次结果与对应原查询。Wiki/关系图模块首次进入才加载，隐藏时清理只读派生和重DOM，保留筛选、分页、选中及Wiki草稿；科学源预览隐藏后释放PDF资源。已有关系图为有界SVG，无新增无用Worker。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。P2.3记录的组合65/67，其中RAG7/7、图谱7/7、科学知识10/10通过。知识宿主探针位于Vite类型擦除之后，计数注入未命中；改成pre转换并检查正计数，下一阅读测试显式恢复自己的活动视图。随后 `node --test --test-concurrency=1 tests/renderer/literature-workspace-layout.test.mjs tests/renderer/radix-settings-dialog.test.mjs tests/renderer/lifecycles.test.mjs` **113/114**，知识宿主完整 **6/6**，唯一失败为设置新增断言缺少expect导入，另记P6.4。知识范围累计30/30；静态类型、设计审计、derive单测15/15通过。图谱和科学知识截图现放自动清理的夹具目录。
+
 ## 2026-11-23 P2.3：壳控制层与右侧对象检视
 
 状态：**Verified passing**（以下壳与对象回归范围）。AppShellContent只组合启动、主题、布局与快捷键；共享资源、对象动作及运行关注分别由workspace/panel/run-attention控制层持有，use-app-route保持唯一URL写入点。对象动作沿用同一导航、脏草稿和待保存守卫，未创建任务状态副本。

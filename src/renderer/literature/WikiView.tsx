@@ -8,6 +8,9 @@ import './knowledge-workspace.css';
 import type {RocClient} from '../shared/roc-client';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import { deriveWiki, wikiNeighbors, WIKI_PAGE_SIZE, type WikiConceptPage, type WikiEvidenceCard } from './derive-wiki';
+import {useViewActive} from '../shared/view-activity';
+
+const inactiveProjection = deriveWiki({claims: [], evidence: [], libraryItems: []});
 
 const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
 
@@ -59,10 +62,11 @@ export function WikiView({
   onOpenClaim,
   onOpenPaper,
   onAskAssistant
-}: WikiViewProps): React.JSX.Element {
+}: WikiViewProps): React.JSX.Element | null {
+  const active = useViewActive();
   const projection = useMemo(
-    () => deriveWiki({ claims, evidence, libraryItems, snapshot }),
-    [claims, evidence, libraryItems, snapshot]
+    () => active ? deriveWiki({ claims, evidence, libraryItems, snapshot }) : inactiveProjection,
+    [active, claims, evidence, libraryItems, snapshot]
   );
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -110,6 +114,8 @@ export function WikiView({
       concepts: follow ? Math.floor(Math.max(0, projection.pages.findIndex(page => page.claimId === claimId)) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE : current.concepts}));
     if (follow) setQuery('');
   };
+
+  if (!active) return null;
 
   if (projection.pages.length === 0 && projection.orphanEvidence.length === 0) {
     return (

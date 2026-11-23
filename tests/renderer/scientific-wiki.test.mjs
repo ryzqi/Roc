@@ -13,7 +13,7 @@ import {scientificWikiFixture, scientificWikiCandidates} from '../unit/fixtures/
 
 let api, services, structured, directory, app, page, windowId, active;
 const fixtures = [], errors = [], calls = [], holds = [];
-const artifacts = join(process.cwd(), '.artifacts/scientific-rag/phase6-ui', new Date().toISOString().replace(/[:.]/gu, '-'));
+let artifacts;
 const rows = () => page.getByTestId('wiki-scientific-row');
 const source = () => page.getByTestId('wiki-scientific-source');
 const record = () => page.getByTestId('wiki-scientific-record');
@@ -29,6 +29,7 @@ before(async () => {
       importTypeScriptModule(`src/main/plugins/research/${name}.ts`,
         {platform: 'node', external: ['@napi-rs/canvas'], tempDir: '.runtime/tmp'}))]);
   directory = await mkdtemp(join(tmpdir(), 'roc-scientific-wiki-ui-'));
+  artifacts = join(directory, 'captures');
   await mkdir(artifacts, {recursive: true});
   await buildViteRenderer({directory, script: `
     import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
@@ -38,6 +39,7 @@ before(async () => {
     import {WikiWorkspace} from './src/renderer/literature/WikiWorkspace';
     import {WikiView} from './src/renderer/literature/WikiView';
     import {KnowledgeGraphView} from './src/renderer/literature/KnowledgeGraphView';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     const root=createRoot(document.getElementById('root'));
     const methods=['searchWikiKnowledge','readWikiPaperKnowledge','resolveDocumentParse','getDocumentContent',
       'previewDocument','listReadingHighlights','searchWiki','readWiki','createWiki','saveWiki','compileWiki',
@@ -58,8 +60,12 @@ before(async () => {
         onOpenClaim={()=>{}}/>;
       return <ScientificKnowledgePanel client={client} projectId={value.projectId} documentIds={value.documentIds}/>;
     }
+    function ActivityHarness(props) {
+      const [active,setActive]=React.useState(true);window.setViewActive=setActive;
+      return <ViewActivity active={active}><Harness {...props}/></ViewActivity>;
+    }
     window.mount=(surface,state)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user">
-      <LazyMotion features={domAnimation} strict><Harness key={++generation} surface={surface} state={state}/></LazyMotion>
+      <LazyMotion features={domAnimation} strict><ActivityHarness key={++generation} surface={surface} state={state}/></LazyMotion>
     </MotionConfig>));
     window.unmount=()=>flushSync(()=>root.render(null));
   `, style: `html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,sans-serif}
@@ -264,6 +270,16 @@ test('fixed table-cell source opens actual PDF via protocol with exact quote and
   assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_evidence').pluck().get(), 0);
   await source().getByText('未记录精确区域，仅定位原始页。', {exact: true}).waitFor();
   await page.screenshot({path: join(artifacts, 'table-cell-source.png')});
+  await page.evaluate(() => window.setViewActive(false));
+  await source().waitFor({state: 'detached'});
+  await page.waitForFunction(() => window.liveWorkers === 0);
+  assert.equal(calls.some(call => call.projectId === f.project.id && call.method === 'source' &&
+    call.native?.method === 'HEAD' && call.native.release), true);
+  await page.evaluate(() => window.setViewActive(true));
+  await record().waitFor();
+  assert.equal(await rows().filter({hasText: 'Reported F1'}).getAttribute('aria-pressed'), 'true');
+  await details.last().locator(':scope > summary').click();
+  await source().getByTestId('reader-pdf-canvas').waitFor();
   await details.last().locator(':scope > summary').click();
   await page.waitForFunction(() => window.liveWorkers === 0);
   assert.equal(calls.some(call => call.projectId === f.project.id && call.method === 'source' &&

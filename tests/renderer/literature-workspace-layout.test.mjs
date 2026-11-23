@@ -12,7 +12,17 @@ let directory, app, page;
 const errors = [];
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-literature-workspace-'));
-  await buildViteRenderer({directory, plugins: [tailwindcss()], script: `
+  await buildViteRenderer({directory, plugins: [tailwindcss(), {
+    name: 'knowledge-lifecycle-probes',
+    enforce: 'pre',
+    transform(source, id) {
+      const entry = id.match(/\/(WikiWorkspace|KnowledgeGraphView)\.tsx$/u)?.[1];
+      if (entry) return {code: `globalThis.knowledgeModuleLoads ??= []; globalThis.knowledgeModuleLoads.push('${entry}');\n${source}`, map: null};
+      if (id.endsWith('/derive-graph.ts')) return {code: source.replace('): KnowledgeGraph {',
+        '): KnowledgeGraph { globalThis.graphDerivations = (globalThis.graphDerivations ?? 0) + 1;'), map: null};
+      return null;
+    }
+  }], script: `
     import React,{useRef,useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
@@ -39,7 +49,10 @@ before(async () => {
       listReadingNotes:async()=>ok([]),searchWiki:async()=>ok({pages:[],nextOffset:null,mode:'keyword',degradation:null}),
       knowledgeJobs:async()=>ok([]),listIndexedFiles:async()=>ok([]),listIndexJobs:async()=>ok([]),
       getIndexStatus:async()=>ok({phase:'idle',generation:1,error:null,workspacePath:'/synthetic',lastScanAt:null,
-        counts:{total:0,ready:0,queued:0,running:0,failed:0},settings:{revision:1,projectId:'fixture',paused:false,watch:false,kinds:[],include:[],exclude:[],embeddingConfigId:null}})
+        counts:{total:0,ready:0,queued:0,running:0,failed:0},settings:{revision:1,projectId:'fixture',paused:false,watch:false,kinds:[],include:[],exclude:[],embeddingConfigId:null}}),
+      searchKnowledge:async input=>ok({query:input.query,hits:[{chunkId:'source-hit',documentId:'document:parse',sourceId:'paper',sourceType:'literature',
+        title:item.metadata.title,content:'Evidence and understanding',locator:'page:1',rrfScore:0.03,keywordRank:1,vectorRank:null}],
+        keywordCount:1,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-23T00:00:00.000Z',ranking:{degradation:null,reranker:{status:'not_requested'}}})
     }}};
     const scope={client,projectId:'fixture',workspacePath:'/synthetic',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas(){}};
     function Harness(){
@@ -93,7 +106,41 @@ before(async () => {
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
 
+test('knowledge modules load on first entry and hidden graphs release the projection while preserving its selection', async () => {
+  assert.deepEqual(await page.evaluate(() => window.knowledgeModuleLoads ?? []), []);
+  await page.evaluate(() => window.selectWorkspace('knowledge'));
+  await expect(page.getByTestId('rag-query')).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.knowledgeModuleLoads ?? []), []);
+  await page.getByTestId('literature-subview-wiki').click();
+  await expect(page.getByTestId('wiki-pages')).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.knowledgeModuleLoads), ['WikiWorkspace']);
+  await page.getByRole('button', {name: '新建主题页', exact: true}).click();
+  await page.getByLabel('页面标题', {exact: true}).fill('Retained knowledge draft');
+  await page.getByTestId('literature-subview-rag').click();
+  await page.getByTestId('literature-subview-wiki').click();
+  await expect(page.getByLabel('页面标题', {exact: true})).toHaveValue('Retained knowledge draft');
+  await page.getByLabel('页面标题', {exact: true}).fill('');
+  await page.getByRole('button', {name: '取消', exact: true}).click();
+  await page.getByTestId('literature-open-graph').click();
+  await expect(page.getByTestId('knowledge-graph')).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.knowledgeModuleLoads), ['WikiWorkspace', 'KnowledgeGraphView']);
+  await page.getByTestId('graph-node-claim:c-1').click();
+  const beforeHide = await page.evaluate(() => window.graphDerivations);
+  assert.ok(Number.isInteger(beforeHide) && beforeHide > 0, 'graph derivation probe must execute');
+  await page.evaluate(() => window.setHubActive(false));
+  await expect(page.getByTestId('knowledge-graph')).toHaveCount(0);
+  await page.evaluate(() => window.setContextDrawerOpen(true));
+  assert.equal(await page.evaluate(() => window.graphDerivations), beforeHide);
+  await page.evaluate(() => {window.setContextDrawerOpen(false); window.setHubActive(true);});
+  await expect(page.getByTestId('graph-detail-id')).toHaveText('claim:c-1');
+  assert.ok(await page.evaluate(() => window.graphDerivations) > beforeHide);
+  await page.getByTestId('literature-return-wiki').click();
+  await expect(page.getByTestId('knowledge-graph')).toHaveCount(0);
+  await page.evaluate(() => window.selectWorkspace('library'));
+});
+
 test('literature keeps full reading width, with reachable navigation at narrow and wide canvas sizes',async()=>{
+  await page.evaluate(() => {window.setHubActive(true); window.setContextDrawerOpen(false); window.openObject({kind:'reader',libraryItemId:'paper'});});
   for(const width of [440,820,1280]) {
     await page.evaluate(width=>document.getElementById('root').style.width=width+'px',width);
     await page.getByTestId('reader-title').waitFor();
@@ -168,6 +215,12 @@ test('object navigation opens the requested paper or claim and returns to the re
   await expect.poll(()=>page.getByTestId('reader-content-area').evaluate(element=>element.scrollTop)).toBe(0);
   await page.getByTestId('literature-return-search').click();
   await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace','knowledge');
+  await expect(page.getByTestId('rag-query')).toHaveValue('How does the evidence support this claim?');
+  await page.getByTestId('rag-search').click();
+  await page.getByTestId('rag-hit-open-source-hit').click();
+  await expect(page.locator('[data-block-id="heading"]')).toHaveAttribute('data-focused','true');
+  await page.getByTestId('literature-return-search').click();
+  await expect(page.getByTestId('rag-hit-open-source-hit')).toBeFocused();
   await expect(page.getByTestId('rag-query')).toHaveValue('How does the evidence support this claim?');
 });
 

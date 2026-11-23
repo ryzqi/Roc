@@ -6,11 +6,9 @@ import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { ImportDialog } from './ImportDialog';
-import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { LibraryList } from './LibraryList';
 import { PaperReader } from './PaperReader';
 import { RagStudio } from './RagStudio';
-import {WikiWorkspace} from './WikiWorkspace';
 import { workspaceForSubView, type ImportTabRequest, type LiteratureSubView, type LiteratureWorkspace } from './hub-route';
 import type { ViewProps } from '../app/view-registry';
 import { useLiterature } from './literature-scope';
@@ -29,6 +27,8 @@ const DiscoverySearch = retryableLazy(() => import('./DiscoverySearch'));
 const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
 const AcademicRadarPanel = retryableLazy(() => import('./AcademicRadarPanel'));
 const MonitorsPanel = retryableLazy(() => import('./MonitorsPanel'));
+const WikiWorkspace = retryableLazy(async () => ({default: (await import('./WikiWorkspace')).WikiWorkspace}));
+const KnowledgeGraphView = retryableLazy(async () => ({default: (await import('./KnowledgeGraphView')).KnowledgeGraphView}));
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
   { id: 'search', label: '学术搜索', icon: Search, iconClass: 'text-[var(--icon-literature)]' },
@@ -308,7 +308,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               </button>
             </div>
             {derivedReady ? (
-              <WikiWorkspace
+              <LazyBoundary active={hubActive && subView === 'wiki'} fallback={<p role="status" className="p-3">加载知识页…</p>}><WikiWorkspace
                 client={store.client}
                 projectId={store.projectId}
                 writable={scope.writable}
@@ -320,7 +320,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
                 onOpenClaim={(claimId) => scope.openLiterature({kind: 'concept', claimId})}
                 onOpenPaper={(libraryItemId) => scope.openLiterature({kind: 'reader', libraryItemId})}
                 onAskAssistant={(prompt) => void store.askAssistant(prompt)}
-              />
+              /></LazyBoundary>
             ) : (
               derivedPanel
             )}
@@ -338,7 +338,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               </button>
             </div>
             {derivedReady ? (
-              <KnowledgeGraphView
+              <LazyBoundary active={hubActive && subView === 'graph'} fallback={<p role="status" className="p-3">加载关系图…</p>}><KnowledgeGraphView
                 client={store.client}
                 projectId={store.projectId}
                 claims={claims}
@@ -349,7 +349,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
                 onAskAssistantAboutNode={(node) =>
                   void store.askAssistant(`请围绕实体 “${node.label}” 扩展相关原理、算法演进与代表论文。`)
                 }
-              />
+              /></LazyBoundary>
             ) : (
               derivedPanel
             )}

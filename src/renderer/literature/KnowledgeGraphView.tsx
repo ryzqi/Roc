@@ -8,6 +8,9 @@ import type {RocClient} from '../shared/roc-client';
 import {GraphNeighborhood, graphRelationLabel} from './GraphNeighborhood';
 import './knowledge-workspace.css';
 import {ScientificKnowledgePanel} from './ScientificKnowledgePanel';
+import {useViewActive} from '../shared/view-activity';
+
+const inactiveGraph = deriveGraph({claims: [], evidence: [], libraryItems: []});
 
 /** Recorded relations with bounded node and selected-neighborhood lists. */
 
@@ -57,10 +60,11 @@ function RecordedKnowledgeGraph({
   focusClaimId = null,
   focusRequestId = 0,
   onAskAssistantAboutNode
-}: KnowledgeGraphViewProps): React.JSX.Element {
+}: KnowledgeGraphViewProps): React.JSX.Element | null {
+  const active = useViewActive();
   const graph = useMemo(
-    () => deriveGraph({ claims, evidence, libraryItems }),
-    [claims, evidence, libraryItems]
+    () => active ? deriveGraph({ claims, evidence, libraryItems }) : inactiveGraph,
+    [active, claims, evidence, libraryItems]
   );
   const focusKey = `${focusRequestId}:${focusClaimId ?? ''}`;
   const [selection, setSelection] = useState<{nodeId: string; focusKey: string} | null>(null);
@@ -101,6 +105,9 @@ function RecordedKnowledgeGraph({
   const changeText = (text: string): void => { setFilterText(text); setPage(0); setBrowsing({open: true, focusKey}); };
   const changeKind = (kind: GraphNodeKind | 'all'): void => { setKindFilter(kind); setPage(0); setBrowsing({open: true, focusKey}); };
   const selectNode = (nodeId: string): void => { setSelection({nodeId, focusKey}); setBrowsing({open: false, focusKey}); setNeighbourPaging({ nodeId, page: 0 }); };
+
+  // Keep only the small filters/selection above; release the graph maps and DOM.
+  if (!active) return null;
 
   if (graph.nodes.length === 0) {
     return (
