@@ -34,8 +34,8 @@ before(async () => {
     const record = (method, input) => window.calls.push({method, input});
     const inspection = value => ok(researchManuscriptSyncInspectionSchema.parse(value));
     let bound = stored;
-    const client = {api:{files:{
-      listTree: async () => ok({relativePath:'',truncated:false,entries:[{type:'file', name:'main.tex', relativePath:'main.tex', size:16, updatedAt:'2026-11-20T00:00:00.000Z'}]}),
+    const client = {api:{workspace:{onChanged:()=>()=>{}},files:{
+      listTree: async () => ok({workspacePath:'/isolated',relativePath:'',truncated:false,entries:[{type:'file', name:'main.tex', relativePath:'main.tex', size:16, updatedAt:'2026-11-20T00:00:00.000Z'}]}),
       preview: async () => ok({relativePath:'main.tex',kind:'text',content:'Saved disk text',sizeBytes:16,truncated:false,mediaType:'text/plain'}),
       writeText: async input => {record('writeText',input); throw new Error('sync must leave editor saves explicit');}
     },research:{

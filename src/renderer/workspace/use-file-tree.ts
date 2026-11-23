@@ -3,8 +3,8 @@ import type { FileEntry } from '../../shared/types';
 import { readFileTreeExpanded, writeFileTreeExpanded } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
 import { compareTreeEntries, joinRelative, parentRelative } from './paths';
-import { WATCH_REFRESH_WINDOW_MS } from './watch-refresh';
-import { listTree } from './workspace-store';
+import {workspaceDirectoryIndex} from './directory-index';
+export {planChangedDirectories} from './directory-index';
 /**
  * File tree state for the sidebar (P3/T3.2).
  *
@@ -115,47 +115,12 @@ export type FileTreeState = {
   reload: () => void;
 };
 
-/**
- * Which already-listed directories a watcher event makes stale.
- *
- * `workspace.onChanged` reports the deepest path that changed (`null` for a
- * wholesale change). Only directories we have actually listed need a refetch, and
- * the root always does. Pure so the mapping from "external edit" to "what to
- * reload" is testable without a DOM or an IPC bridge.
- */
-export function planChangedDirectories(
-  changedRelativePath: string | null,
-  cachedDirectories: Iterable<string>
-): string[] {
-  const targets = new Set<string>(['']);
-  if (changedRelativePath === null) {
-    for (const directory of cachedDirectories) {
-      targets.add(directory);
-    }
-    return [...targets];
-  }
-  const parent = parentRelative(changedRelativePath);
-  for (const directory of cachedDirectories) {
-    if (directory === '' || directory === changedRelativePath || directory === parent) {
-      targets.add(directory);
-      continue;
-    }
-    // A directory is affected when it is an ancestor of the changed path: its
-    // listing contains the entry that now has a new size or timestamp.
-    if (changedRelativePath.startsWith(`${directory}/`)) {
-      targets.add(directory);
-    }
-  }
-  return [...targets];
-}
-
-
-
 export function useFileTree(
   client: RocClient,
   options: { workspacePathKey: string | null; projectId: string | null }
 ): FileTreeState {
   const { workspacePathKey, projectId } = options;
+  const directoryIndex = useMemo(() => workspaceDirectoryIndex(client, workspacePathKey), [client, workspacePathKey]);
   const [children, setChildren] = useState<ReadonlyMap<string, FileEntry[]>>(new Map());
   const [truncated, setTruncated] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
@@ -164,8 +129,6 @@ export function useFileTree(
   const [nonce, setNonce] = useState(0);
   const requestSeq = useRef(0);
   const directoryReadSeq = useRef(new Map<string, number>());
-  // Cached directory keys, readable from the watcher without re-subscribing on
-  // every load (the map identity changes on each fetched listing).
   const cachedDirectoriesRef = useRef<string[]>([]);
 
   // Seed expansion from the stored preference whenever the project changes.
@@ -189,13 +152,14 @@ export function useFileTree(
 
   const load = useCallback(
     async (relativePath: string): Promise<void> => {
+      if (directoryIndex === null) return;
       const seq = requestSeq.current;
       const readSeq = (directoryReadSeq.current.get(relativePath) ?? 0) + 1;
       directoryReadSeq.current.set(relativePath, readSeq);
       const isCurrent = (): boolean => seq === requestSeq.current && directoryReadSeq.current.get(relativePath) === readSeq;
       setLoading((current) => new Set(current).add(relativePath));
       try {
-        const result = await listTree(client, relativePath);
+        const result = await directoryIndex.read(relativePath);
         // A workspace switch, unmount or newer read of this directory invalidates the response.
         if (!isCurrent()) return;
         if (!result.ok) {
@@ -223,7 +187,7 @@ export function useFileTree(
         }
       }
     },
-    [client]
+    [directoryIndex]
   );
 
   // Load the root whenever the workspace changes.
@@ -323,72 +287,18 @@ export function useFileTree(
   }, [projectId]);
 
   const reload = useCallback(() => {
+    directoryIndex?.invalidate();
     setNonce((current) => current + 1);
-  }, []);
+  }, [directoryIndex]);
 
   cachedDirectoriesRef.current = [...children.keys()];
 
-  /**
-   * External-edit refresh (T3.2, gate 1).
-   *
-   * The first event refreshes at once; further events inside the window are
-   * coalesced into one trailing refresh. Events are ignored when they belong to
-   * another workspace, so a stale watcher cannot repopulate the tree after a
-   * project switch.
-   */
-  useEffect(() => {
-    if (workspacePathKey === null) {
-      return;
+  // The index owns the single watcher and invalidates before notifying either consumer.
+  useEffect(() => directoryIndex?.subscribe(targets => {
+    for (const target of targets) {
+      if (target === '' || cachedDirectoriesRef.current.includes(target)) void load(target);
     }
-    let timer: number | null = null;
-    let pendingChangedPath: string | null = null;
-    let pendingWholeWorkspace = false;
-    let pendingDirty = false;
-
-    const flush = (): void => {
-      const targets = planChangedDirectories(
-        pendingWholeWorkspace ? null : pendingChangedPath,
-        cachedDirectoriesRef.current
-      );
-      pendingDirty = false;
-      pendingChangedPath = null;
-      pendingWholeWorkspace = false;
-      for (const target of targets) {
-        void load(target);
-      }
-    };
-
-    const unsubscribe = client.api.workspace.onChanged((event) => {
-      if (event.workspacePath !== workspacePathKey) {
-        return;
-      }
-      if (timer === null) {
-        pendingChangedPath = event.relativePath;
-        pendingWholeWorkspace = event.relativePath === null;
-        flush();
-        timer = window.setTimeout(() => {
-          timer = null;
-          if (pendingDirty) {
-            flush();
-          }
-        }, WATCH_REFRESH_WINDOW_MS);
-        return;
-      }
-      pendingDirty = true;
-      if (event.relativePath === null) {
-        pendingWholeWorkspace = true;
-      } else {
-        pendingChangedPath = event.relativePath;
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      if (timer !== null) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [client, workspacePathKey, load]);
+  }), [directoryIndex, load]);
 
   /**
    * Flatten the expanded directories into the visible row list. Directories that

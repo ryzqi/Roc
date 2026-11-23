@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P5.1：共享目录与写作问题面板
+
+状态：**Verified passing**。文件树与写作复用同一目录索引、待完成请求及watcher，200ms合并后续文件变化，隔离不同工作区的迟到响应。隐藏写作暂停目录扫描与全局保存快捷键，保留正文草稿和导航/卸载保护，重新显示时读取最新元数据。编译问题移入160–240px可折叠底部区域，保留真实文件/行号、草稿保护、取消和导出；编辑/预览按55:45分配。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`ROC_UI_CAPTURE_DIR=/tmp/roc-ui-p5-captures-20261123 node --test --test-concurrency=1 tests/renderer/authoring-tools-layout.test.mjs tests/renderer/manuscript-sync.test.mjs tests/renderer/file-tree-virtualization.test.mjs` **13/13**，包括两个消费者合并读取、隐藏停止子目录扫描、恢复新增文件且脏草稿保留、真实组件错误行定位和取消/导出。`node --test tests/unit/renderer-directory-index.test.mjs tests/unit/renderer-view-retention.test.mjs tests/unit/renderer-routes.test.mjs tests/unit/renderer-navigation-guard.test.mjs` **30/30**，其中目录索引6/6。此次编译服务为受控返回，实际离线编译另由最终smoke验证。
+
 ## 2026-11-23 P2.2：按项目和模式恢复布局
 
 状态：**Verified passing**。探索/专注/运行保留兼容URL标识，宽度与左栏折叠分别按项目/模式保存，最多60组；首次沿用旧全局宽度，新模式独立修改。当前模式重置恢复232/344px，侧栏200–340px、Dock280–520px；缩放覆盖状态不持久化，助手开关继续来自URL。ADR0023和工作台合同已同步。

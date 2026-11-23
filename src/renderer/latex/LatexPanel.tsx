@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileText, Loader2, PanelLeft, Save } from 'lucide-react';
 import type { FilePreviewResult } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
@@ -8,8 +8,10 @@ import { ModalShell } from '../shell/ModalShell';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatBeijingDateTime, formatBytes } from '../shared/format';
+import {useViewActive} from '../shared/view-activity';
 import { fileName } from '../workspace/paths';
-import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
+import {previewFile, writeTextFile} from '../workspace/workspace-store';
+import {workspaceDirectoryIndex} from '../workspace/directory-index';
 import { SourceEditor } from './SourceEditor';
 import type { SourceReplacement, SourceSelection } from './SourceEditor';
 import {
@@ -62,6 +64,7 @@ export function LatexPanel(): React.JSX.Element {
    * prop went with it and the route-rendered predicate is the only one.
    */
   const scope = useWorkspaceScope();
+  const active = useViewActive();
   const canWrite = scope.writable;
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -84,13 +87,15 @@ export function LatexPanel(): React.JSX.Element {
   const liveDraft = useDeferredValue(draft ?? '');
   const [note, setNote] = useState<string | null>(null);
 
-  const files = useAsyncResource<{
+  const directoryIndex = useMemo(() => workspaceDirectoryIndex(scope.client, scope.workspacePath), [scope.client, scope.workspacePath]);
+  const fileRead = useAsyncResource<{
     entries: { path: string; sizeBytes: number; updatedAt: string }[];
     partial: boolean;
   }>(
-    scope.workspacePath === null ? null : `latex-files:${scope.workspacePath}`,
+    !active || scope.workspacePath === null ? null : `latex-files:${scope.workspacePath}`,
     async () => {
-      const root = await listTree(scope.client, '');
+      if (directoryIndex === null) throw new Error('工作目录尚未绑定。');
+      const root = await directoryIndex.read('');
       if (!root.ok) {
         return root;
       }
@@ -107,7 +112,7 @@ export function LatexPanel(): React.JSX.Element {
         if (entry.type !== 'directory') {
           continue;
         }
-        const nested = await listTree(scope.client, entry.relativePath);
+        const nested = await directoryIndex.read(entry.relativePath);
         if (!nested.ok) {
           partial = true;
           continue;
@@ -123,6 +128,16 @@ export function LatexPanel(): React.JSX.Element {
     },
     { label: '扫描文稿文件' }
   );
+
+  // Retained editors keep their draft and preview while hidden. Only directory
+  // metadata sleeps; selecting the view again restores the key and rereads the
+  // shared index, which the sidebar may have invalidated in the meantime.
+  useEffect(() => {
+    if (!active) return;
+    return directoryIndex?.subscribe(fileRead.reload);
+  }, [active, directoryIndex, fileRead.reload]);
+  const refreshFiles = useCallback(() => directoryIndex?.invalidate(), [directoryIndex]);
+  const files = {...fileRead, reload: refreshFiles};
 
   const preview = useAsyncResource<FilePreviewResult>(
     selectedPath === null || scope.workspacePath === null ? null : JSON.stringify(['latex-preview', scope.workspacePath, selectedPath]),
@@ -243,7 +258,7 @@ export function LatexPanel(): React.JSX.Element {
       dirtyRef.current = false;
       setNote(`已保存 ${saved.data.bytesWritten} 字节。`);
       setRecovery('写入前已保留备份。');
-      files.reload();
+      directoryIndex?.invalidate(selectedPath);
       return true;
     } finally {
       savingRef.current = false;
@@ -277,6 +292,7 @@ export function LatexPanel(): React.JSX.Element {
   }, [scope.projectId]);
 
   useEffect(() => {
+    if (!active) return;
     const keydown = (event: KeyboardEvent): void => {
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's' && !event.isComposing) {
         event.preventDefault();
@@ -349,13 +365,13 @@ export function LatexPanel(): React.JSX.Element {
         <h1>文稿</h1><span className="text-muted">{entries.length} 个文件</span>
         <button type="button" className="authoring-refresh" onClick={files.reload} disabled={files.status==='loading'}>重新扫描</button>
       </header>
-      {scope.projectId !== null ? <WorkspaceCompilePanel client={scope.client} projectId={scope.projectId} writable={canWrite}
+      <WorkspaceCompilePanel client={scope.client} projectId={scope.projectId} writable={canWrite}
         files={entries} beforeCompile={() => dirtyRef.current ? saveDraft() : Promise.resolve(true)}
         onBusyChange={busy => { compilingRef.current = busy; setCompiling(busy); if (busy) setPdfPreview(null); }} onPreview={path => { setPdfPreview(path); setPreviewOpen(false); }}
         onDiagnostic={(path, line) => requestLeave(() => {
           if (path !== selectedPath) selectFile(path);
           setFocusLine({ line: line ?? 1, nonce: Date.now() });
-        })} /> : null}
+        })}>
       <div className="authoring-layout">
 
       <label className="authoring-file-picker">
@@ -506,6 +522,7 @@ export function LatexPanel(): React.JSX.Element {
 
       </div>
       </div>
+      </WorkspaceCompilePanel>
     </div>
     <InlineCommandBar
       selection={inlineSelection}

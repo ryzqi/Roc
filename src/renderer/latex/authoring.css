@@ -13,8 +13,8 @@
 .authoring-file-parent { color: var(--muted); font-size: var(--font-meta-size); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .authoring-file-picker, .authoring-file-state { display: none; }
 .authoring-editor-layout { display: flex; min-height: 0; min-width: 0; flex: 1; }
-.authoring-source { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: 1; }
-.authoring-live-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; border-inline-start: .5px solid var(--line); }
+.authoring-source { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: 11; }
+.authoring-live-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 9; border-inline-start: .5px solid var(--line); }
 .authoring-live-preview > header { flex-shrink: 0; padding: 8px 16px; border-bottom: .5px solid var(--line); font-size: var(--font-meta-size); color: var(--muted); }
 .authoring-preview-content { overflow: auto; min-height: 0; flex: 1; padding: 20px; }
 .authoring-panel[data-files-open=false] .authoring-files { display: none; }
@@ -33,11 +33,18 @@
 .authoring-secondary:disabled { opacity: .5; }
 .authoring-compile > p { margin-top: 8px; color: var(--muted); overflow-wrap: anywhere; }
 .authoring-output-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
-.authoring-diagnostics { margin-top: 8px; }
-.authoring-diagnostics summary { cursor: pointer; }
-.authoring-diagnostics ul { max-height: 160px; overflow: auto; margin-top: 8px; }
-.authoring-diagnostics li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding-block: 4px; overflow-wrap: anywhere; }
+.authoring-problems { flex-shrink: 0; min-width: 0; border-top: .5px solid var(--line); font-size: var(--font-meta-size); display: flex; flex-direction: column; }
+.authoring-problems[data-expanded=true] { height: clamp(160px, 22vh, 240px); }
+.authoring-problems-toggle { display: flex; align-items: center; gap: 8px; min-height: 36px; flex-shrink: 0; padding: 8px 12px; text-align: start; }
+.authoring-problems-toggle:hover { background: var(--overlay-hover); }
+.authoring-problems-toggle:active { background: var(--overlay-active); }
+.authoring-problems-content { min-height: 0; overflow: auto; padding: 0 12px 8px; }
+.authoring-problems-content[hidden] { display: none; }
+.authoring-problems li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding-block: 8px; border-top: .5px solid var(--line-soft); overflow-wrap: anywhere; }
+.authoring-problem-severity { display: inline-flex; align-items: center; gap: 4px; }
+.authoring-problem-message { min-width: 0; flex: 1 1 200px; }
 .authoring-diagnostic-link { text-decoration: underline; text-underline-offset: 2px; font-family: var(--font-mono); }
+.authoring-panel :is(button, select, input):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 @container authoring (max-width: 900px) {
   .authoring-toggle-files { display: none; }
   .authoring-layout { flex-direction: column; }

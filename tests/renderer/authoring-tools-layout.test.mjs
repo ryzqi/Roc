@@ -16,7 +16,7 @@ const formula = String.raw`\[\frac{a}{b}=c^2\]`;
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-authoring-tools-'));
   await buildViteRenderer({directory, style: 'html,body,#root{height:100%;margin:0}#root{overflow:hidden}', script: `
-    import React from 'react';
+    import React, {useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LazyMotion, domMax, MotionConfig} from 'motion/react';
@@ -25,20 +25,27 @@ before(async () => {
     import {GitPanel} from './src/renderer/canvas/git/GitPanel';
     import {TerminalSessionView} from './src/renderer/canvas/terminal/TerminalView';
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
+    import {useFileTree} from './src/renderer/workspace/use-file-tree';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     const ok = data => ({ok: true, data});
-    const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}};
+    const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}, 'chapters/intro.tex':'Introduction'};
+    window.setWorkspaceFile=(path,content)=>{if(content===null)delete contents[path];else contents[path]=content;};
     const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'running', exitCode: null};
     window.writes = []; window.inlineCommands = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
     window.addEventListener('roc:inline-selection-command', event => window.inlineCommands.push(event.detail));
     window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
-    window.fileListMode = 'ready'; window.fileScans = 0;
+    window.fileListMode = 'ready'; window.fileScans = 0; window.fileReads=[]; window.includeNested=false;
+    const workspaceListeners=new Set();
+    window.emitWorkspace=relativePath=>{for(const listener of workspaceListeners)listener({workspacePath:'/synthetic',relativePath,eventType:'change'});};
     const client = {api: {
-      workspace: {onChanged: () => () => {}},
+      workspace: {onChanged: listener => {workspaceListeners.add(listener);return()=>workspaceListeners.delete(listener);}},
       files: {
-        listTree: async () => {window.fileScans++;
+        listTree: async ({relativePath}) => {window.fileScans++;window.fileReads.push(relativePath);
+          const names=Object.keys(contents).filter(name=>relativePath==='chapters'?name.startsWith('chapters/'):!name.includes('/'));
           return window.fileListMode === 'error' ? {ok:false,error:{message:'Scan unavailable'}} :
-            ok({relativePath: '', truncated: window.fileListMode === 'partial', entries: window.fileListMode === 'empty' ? [] : Object.keys(contents).map(name =>
-              ({name, relativePath: name, type: 'file', size: contents[name].length, updatedAt: '2026-11-12T00:00:00.000Z'}))});},
+            ok({workspacePath:'/synthetic',relativePath, truncated: window.fileListMode === 'partial', entries: window.fileListMode === 'empty' ? [] : [
+              ...names.map(name=>({name:name.split('/').at(-1), relativePath: name, type: 'file', size: contents[name].length, updatedAt: '2026-11-12T00:00:00.000Z'})),
+              ...(relativePath===''&&window.includeNested?[{name:'chapters',relativePath:'chapters',type:'directory',size:0,updatedAt:'2026-11-12T00:00:00.000Z'}]:[])]});},
         preview: async ({relativePath}) => ok({relativePath, kind: 'text', content: contents[relativePath],
           sizeBytes: contents[relativePath].length, truncated: false, mediaType: 'text/plain'}),
         previewPdf: async request => {window.pdfRequests.push(request); return ok({relativePath: request.relativePath, resourceUrl: 'about:blank', sizeBytes: 1024});},
@@ -79,11 +86,20 @@ before(async () => {
     const scope = {client, projectId: 'fixture', workspacePath: '/synthetic', writable: true,
       workspaceStatus: 'ready', workspaceError: null, openFileInCanvas: () => {}, rebindWorkspace: () => {}};
     const root = createRoot(document.getElementById('root'));
+    function WritingFixture(){
+      const tree=useFileTree(client,{workspacePathKey:'/synthetic',projectId:'fixture'});
+      const [writerEpoch,setWriterEpoch]=useState(0);
+      const [writingActive,setWritingActive]=useState(true);
+      window.treeRows=tree.rows;window.expandDirectory=path=>tree.expandDirectories([path]);window.collapseDirectories=tree.collapseAll;
+      window.remountWriting=()=>setWriterEpoch(value=>value+1);
+      window.setWritingActive=setWritingActive;
+      return <ViewActivity active={writingActive}><div hidden={!writingActive} style={{height:'100%'}}><LatexPanel key={writerEpoch}/></div></ViewActivity>;
+    }
     let epoch = 0;
     window.unmount = () => flushSync(() => root.render(null));
     window.mount = mode => {
       window.unmount();
-      const child = mode === 'latex' ? <LatexPanel /> : mode === 'file' ?
+      const child = mode === 'latex' ? <WritingFixture /> : mode === 'file' ?
         <FilePreview client={client} projectId="fixture" workspacePath="/synthetic" relativePath="notes.md" writable /> :
         mode === 'git' ? <GitPanel client={client} workspacePath="/synthetic" writable layout="drawer" /> :
         <TerminalSessionView client={client} workspacePath="/synthetic" writable />;
@@ -168,6 +184,66 @@ test('authoring uses real Markdown math previews and protects drafts when changi
   await source.press('Meta+A');
   await expect(page.getByRole('region', {name: '所选公式预览'}).locator('.katex')).toHaveCount(1);
   assert.equal(await page.getByRole('region', {name: 'Markdown 实时预览'}).count(), 0);
+});
+
+test('writing reuses sidebar directory reads across remounts and external changes preserve the draft', async () => {
+  await page.evaluate(() => {window.includeNested=true;window.fileReads=[];window.mount('latex');});
+  try {
+    await expect(page.getByTestId('production-latex-file-chapters/intro.tex')).toBeVisible();
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters']);
+    await page.evaluate(()=>window.expandDirectory('chapters'));
+    await page.waitForFunction(()=>window.treeRows.some(row=>row.entry.relativePath==='chapters/intro.tex'));
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters']);
+    await page.evaluate(()=>window.remountWriting());
+    await expect(page.getByTestId('production-latex-file-chapters/intro.tex')).toBeVisible();
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters']);
+    await selectFile('notes.md');
+    await page.getByTestId('production-latex-content').fill('Unsaved local draft');
+    await page.evaluate(()=>{window.fileReads=[];window.emitWorkspace('chapters/intro.tex');});
+    await expect.poll(()=>page.evaluate(()=>window.fileReads.length)).toBe(2);
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters']);
+    await expect(page.getByTestId('production-latex-content')).toHaveText('Unsaved local draft');
+    await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');
+  } finally {
+    await page.evaluate(()=>{window.collapseDirectories();window.includeNested=false;window.mount('latex');});
+  }
+});
+
+test('hidden writing pauses directory scans and save shortcuts while the sidebar and draft survive', async () => {
+  await page.evaluate(()=>{window.includeNested=true;window.mount('latex');});
+  try {
+    await expect(page.getByTestId('production-latex-file-chapters/intro.tex')).toBeVisible();
+    await selectFile('notes.md');
+    const editor=page.getByTestId('production-latex-content');
+    await editor.fill('# Retained draft');
+    await page.getByTestId('latex-toggle-preview').click();
+    await expect(page.getByRole('heading',{name:'Retained draft'})).toBeVisible();
+    const writes=await page.evaluate(()=>window.writes.length);
+    await page.evaluate(()=>window.setWritingActive(false));
+    await expect(editor).toBeHidden();
+    await expect(editor).toHaveCount(1);
+    await page.evaluate(()=>{
+      window.fileReads=[];
+      window.setWorkspaceFile('sidebar-new.md','Sidebar change');
+      window.setWorkspaceFile('chapters/new.tex','New chapter');
+      window.emitWorkspace('chapters/new.tex');
+    });
+    await page.waitForFunction(()=>window.treeRows.some(row=>row.entry.relativePath==='sidebar-new.md'));
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),[''],'the sidebar keeps watching without scanning the hidden writing directory');
+    await page.keyboard.press('Meta+s');
+    assert.equal(await page.evaluate(()=>window.writes.length),writes,'hidden writing does not receive the active surface save shortcut');
+    await page.evaluate(()=>window.setWritingActive(true));
+    await expect(page.getByTestId('production-latex-file-chapters/new.tex')).toBeVisible();
+    assert.deepEqual(await page.evaluate(()=>window.fileReads),['','chapters'],'resuming reads only invalidated metadata');
+    await expect(editor).toHaveText('# Retained draft');
+    await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');
+    await expect(page.getByRole('heading',{name:'Retained draft'})).toBeVisible();
+  } finally {
+    await page.evaluate(()=>{
+      window.setWorkspaceFile('sidebar-new.md',null);window.setWorkspaceFile('chapters/new.tex',null);
+      window.collapseDirectories();window.includeNested=false;window.mount('latex');
+    });
+  }
 });
 
 test('selected LaTeX exposes scoped commands and applies a confirmed replacement to the saveable draft', async () => {
@@ -265,6 +341,15 @@ test('writing saves before compiling, previews and exports the result, and waits
   await page.evaluate(() => {window.compileMode = 'failed';});
   await page.getByTestId('writing-compile').click();
   await expect(page.getByTestId('writing-compile-result')).toHaveText('编译失败');
+  const problems=page.getByTestId('writing-problems');
+  await expect(page.getByTestId('writing-problems-toggle')).toHaveAttribute('aria-expanded','true');
+  const bounds=await problems.boundingBox();
+  assert(bounds.height>=160&&bounds.height<=240);
+  assert((await page.getByTestId('production-latex-editor').boundingBox()).y<bounds.y);
+  await page.getByTestId('writing-problems-toggle').focus();await page.keyboard.press('Enter');
+  await expect(page.getByTestId('writing-problems-toggle')).toHaveAttribute('aria-expanded','false');
+  assert((await problems.boundingBox()).height<80);
+  await page.keyboard.press('Enter');
   await page.getByRole('button', {name: 'main.tex:3', exact: true}).click();
   await expect(page.locator('.cm-activeLine')).toHaveText('Current saved draft');
   await page.evaluate(() => {window.compileMode = 'pending';});
@@ -277,6 +362,30 @@ test('writing saves before compiling, previews and exports the result, and waits
   await expect(page.getByTestId('writing-compile-result')).toHaveText('编译已取消');
   await expect(page.getByTestId('writing-compile')).toBeEnabled();
   await page.evaluate(() => {window.compileMode = 'ready';});
+});
+
+test('bottom problems retain drafts and readable locations in both themes and densities', async () => {
+  await page.evaluate(()=>{window.compileMode='failed';window.mount('latex');});
+  try {
+    await page.getByTestId('writing-compile').click();
+    await expect(page.getByTestId('writing-problems')).toBeVisible();
+    await selectFile('notes.md');
+    const editor=page.getByTestId('production-latex-content');
+    await editor.fill('Uncommitted notes');
+    await page.getByRole('button',{name:'main.tex:3',exact:true}).click();
+    await expect(page.getByTestId('latex-unsaved')).toBeVisible();
+    await page.getByTestId('latex-unsaved').getByRole('button',{name:'取消',exact:true}).click();
+    await expect(editor).toHaveText('Uncommitted notes');
+    await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');
+    for(const theme of ['light','dark'])for(const density of ['compact','comfortable'])for(const width of [1184,1280,1440]){
+      await page.setViewportSize({width,height:800});
+      await page.evaluate(({theme,density})=>{document.documentElement.dataset.theme=theme;document.documentElement.dataset.density=density;},{theme,density});
+      const panel=await page.getByTestId('writing-problems').boundingBox();
+      assert(panel.height>=160&&panel.height<=240);
+      await expect(page.getByRole('button',{name:'main.tex:3',exact:true})).toBeVisible();
+      await audit();
+    }
+  } finally {await page.evaluate(()=>{window.compileMode='ready';window.mount('latex');});}
 });
 
 test('Git gives the diff more space without losing the commit draft or file selection', async () => {
