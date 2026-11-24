@@ -53,12 +53,48 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
   };
   const stages = literaturePipeline(document, job);
   const current = stages.find(stage => stage.id === selected);
-  const retrySelected = job !== null && selected === acquisitionPipelineStage(job) && canRetryAcquisition(job);
   const failedStage = job === null || !canRetryAcquisition(job) ? null : stages.find(stage => stage.id === acquisitionPipelineStage(job));
-  return <details data-testid="reader-resource-status" className="reading-disclosure reading-pipeline-details">
+  const failedStageId = failedStage?.id ?? null;
+  const processingFailure = job === null || failedStageId === null ? null :
+    JSON.stringify([scope.projectId, itemId, job.id, job.generation, job.documentId, failedStageId]);
+  const retryFailure = error === null ? null : currentRetry;
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const seenFailures = useRef<{receipt: boolean; processing: string | null; retry: RetryState | null}>({
+    receipt: false, processing: null, retry: null
+  });
+  useEffect(() => {
+    const seen = seenFailures.current;
+    const newProcessingFailure = receipt.status === 'ready' && processingFailure !== null && processingFailure !== seen.processing;
+    const reveal = (receipt.status === 'error' && !seen.receipt) || newProcessingFailure ||
+      (retryFailure !== null && retryFailure !== seen.retry);
+    // Reload clears the read error while keeping its snapshot. That loading interval
+    // is not a recovery and must not undo the user's fold of the same failure.
+    if (receipt.status === 'ready' || receipt.status === 'error') seen.receipt = receipt.status === 'error';
+    if (receipt.status === 'ready') seen.processing = processingFailure;
+    seen.retry = retryFailure;
+    if (!reveal) return;
+    // Keep the user's detail action mounted; failure recovery has its own entry.
+    if (newProcessingFailure) setSelected(current => current ?? failedStageId);
+    if (disclosure.current !== null) disclosure.current.open = true;
+  }, [receipt.status, processingFailure, failedStageId, retryFailure]);
+  return <details ref={disclosure} data-testid="reader-resource-status" className="reading-disclosure reading-pipeline-details">
     <summary data-testid="reader-pipeline-toggle">处理阶段{receipt.error !== null ? <span>读取失败</span> :
       failedStage ? <span>{failedStage.label}{failedStage.state}</span> : null}</summary>
     <div className="reading-disclosure-body">
+    {receipt.error !== null ? <div className="reading-pipeline-feedback">
+      <p role="alert" className="text-muted">处理回执读取失败：{receipt.error}</p>
+      <button type="button" onClick={receipt.reload} className={buttonClass}>重试</button>
+    </div> : null}
+    {failedStage || job?.errorCode || error !== null ? <div className="reading-pipeline-feedback">
+      <div>
+        {error === null ? null : <p role="alert" className="text-[var(--st-bad)]">{error}</p>}
+        {job?.errorCode ? <p role="alert" className="text-[var(--st-bad)]">{job.errorCode}</p> :
+          failedStage ? <p className="text-muted">{failedStage.label}：{failedStage.state}</p> : null}
+      </div>
+      {failedStage ? <button type="button" className={buttonClass} disabled={!scope.writable || scope.projectId === null || pending}
+        data-testid="reader-pipeline-retry" onClick={() => void retry()}>{pending ? '正在提交…' : `重试${failedStage.label}`}</button> : null}
+    </div> : null}
+    {notice === null ? null : <p role="status" className="text-muted">{notice}</p>}
     {receipt.data === null ? <p role="status" className="text-[length:var(--font-meta-size)] text-muted">
       {receipt.error === null ? '正在核验处理阶段…' : '处理阶段暂不可核验'}
     </p> : <PipelineProgress stages={stages} selected={selected} onSelect={stage => {
@@ -67,9 +103,6 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
       if (stage === 'pdf' && document !== null) onPdf();
       if (stage === 'parse' && document !== null) onParse();
     }}/>}
-    {receipt.error !== null ? <p role="alert" className="text-[length:var(--font-meta-size)] text-muted">处理回执读取失败：{receipt.error}
-      <button type="button" onClick={receipt.reload} className="ms-2 rounded-control px-2 py-1 hover:bg-[var(--overlay-hover)]">重试</button></p> : null}
-    {job?.errorCode ? <p role="alert" className="text-[length:var(--font-meta-size)] text-[var(--st-bad)]">{job.errorCode}</p> : null}
     {current === undefined ? null : <div data-testid="reader-pipeline-details" className="flex flex-wrap items-center gap-2 text-[length:var(--font-meta-size)]" aria-label={`${current.label}详情`}>
       <span className="text-muted">{current.label}：{current.state}</span>
       {selected !== 'pdf' || document !== null ? null : <button type="button" className={buttonClass} disabled={!scope.writable || pending}
@@ -77,11 +110,7 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
       {selected !== 'parse' || document?.error == null ? null : <span className="break-words text-[var(--st-bad)]">{document.error}</span>}
       {selected !== 'index' && selected !== 'wiki' ? null : <button type="button" className={buttonClass} disabled={scope.projectId === null}
         onClick={() => onKnowledge(selected)}>{selected === 'index' ? '查看索引任务' : '查看知识页'}</button>}
-      {!retrySelected ? null : <button type="button" className={buttonClass} disabled={!scope.writable || scope.projectId === null || pending}
-        data-testid="reader-pipeline-retry" onClick={() => void retry()}>{pending ? '正在提交…' : `重试${current.label}`}</button>}
     </div>}
-    {error === null ? null : <p role="alert" className="text-[length:var(--font-meta-size)] text-[var(--st-bad)]">{error}</p>}
-    {notice === null ? null : <p role="status" className="text-[length:var(--font-meta-size)] text-muted">{notice}</p>}
     </div>
   </details>;
 }

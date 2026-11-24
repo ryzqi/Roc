@@ -24,6 +24,10 @@
 .reading-paper-details > summary, .reading-pipeline-details > summary { min-height: 28px; padding: 4px 8px; border-radius: var(--radius-control); white-space: nowrap; }
 .reading-paper-details[open] { grid-column: 1 / -1; }
 .reading-paper-details .reading-disclosure-body { padding-inline: 0; }
+.reading-pipeline-details .reading-disclosure-body { gap: 8px; padding: 8px; }
+.reading-pipeline-feedback { display: flex; align-items: start; min-width: 0; gap: 8px; }
+.reading-pipeline-feedback > p, .reading-pipeline-feedback > div { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.reading-pipeline-feedback > button { flex-shrink: 0; }
 .reading-paper-header > [role=status] { grid-column: 1 / -1; padding-bottom: 8px; }
 .reading-resource-panels { max-height: 38%; flex-shrink: 0; overflow: auto; border-bottom: .5px solid var(--line); }
 .reading-document-controls { max-height: 32%; flex-shrink: 0; overflow-y: auto; }

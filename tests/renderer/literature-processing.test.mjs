@@ -129,9 +129,14 @@ async function mount(options) {
 async function expand() {await toggle().click();}
 async function mountResource(options) {
   await page.evaluate(options => window.mountResource(options), options);
+  const resource = page.getByTestId('reader-resource-status');
   const toggle = page.getByTestId('reader-pipeline-toggle');
-  await toggle.focus(); await expect(toggle).toBeFocused(); await page.keyboard.press('Enter');
-  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
+  const automatic = !options?.metadataOnly && !options?.empty;
+  await expect(resource).toHaveJSProperty('open', automatic);
+  if (!automatic) {
+    await toggle.focus(); await expect(toggle).toBeFocused(); await page.keyboard.press('Enter');
+  }
+  await expect(resource).toHaveJSProperty('open', true);
   await expect(page.getByTestId('pipeline-stage-metadata')).toBeVisible();
 }
 
@@ -219,6 +224,146 @@ test('reader metadata-only stages never claim full text and keep import and know
   await resource.getByRole('button',{name:'查看知识页',exact:true}).click();
   assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'openKnowledge').input), 'wiki');
   assert.equal(await count('retryAcquisition'), 0);
+});
+
+test('reader failures disclose once without moving focus and re-disclose after recovery or a new generation', async () => {
+  await page.evaluate(() => window.mountResource({metadataOnly:true}));
+  const resource = page.getByTestId('reader-resource-status');
+  const alerts = resource.locator('[role="alert"]');
+  const toggle = page.getByTestId('reader-pipeline-toggle');
+  await expect(resource).toHaveJSProperty('open', false);
+  await toggle.focus(); await expect(toggle).toBeFocused();
+  await page.evaluate(() => {
+    resourceDocument={id:'document-a',status:'ready',currentParseId:'parse-a',error:null};
+    response=()=>({jobs:[job('a',{stage:'index',status:'blocked',documentId:'document-a',errorCode:'embedding_unconfigured'})],
+      total:1,nextOffset:null});
+    renderResource();libraryChanged('project-a');
+  });
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(toggle).toBeFocused();
+  await expect(alerts).toBeVisible();
+  await expect(resource.getByTestId('pipeline-stage-index')).toHaveAttribute('aria-pressed', 'true');
+  await expect(resource.getByTestId('reader-pipeline-retry')).toBeVisible();
+  assert.equal(await count('retryAcquisition'), 0);
+  await page.keyboard.press('Enter');
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => {held.add('listAcquisition');libraryChanged('project-a');});
+  await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => {
+    held.delete('listAcquisition');
+    resolveNext('listAcquisition',{ok:true,data:{jobs:[job('a',{stage:'index',status:'blocked',documentId:'document-a',
+      errorCode:'embedding_still_unconfigured',updatedAt:'2026-11-19T00:01:00.000Z'})],total:1,nextOffset:null}});
+  });
+  await expect(alerts).toHaveText('embedding_still_unconfigured');
+  await expect(resource).toHaveJSProperty('open', false);
+  await expect(toggle).toBeFocused();
+  await page.evaluate(() => {resourceDocument=null;renderResource();});
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => {
+    resourceDocument={id:'document-a',status:'ready',currentParseId:'parse-a',error:null};renderResource();
+  });
+  await expect(resource).toHaveJSProperty('open', false);
+  await expect(toggle).toBeFocused();
+  await page.evaluate(() => {
+    response=()=>({jobs:[job('a',{stage:'wiki',status:'ready',documentId:'document-a'})],total:1,nextOffset:null});
+    libraryChanged('project-a');
+  });
+  await expect(alerts).toHaveCount(0);
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => {
+    response=()=>({jobs:[job('a',{stage:'index',status:'blocked',documentId:'document-a',errorCode:'embedding_unconfigured'})],
+      total:1,nextOffset:null});libraryChanged('project-a');
+  });
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => {
+    response=()=>({jobs:[job('a',{generation:'generation-new',stage:'index',status:'failed',documentId:'document-a',
+      errorCode:'embedding_new_failure'})],total:1,nextOffset:null});libraryChanged('project-a');
+  });
+  await expect(alerts).toHaveText('embedding_new_failure');
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(resource.getByTestId('reader-pipeline-retry')).toBeVisible();
+  await expect(toggle).toBeFocused();
+  assert.equal(await count('retryAcquisition'), 0);
+});
+
+test('reader new failure preserves a focused detail action while exposing the current retry', async () => {
+  await mountResource({metadataOnly:true});
+  const resource = page.getByTestId('reader-resource-status');
+  await resource.getByTestId('pipeline-stage-wiki').click();
+  const action = resource.getByRole('button', {name:'查看知识页',exact:true});
+  await action.focus(); await expect(action).toBeFocused();
+  await page.evaluate(() => {
+    resourceDocument={id:'document-a',status:'ready',currentParseId:'parse-a',error:null};
+    response=()=>({jobs:[job('a',{stage:'parse',status:'failed',documentId:'document-a',errorCode:'parse_failed'})],
+      total:1,nextOffset:null});
+    renderResource();libraryChanged('project-a');
+  });
+  await expect(resource.getByRole('alert')).toHaveText('parse_failed');
+  await expect(resource.getByTestId('reader-pipeline-retry')).toHaveText('重试全文解析');
+  await expect(action).toBeFocused();
+  await expect(resource.getByTestId('pipeline-stage-wiki')).toHaveAttribute('aria-pressed', 'true');
+  assert.equal(await count('retryAcquisition'), 0);
+  assert.equal(await count('openKnowledge'), 0);
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(() => calls.find(call => call.method==='openKnowledge').input), 'wiki');
+});
+
+test('reader receipt failure preserves a manual fold through loading and re-discloses after a successful read', async () => {
+  await page.evaluate(() => window.mountResource({metadataOnly:true}));
+  const resource = page.getByTestId('reader-resource-status');
+  const alerts = resource.locator('[role="alert"]');
+  const toggle = page.getByTestId('reader-pipeline-toggle');
+  await expect(page.getByTestId('pipeline-stage-metadata')).toBeAttached();
+  await toggle.focus(); await expect(toggle).toBeFocused();
+  const failure={ok:false,error:{message:'Synthetic acquisition read failed',code:'fixture_read_failed'}};
+  await page.evaluate(() => {held.add('listAcquisition');libraryChanged('project-a');});
+  await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
+  await page.evaluate(failure => resolveNext('listAcquisition',failure), failure);
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(alerts).toBeVisible();
+  await expect(resource.getByRole('button',{name:'重试',exact:true})).toBeVisible();
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => libraryChanged('project-a'));
+  await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
+  await expect(alerts).toHaveCount(0);
+  await page.evaluate(failure => resolveNext('listAcquisition',failure), failure);
+  await expect(alerts).toContainText(failure.error.message);
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => libraryChanged('project-a'));
+  await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
+  await page.evaluate(() => resolveNext('listAcquisition',{ok:true,data:{jobs:[],total:0,nextOffset:null}}));
+  await expect(alerts).toHaveCount(0);
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => libraryChanged('project-a'));
+  await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
+  await page.evaluate(failure => resolveNext('listAcquisition',failure), failure);
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(alerts).toBeVisible();
+  await expect(toggle).toBeFocused();
+  assert.equal(await count('retryAcquisition'), 0);
+});
+
+test('reader retry failure reopens a manually folded pending request without moving focus', async () => {
+  await mountResource();
+  const resource = page.getByTestId('reader-resource-status');
+  await page.getByTestId('pipeline-stage-index').click();
+  await page.evaluate(() => held.add('retryAcquisition'));
+  await page.getByTestId('reader-pipeline-retry').click();
+  await expect(page.getByTestId('reader-pipeline-retry')).toBeDisabled();
+  const toggle = page.getByTestId('reader-pipeline-toggle');
+  await toggle.focus(); await page.keyboard.press('Enter');
+  await expect(resource).toHaveJSProperty('open', false);
+  await page.evaluate(() => resolveNext('retryAcquisition',{ok:false,error:{message:'Synthetic retry rejected'}}));
+  await expect(resource.getByRole('alert').filter({hasText:'Synthetic retry rejected'})).toBeVisible();
+  await expect(resource).toHaveJSProperty('open', true);
+  await expect(toggle).toBeFocused();
+  assert.equal(await count('retryAcquisition'), 1);
 });
 
 test('reader document hydration retains the open trajectory, selected stage and keyboard focus', async () => {

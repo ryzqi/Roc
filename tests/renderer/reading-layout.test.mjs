@@ -11,7 +11,7 @@ let directory, app, page;
 let artifacts;
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-reading-layout-'));
-  artifacts=join(directory,'captures');
+  artifacts=process.env.ROC_UI_CAPTURE_DIR??join(directory,'captures');
   await mkdir(artifacts,{recursive:true});
   await buildViteRenderer({directory, script: `
     import React from 'react';
@@ -157,7 +157,8 @@ test('long paper metadata leaves at least three quarters of a short column for r
     await expect.poll(async()=>{const box=await area.boundingBox();return box!==null&&box.height>0&&box.height<=640;}).toBe(true);
     const geometry=await area.boundingBox();
     assert.ok(geometry.height>=640*.75,`only ${geometry.height}px of 640px available at ${width}px`);
-    assert.equal(await page.getByTestId('reader-resource-status').count(),0);
+    await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open',false);
+    await expect(page.getByTestId('pipeline-stage-metadata')).toBeHidden();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.equal(await page.getByLabel('结构化阅读分类').isVisible(),false);
     const audit=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
@@ -192,16 +193,75 @@ test('provider reply loops have an actionable reason within the task column',asy
 });
 
 test('reading hides routine pipeline receipts while acquisition failures and retry remain visible',async()=>{
+  const checkFeedback=async controls=>{
+    for(const control of controls){
+      await expect.poll(()=>control.evaluate(element=>{
+        const rect=element.getBoundingClientRect();
+        const header=element.closest('.reading-paper-header').getBoundingClientRect();
+        // Check the full bounds and sample inside the controls' rounded corners.
+        const insetX=Math.min(6,rect.width/4),insetY=Math.min(6,rect.height/4);
+        const points=[[.5,.5],[0,0],[1,0],[0,1],[1,1]].map(([x,y])=>{
+          const hit=document.elementFromPoint(rect.x+insetX+(rect.width-2*insetX)*x,rect.y+insetY+(rect.height-2*insetY)*y);
+          return {x,y,visible:hit===element||element.contains(hit),hit:hit?.tagName};
+        });
+        return {inside:rect.left>=header.left&&rect.right<=header.right&&rect.top>=header.top&&rect.bottom<=header.bottom,
+          points,rect:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},
+          header:{left:header.left,right:header.right,top:header.top,bottom:header.bottom}};
+      })).toMatchObject({inside:true,points:Array.from({length:5},()=>({visible:true}))});
+    }
+  };
   await page.evaluate(()=>window.mountTranslation(420,640));
   await page.getByTestId('reader-block-paragraph').waitFor();
-  await expect(page.getByTestId('reader-resource-status')).toHaveCount(0);
+  const resource=page.getByTestId('reader-resource-status');
+  await expect(resource).toHaveJSProperty('open',false);
+  await expect(page.getByTestId('pipeline-stage-metadata')).toBeHidden();
   await page.evaluate(()=>window.updateAcquisition({ok:false,error:{message:'Synthetic receipt failure'}}));
   await expect(page.getByRole('alert')).toContainText('Synthetic receipt failure');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(resource).toHaveJSProperty('open',true);
   await expect(page.getByRole('button',{name:'重试',exact:true})).toBeVisible();
+  await checkFeedback([page.getByRole('alert'),page.getByRole('button',{name:'重试',exact:true})]);
   await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[{documentId:'document',status:'failed',stage:'parse',errorCode:'synthetic_parse_failed'}]}}));
   await expect(page.getByRole('alert')).toHaveText('synthetic_parse_failed');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByTestId('reader-pipeline-retry')).toBeVisible();
+  const auditSource=await readFile('scripts/ui-audit/clip-audit.js','utf8');
+  for(const [width,theme] of [[420,'light'],[420,'dark'],[820,'light'],[1100,'dark']]){
+    await page.setViewportSize({width,height:700});
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(({width,theme})=>{
+      document.documentElement.dataset.theme=theme;window.mountTranslation(width,640);
+    },{width,theme});
+    await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[],total:0,nextOffset:null}}));
+    await expect(resource.locator('[role="alert"]')).toHaveCount(0);
+    await page.evaluate(()=>window.updateAcquisition({ok:false,error:{message:'Synthetic receipt failure'}}));
+    await expect(page.getByRole('alert')).toContainText('Synthetic receipt failure');
+    const receiptRetry=page.getByRole('button',{name:'重试',exact:true});
+    await checkFeedback([page.getByRole('alert'),receiptRetry]);
+    await page.screenshot({path:join(artifacts,`receipt-failed-${theme}-${width}.png`)});
+    await receiptRetry.focus();await expect(receiptRetry).toBeFocused();
+    const receiptAudit=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    assert.equal(receiptAudit.cut,0);
+    await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[{documentId:'document',status:'failed',stage:'parse',errorCode:'synthetic_parse_failed'}]}}));
+    await expect(page.getByRole('alert')).toHaveText('synthetic_parse_failed');
+    await expect(page.getByTestId('reader-pipeline-retry')).toBeVisible();
+    await checkFeedback([page.getByRole('alert'),page.getByTestId('reader-pipeline-retry')]);
+    await page.screenshot({path:join(artifacts,`pipeline-failed-${theme}-${width}.png`)});
+    const retry=page.getByTestId('reader-pipeline-retry');
+    await retry.hover();
+    const hoverAudit=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    assert.equal(hoverAudit.cut,0);
+    await retry.focus();await expect(retry).toBeFocused();
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  }
   await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[{documentId:'document',status:'ready',stage:'wiki',errorCode:null}]}}));
-  await expect(page.getByTestId('reader-resource-status')).toHaveCount(0);
+  await expect(resource.locator('[role="alert"]')).toHaveCount(0);
+  const toggle=page.getByTestId('reader-pipeline-toggle');
+  await toggle.focus();await page.keyboard.press('Enter');
+  await expect(resource).toHaveJSProperty('open',false);
+  await expect(page.getByTestId('pipeline-stage-metadata')).toBeHidden();
 });
 
 

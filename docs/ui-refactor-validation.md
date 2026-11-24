@@ -1,5 +1,15 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.6：阅读失败披露与可见恢复
+
+状态：**Verified passing**（阅读处理与布局范围）。常规处理阶段保持折叠；首次回执读取失败、处理失败或重试提交失败自动展开，不调用focus。同次失败的loading、错误文案更新和文档hydration保留手动收起；成功恢复或新代次失败可再次披露。新失败仅初始化尚未选择的阶段，保留用户正在使用的详情动作。
+
+真实几何检查复现：原阶段列表排在错误与重试之前，展开后错误原因及重试被32%高度的标题滚动区挡住。反馈现位于阶段列表前，原因与唯一重试同排，正文采用8px间距与内边距，原生披露和正常阅读正文预算保留。静态审查另发现强行切换阶段会卸载聚焦的“查看知识页”；新真实回归先失败于该按钮消失，修复后其选择、焦点和Enter动作均保留。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`ROC_UI_CAPTURE_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/reader-failure node --test --test-concurrency=1 tests/renderer/literature-processing.test.mjs tests/renderer/reading-layout.test.mjs` **33/33**；`node --test --test-name-pattern='reader pipeline keyboard' tests/renderer/paper-reader.test.mjs` **1/1**。覆盖420px浅深、820px浅、1100px深的回执读取失败与处理失败，共八个布局状态；原因及按钮完整矩形位于标题区内，五点命中、键盘焦点与阴影审计通过，cut=0、无页面横滚，处理重试的hover审计亦通过。正常长标题阅读区仍至少占640px列高的75%。五点取样避开按钮透明圆角，同时保留完整矩形边界检查。
+
+`pnpm build`、`pnpm audit:design`（278个组件）及`git diff --check`通过。已查看420px浅色回执失败和深色处理失败截图；诊断截图与测试资料根在结果落档后清理。最终全量Renderer、完整smoke、打包和性能另验。
+
 ## 2026-11-24 P8.5：阅读阶段的真实键盘焦点
 
 状态：**Verified passing**（阶段键盘回归范围）。原路径连续失败于元数据目标聚焦；在发送Enter前加入即时诊断，确认元数据阶段按钮尚未可见、`focus()`未使它成为活动元素。只增加按钮可见性等待后原路径通过。最终夹具明确等待原生披露打开、各阶段可见并确认真实焦点，再发送Enter/Space；保留目标summary聚焦、details打开、结构化阅读模式和数据库零写入断言。
