@@ -14,7 +14,7 @@
 
 扫描 `src/renderer` 的全部 TS/TSX/JS/JSX 文件，以及 `src/shared/surfaces.ts`。
 原生 `button/details/summary/dialog/select/input/textarea/a` 与
-`ActionButton/PageListRow/TextField/NumberField/CheckboxField/SelectField/ModalShell/ConfirmDialog`
+`ActionButton/ActionStatus/TransientStatus/PageListRow/TextField/NumberField/CheckboxField/SelectField/ModalShell/ConfirmDialog`
 均纳入；`motion.*` 控件按其原生标签归类，Popover 属性、显式 `role="dialog"` 和
 `onClick/onChange/onSubmit/onPointerDown` 事件节点单独记录。
 路由索引同时读取 canonical `APP_VIEWS/AppSubview` 与已有 surface 分类表；
@@ -30,6 +30,10 @@ details 205、summary 205、select 134、input 168、textarea 83；其它为共�
 P1 更新后仍为 402 个 Renderer 源文件、35 个合同，静态模板/路由为 2146 个；
 新增量主要来自诊断披露、取消确认和项目搜索。当前源码摘要与定向证据保存在 CSV，
 具体运行覆盖见阶段验证，不能将模板数量当作已通过用例数。
+
+P2 增加共享受控反馈后为 403 个 Renderer 源文件、238 个含索引条目的文件，
+共 2152 个模板/路由、35 个合同。新的状态入口纳入同一索引；CSS 与 Motion 映射、
+AST 审查及实际画廊的定向证据见 P2 验证记录。
 
 ```sh
 # 工作目录：仓库根目录
@@ -138,7 +142,7 @@ AppShell（唯一窗口壳）
 | <a id="s30"></a>**S30 RAG 设置** | 当前配置/知识索引 → 编辑/探测/保存 → 保存与读取 pending → 真配置及收录状态。 | 原始 error 保留；探测/保存失败不丢字段；秘密不持久化到 renderer。 | P1 默认显示阶段、收录/剩余计数；phase/revision/generation 保留在诊断。expectedRevision 使用 settings.revision；IME/焦点/草稿保持。`settings/sections/RagSection.tsx`；F08。设置定向路径见阶段验证。 |
 | <a id="s31"></a>**S31 设置全部领域** | 当前 13 分区、搜索、脏状态 → 导航/编辑/保存 → save pending → 真正配置完成。 | 重大影响确认、脏草稿关闭/重置确认与失败持久；可重试，不削弱守卫。 | P1 记最近合法分区，未通过草稿守卫的切换不写偏好；只保存导航 ID。P3 弱交接保持焦点；密集表单可滚动，缩放不裁切。`SettingsModal.tsx`、`settingsRegistry.ts`、`sections/*`；F11。P1 的 29 项设置回归见阶段验证。 |
 | <a id="s32"></a>**S32 工件/审阅/出版/生产** | 当前 artifact/version/source/proposal → 检视/编辑/审阅/发布 → command pending → 真回执/产物。 | expectedRevision 失败不伪成功；删除/发布/外部协作权限保持；脏编辑离开守卫。 | 版本/证据 identity 分开；正常/失败/换对象三个用例按业务区执行；长表/代码无全容器动画。`artifacts/ArtifactInspector.tsx`、`ReviewInspector.tsx`、`*Editor.tsx`、`*Receipt.tsx`。运行：待验证。 |
-| <a id="s33"></a>**S33 共享表单/页面反馈** | idle/可编辑字段 → trigger → loading/disabled/aria-busy → success 内容投影。 | Field/FormNote/ErrorBar 保留可见标签、原始失败与重试；不自造业务完成态。 | ActionButton 仅展示 loading，调用者防重；统一 duration/status，减少动态效果有同等语义；长字段不裁切。`shared/form-ui.tsx`、`page-ui.tsx`、`shell/DelayedFallback.tsx`；F13/F14。运行：待验证。 |
+| <a id="s33"></a>**S33 共享表单/页面反馈** | idle/可编辑字段 → trigger → loading/disabled/aria-busy → success 内容投影。 | Field/FormNote/ErrorBar 保留可见标签、原始失败与重试；不自造业务完成态。 | ActionButton 仅展示 loading，调用者防重；ActionStatus 统一可访问反馈，TransientStatus 只收起真实完成提示。减少动态效果保留文字与图标；长字段不裁切。`shared/form-ui.tsx`、`action-status.tsx`、`page-ui.tsx`、`shell/DelayedFallback.tsx`；F13/F14。P2 画廊与设置回归通过，完整合同其余路径待验证。 |
 | <a id="s34"></a>**S34 启动/项目失败入口与选区命令** | 启动/项目读取失败 → 重试或返回门户；阅读/写作选区 → 选区命令/替换预览 → pending → 真实提案或应用到草稿。 | 项目失败仍有返回入口；拒绝提案不更改原文；选区变化时丢弃过期预览。 | Skip-to-canvas 保留；选区命令不拥有路由/Agent 状态；⌘K、IME、焦点与原选区归属保持。`app/AppShellContent.tsx`、`canvas/InlineCommandBar.tsx`。运行：待验证。 |
 | <a id="s35"></a>**S35 surface 注册/路由** | surface id/current project → query/menu intent → lazy view 或 drawer loading → 在注册位置显示。 | unknown/parked 能力不转为新 page；加载错误可重试，旧视图可读。 | 仅一个 AppShell；项目切换走守卫；tab/subview/drawer 语义一致；历史/焦点恢复待验证。`src/shared/surfaces.ts`、`app/routes.ts`、`view-registry.ts`。 |
 

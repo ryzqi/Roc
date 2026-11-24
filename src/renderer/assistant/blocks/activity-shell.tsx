@@ -124,8 +124,8 @@ export function ActivityBlockShell({
             aria-hidden="true"
             className={
               open
-                ? 'shrink-0 rotate-180 text-subtle transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none'
-                : 'shrink-0 text-subtle transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none'
+                ? 'shrink-0 rotate-180 text-subtle transition-transform ui-motion-fast motion-reduce:transition-none'
+                : 'shrink-0 text-subtle transition-transform ui-motion-fast motion-reduce:transition-none'
             }
           />
         ) : null}

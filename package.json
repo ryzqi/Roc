@@ -59,6 +59,7 @@
     "database:clear-agent-history": "node scripts/clear-agent-history.mjs --all-thread-kinds",
     "logs:query": "node scripts/query-logs.mjs",
     "audit:design": "python3 scripts/ui-audit/audit-design-rules.py src/renderer",
+    "audit:motion": "node scripts/ui-audit/audit-motion-rules.mjs src/renderer",
     "audit:layout": "node scripts/ui-layout-audit.mjs",
     "package:dir": "node scripts/package-dir.mjs",
     "package:mac": "node scripts/package-mac.mjs",

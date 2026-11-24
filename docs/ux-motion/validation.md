@@ -80,3 +80,33 @@ RAG、Wiki、监控和 Zotero 的底层字段收进原生诊断，业务状态�
 RAG 设置的低影响文字分层完成源码审阅，沿用设置回归；没有另造只重复展示实现的测试，
 其后端计数诊断的独立运行场景仍保留待验证。
 完整合同仍包含未测的物理输入、VoiceOver、真人任务和外部服务；不由本阶段成绩推导全量通过。
+
+## P2：事件刻度、受控反馈与 AST 审查
+
+状态：**Verified passing（定向自动化范围）**，2026-11-25。
+
+七个事件预设与 CSS 刻度建立可检查映射，已有 modal、drawer、popover、scrim 和
+selection 导出保留原节奏。13 个局部 duration utility 显式迁移到 `ui-motion-*`，
+分隔条两处 `transition-all` 缩为 opacity/transform；附件使用的 standard 曲线补齐。
+AST 审查复用现有 Babel 解析器，不增加依赖、运行时 CSS 解析或自动生成报告。
+
+`ActionStatus` 统一文字、图标和可访问语义；`TransientStatus` 只按真实完成身份收起成功。
+ErrorBar、DelayedFallback、设置保存栏三个入口接入，保留原恢复动作、反闪烁延迟与保存锁。
+外层已拥有 live region 时内层不重复播报。错误和脏内容常驻，成功换对象或到期后清理，
+没有对流式文字或每次计数更新播放动画。
+
+| 检查命令 | 结果 |
+| --- | --- |
+| `pnpm build` | 普通生产构建通过，包含 typecheck |
+| `pnpm check:renderer-chunks` | 通过；eager JS 521590 bytes / 14 files |
+| `node --test tests/unit/motion-contract.test.mjs tests/unit/ui-audit.test.mjs` | 7/7；刻度与旧别名、AST 静态表达式和失败输入 |
+| `pnpm audit:motion` | 403 files，0 violations，0 input failures |
+| `ROC_UI_AUDIT_DIR=/tmp/roc-ux-p2-gallery-20261125 node --test --test-concurrency=1 tests/renderer/page-ui.test.mjs tests/renderer/action-button.test.mjs` | 7/7；原生按钮/表单、单一 live region、真实成功到期/再次完成/换对象、持久错误与减少动态效果 |
+| `node --test --test-name-pattern='^validation jumps\|^transient settings writes\|^discard requires' tests/renderer/radix-settings-dialog.test.mjs` | 3/3；失败保存保留草稿后重试、写入锁与放弃确认 |
+| `node scripts/ui-audit/index-interactions.mjs --write`、`--check` | 403 源文件、2152 模板/路由、35 合同，快照与当前源码一致 |
+| `git diff --check` | 通过 |
+
+读回浅深主题 1440 宽画廊截图；桌面尺寸与 320px 长内容容器裁切检查通过。
+24 张任务截图与画廊临时构建核验后清理，正式夹具和必要回归保留。P2 不重复五轮
+性能采样或全业务回归；P3 的反向面板、P4/P5 调用点和 P6 汇总门禁继续执行。
+AST 只覆盖静态 class 表达式及本文件初值，不将 CSS/动态运行路径或物理读屏声称为已验收。

@@ -1,5 +1,7 @@
-import { AlertTriangle, CircleSlash, RotateCcw, X } from 'lucide-react';
+import { CircleSlash, RotateCcw, X } from 'lucide-react';
 import type { AppError } from '../app/errors';
+import { ActionStatus } from '../shared/action-status';
+import { ActionButton } from '../shared/form-ui';
 
 /**
  * Page-level and blocked-level error surfaces.
@@ -20,7 +22,6 @@ export type ErrorBarProps = {
 
 export function ErrorBar({ error, onDismiss }: ErrorBarProps): React.JSX.Element {
   const blocked = error.level === 'blocked';
-  const Icon = blocked ? CircleSlash : AlertTriangle;
 
   return (
     <div
@@ -33,22 +34,23 @@ export function ErrorBar({ error, onDismiss }: ErrorBarProps): React.JSX.Element
         background: 'var(--surface)'
       }}
     >
-      <Icon size={14} aria-hidden="true" className={blocked ? 'mt-0.5 text-[var(--st-warn)]' : 'mt-0.5 text-[var(--st-bad)]'} />
       <div className="min-w-0 flex-1">
-        <p className="text-ink break-words">{error.message}</p>
+        <ActionStatus state="error" announce={false} className="text-ink"
+          icon={blocked ? <CircleSlash size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--st-warn)]" /> : undefined}>
+          {error.message}
+        </ActionStatus>
         {error.code === undefined || error.code === null ? null : (
           <p className="font-mono text-muted text-[length:var(--font-micro-size)]">{error.code}</p>
         )}
         <div className="mt-1 flex items-center gap-2">
           {error.retry === undefined ? null : (
-            <button
-              type="button"
+            <ActionButton
+              variant="compact"
               onClick={error.retry}
-              className="inline-flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
             >
               <RotateCcw size={12} aria-hidden="true" />
               重试
-            </button>
+            </ActionButton>
           )}
           {error.actionLabel === undefined ? null : (
             <span className="text-muted text-[length:var(--font-meta-size)]">{error.actionLabel}</span>

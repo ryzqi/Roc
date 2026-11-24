@@ -1,8 +1,27 @@
 import {ArrowRight, BookOpen} from 'lucide-react';
+import {useRef, useState} from 'react';
 import {ActionButton} from '../../../src/renderer/shared/form-ui';
+import {ActionStatus, TransientStatus} from '../../../src/renderer/shared/action-status';
 import {PageHeader, PageListRow, PageSection} from '../../../src/renderer/shared/page-ui';
 import {EmptyState} from '../../../src/renderer/shell/EmptyState';
 import {ErrorBar} from '../../../src/renderer/shell/ErrorBar';
+
+function FeedbackSamples(): React.JSX.Element {
+  const nextCompletion = useRef(0);
+  const [completion, setCompletion] = useState<number | null>(null);
+  return <div className="grid gap-2 text-muted" data-testid="gallery-feedback">
+    <ActionStatus state="pending">正在保存笔记…</ActionStatus>
+    <ActionStatus state="success">文献已收录，知识处理尚未完成。</ActionStatus>
+    <ActionStatus state="error" testId="gallery-feedback-error">保存失败，保留草稿后可重试。</ActionStatus>
+    <div role="status" data-testid="gallery-feedback-receipt">
+      <TransientStatus completionId={completion} announce={false} testId="gallery-feedback-success">笔记已保存</TransientStatus>
+    </div>
+    <div className="flex flex-wrap gap-2">
+      <ActionButton variant="compact" onClick={() => setCompletion(++nextCompletion.current)} data-testid="gallery-feedback-complete">完成一次保存</ActionButton>
+      <ActionButton variant="compact" onClick={() => setCompletion(null)} data-testid="gallery-feedback-switch">切换对象</ActionButton>
+    </div>
+  </div>;
+}
 
 export function PageUiGallery({onAction}: {onAction: (action: string) => void}): React.JSX.Element {
   return <main className="mx-auto grid max-w-[1120px] gap-6 p-6" data-testid="page-gallery">
@@ -23,5 +42,6 @@ export function PageUiGallery({onAction}: {onAction: (action: string) => void}):
     <PageSection title="当前任务"><EmptyState compact tone="loading" title="正在读取任务"/></PageSection>
     <PageSection title="读取失败"><ErrorBar error={{level:'page', message:'文献来源暂时无法读取。', retry:() => onAction('retry')}}/></PageSection>
     <PageSection title="工作目录"><ErrorBar error={{level:'blocked', message:'工作目录未绑定。', actionLabel:'从项目设置选择目录。'}}/></PageSection>
+    <PageSection title="动作反馈"><FeedbackSamples /></PageSection>
   </main>;
 }

@@ -41,7 +41,7 @@ const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; ic
 ];
 
 const SUB_TAB_BASE =
-  'flex h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-chip px-3 text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'flex h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-chip px-3 text-[length:var(--font-meta-size)] transition-colors ui-motion-fast';
 
 export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const store = useLiterature();
@@ -229,7 +229,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             disabled={!scope.writable}
             onClick={() => openImport('document')}
             data-testid="literature-hub-import"
-            className="flex h-7 items-center gap-2 rounded-control bg-accent px-3 font-medium text-on-accent text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
+            className="flex h-7 items-center gap-2 rounded-control bg-accent px-3 font-medium text-on-accent text-[length:var(--font-meta-size)] transition-colors ui-motion-fast hover:bg-accent-deep active:opacity-90"
           >
             <Plus size={13} aria-hidden="true" />
             添加文献

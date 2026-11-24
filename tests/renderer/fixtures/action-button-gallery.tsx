@@ -36,7 +36,7 @@ export function ActionButtonGallery(): React.JSX.Element {
         </div>)}
       </div>
     </FormSection>
-    <StickySaveBar dirtyCount={2} highImpactCount={0} savedOnce={false} busy={false}
+    <StickySaveBar dirtyCount={2} highImpactCount={0} savedAt={null} busy={false}
       saving={false} transientDirty={false} onDiscard={() => {}} onSave={() => {}} />
   </main>;
 }

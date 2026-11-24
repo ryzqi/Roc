@@ -16,7 +16,16 @@
 | drag | 指针位置直接映射宽度，RAF 合并重复输入 | 不加 tween；释放或键盘结束才持久化；Escape 还原起点且不写中间值 |
 | disclosure | 原生 `details` 保持双向展开与读屏语义 | 允许 `::details-content` 的尺寸过渡；阅读恢复时取消过渡以保持滚动锚点 |
 
-P0 源码已确认：现有 CSS 与 Motion 分别保存数值，`tabIndicatorTransition` 尚无实际调用点；P2 将语义名称接入同一刻度，并修正文档中的预设调用假设。P0 不改变现有外观。
+P2 的 `motionTransitions` 提供上述七个事件入口，原有面板导出引用同一对象；遮罩保持原有独立预设。
+CSS 的 micro/fast/base/overlay 与 Motion 秒值由合同检查对应，原有 fast/base/slow 数值保留，
+slow 明确指向兼容刻度。普通 utility 使用 `ui-motion-*`，属性仍由调用者明确指定。
+选中指标在 P3 接入，不能将预设存在视为导航已经采用。
+
+共享 [ActionStatus / TransientStatus](../../src/renderer/shared/action-status.tsx)只接收展示状态。
+`ActionStatus` 的 pending/success 默认使用 `status`，error 使用常驻 `alert`；若外层已拥有
+live region，传 `announce={false}`，避免重复播报。`TransientStatus` 只接受真实完成身份，
+新完成重新计时，换对象传 null，卸载清理计时器。错误、脏草稿和高风险结果不用短暂成功替代。
+已有复制提示等自带计时器的反馈继续复用原入口，不叠加第二个倒计时。
 
 ## 中断
 

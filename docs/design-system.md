@@ -246,9 +246,31 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 
 列表拥有者仍负责稳定对象 ID、选中状态、方向键导航和虚拟化；条目透传 `ref`、`tabIndex`、ARIA、`disabled` 与原生表单属性，默认 `type="button"`。不要在条目内部嵌套按钮、链接或表单控件。列表行的 hover、active 和可见焦点不依赖颜色传达当前对象；选中语义由调用方使用 `aria-current` 等实际语义提供。
 
-信息状态继续使用 `EmptyState` 与 `ErrorBar`，无需第二套异步状态组件。每个区块根据自身真实数据展示正常、空、加载、错误或受限状态；保留可用内容和对应恢复入口，不把局部错误升级为整页不可用。
+空态继续使用 `EmptyState`；`ErrorBar` 与加载、保存提示复用共享受控反馈，业务状态仍由调用者持有。每个区块根据自身真实数据展示正常、空、加载、错误或受限状态；保留可用内容和对应恢复入口，不把局部错误升级为整页不可用。
 
 [页面组件夹具](../tests/renderer/fixtures/page-ui-gallery.tsx)与[Electron 回归](../tests/renderer/page-ui.test.mjs)使用同一套组件和当前 CSS，覆盖页面语义、原生键盘、禁用条目、恢复动作、浅深主题、两种密度与长标题。截图仅在 `ROC_UI_AUDIT_DIR` 存在时输出，审阅后清理。
+
+### 状态反馈与动效合同（2026-11-25 UX Motion P2）
+
+[Motion Contract](ux-motion/motion-contract.md) 的事件入口统一在 `shared/motion.ts`：`feedback`、`selection`、`popover`、`modal`、`drawer`、`content-handoff` 和 `list-small`。JS 秒值与 `tokens.css` 的毫秒刻度、曲线通过[契约检查](../tests/unit/motion-contract.test.mjs)同步；运行时不解析 CSS。已有 modal、scrim、drawer 和 popover 导出保留原有时长、曲线与调用方式，旧 CSS 名称通过显式别名兼容。
+
+CSS 调用使用 `ui-motion-micro/fast/base/overlay` 选择时长；这些类只设置 `transition-duration`，属性和曲线仍由调用方提供。优先 `opacity`、`transform` 和语义颜色，避免 `transition-all`、局部数字时长和高频尺寸、滤镜、阴影变化。`ui-feedback-enter` 只在反馈挂载时按共享 fast 刻度淡入，文字、数字与流式 token 更新不逐字动画。根 `MotionConfig`、系统 reduced motion 与应用减少动效设置继续控制最终表现。
+
+`shared/action-status.tsx` 的 `ActionStatus` 只渲染真实状态与图标文字；请求身份、服务调用、防重复锁、权限、重试和草稿仍由调用方掌控。重试按钮只绑定现有恢复能力，不建立第二份任务状态。
+
+| 状态 | 可访问语义 | 展示与恢复 |
+| --- | --- | --- |
+| idle | 不自动宣布 | 显示真实未保存或当前说明 |
+| pending | `role="status"` | 已发出操作的等待反馈，不提前认定完成 |
+| success | `role="status"` | 真实完成回执；短暂反馈使用 `TransientStatus` |
+| error | `role="alert"` | 错误常驻，直到调用方恢复或用户明确关闭 |
+| blocked | `ErrorBar` 的 `role="note"` | 显示限制原因与实际可用的下一步 |
+
+已有父级 `status/alert/note` 时，内层反馈传 `announce={false}`，避免嵌套 live region。`TransientStatus` 接收真实完成的 `completionId`，只用一个定时器收起成功提示；身份变化和卸载清理定时器，错误与未保存内容不自动消失。设置保存栏使用实际 `savedAt`，保持保存和放弃按钮原有 guards；`DelayedFallback` 保留原有延迟和骨架，快速加载不闪出新提示。
+
+原生 `details::details-content` 保留既有 160ms 披露过渡例外，阅读位置恢复时仍关闭 transition。它由全局 reduced motion 规则覆盖，不通过通用 class lint 强制替换。
+
+`pnpm audit:motion` 使用仓库内 AST 审计扫描 JSX 的静态 `className`、条件、模板、拼接及同文件本地初值、对象/数组索引和空格连接的类数组，拒绝 `transition-all`、数字 `duration-*`、`duration-[…]` 和尺寸/滤镜/阴影 transition utility。注释和普通文案不属于类审计，读取或解析失败会非零退出；工具只输出诊断，不生成报告。通用函数调用、跨模块动态类、后续变量赋值与 CSS 属性不在此静态覆盖范围；中断、焦点、物理读屏和帧表现仍需要运行证据。
 
 ### 项目入口与工作台（2026-11-23 P3）
 
@@ -308,6 +330,7 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 
 - 静态与构建：`pnpm typecheck`、相关 renderer 测试、`pnpm check:renderer-chunks`，确认重模块仍懒加载。
 - 设计规则：运行 `pnpm audit:design` 扫描 renderer；单独目录用 `python3 scripts/ui-audit/audit-design-rules.py <目录>`，并人工复核误报及未覆盖规则。审计脚本、来源摘要与 MIT 许可固定在 `scripts/ui-audit/`，干净检出不依赖本机 Skill 安装。
+- 动效规则：运行 `pnpm audit:motion`；单个文件或目录用 `node scripts/ui-audit/audit-motion-rules.mjs <路径>`。静态类检查与状态/中断运行回归分别记录，不以类计数推导体验或帧稳定性。
 - 实窗：1184/1280/1440px、浅/深主题、键盘、真实滚轮、IME、长标题、缩放；检查主内容无横向溢出，焦点可见且能返回。
 - 裁切：在透明 Electron 窗口执行仓库内 `scripts/ui-audit/clip-audit.js`，传 `{ viewport: true }`；默认、hover、展开及动效最终落点均要求 `cut === 0`，`hidden` 人工复核。脚本只覆盖阴影，不替代焦点边界与实际截图检查。
 - 真实性：真实服务不具备下载、解析、索引或模型能力时记录限制；fixture 只能证明展示和交互，不能证明 T1–T3 的外部执行成功。

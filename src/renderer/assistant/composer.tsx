@@ -518,7 +518,7 @@ export function AssistantComposer({
       <span id="assistant-composer-hint" className="sr-only">Enter 或 Command+Enter 发送，Shift+Enter 换行</span>
       <div
         className={[
-          'flex min-w-0 flex-col gap-2 rounded-window border-[0.5px] bg-surface-raised p-2 transition-colors duration-[var(--duration-fast)]',
+          'flex min-w-0 flex-col gap-2 rounded-window border-[0.5px] bg-surface-raised p-2 transition-colors ui-motion-fast',
           'focus-within:border-[var(--composer-border-focus)] focus-within:ring-1 focus-within:ring-accent-soft',
           draggingFiles ? 'border-accent outline outline-2 outline-accent-soft-strong outline-offset-1' : 'border-line-default'
         ].join(' ')}

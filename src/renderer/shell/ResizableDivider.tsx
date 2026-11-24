@@ -125,15 +125,15 @@ export function ResizableDivider({
       <div
         className={
           dragging
-            ? 'h-full w-[0.5px] bg-accent transition-colors duration-[var(--duration-fast)]'
-            : 'h-full w-[0.5px] bg-line transition-colors duration-[var(--duration-fast)] group-hover:bg-line-strong'
+            ? 'h-full w-[0.5px] bg-accent transition-colors ui-motion-fast'
+            : 'h-full w-[0.5px] bg-line transition-colors ui-motion-fast group-hover:bg-line-strong'
         }
       />
       <div
         className={
           dragging
-            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-105 items-center justify-center rounded-control border-[0.5px] border-line bg-[var(--surface-card-hover)] opacity-100 transition-all duration-[var(--duration-fast)]'
-            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-100 items-center justify-center rounded-control border-[0.5px] border-line bg-surface opacity-0 transition-all duration-[var(--duration-fast)] group-hover:opacity-100'
+            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-105 items-center justify-center rounded-control border-[0.5px] border-line bg-[var(--surface-card-hover)] opacity-100 transition-[opacity,transform] ui-motion-fast'
+            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-100 items-center justify-center rounded-control border-[0.5px] border-line bg-surface opacity-0 transition-[opacity,transform] ui-motion-fast group-hover:opacity-100'
         }
       >
         <GripVertical size={10} aria-hidden="true" className="text-muted" />

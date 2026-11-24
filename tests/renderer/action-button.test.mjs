@@ -27,7 +27,7 @@ before(async () => {
     window.actions=[];
     window.submissions=[];
     window.renderFixture=(mode='gallery',state={})=>flushSync(()=>root.render(mode==='gallery'?<ActionButtonGallery/>:
-      mode==='savebar'?<main className="p-6"><StickySaveBar dirtyCount={state.dirtyCount??2} savedOnce={false}
+      mode==='savebar'?<main className="p-6"><StickySaveBar dirtyCount={state.dirtyCount??2} savedAt={state.savedAt??null}
         highImpactCount={0} busy={state.busy??false} saving={state.saving??false} transientDirty={state.transientDirty??false}
         onDiscard={()=>window.actions.push('discard')} onSave={()=>window.actions.push('save')}/></main>:
       <main className="p-6">

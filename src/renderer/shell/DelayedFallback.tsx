@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { ActionStatus } from '../shared/action-status';
 
 /**
  * Deferred loading indicator.
@@ -48,7 +49,7 @@ export function DelayedFallback({
           <div key={width} className={`h-3 rounded-chip ${width}`} style={{ '--skeleton-index': index } as CSSProperties} />
         ))}
       </div>
-      <span className="text-[length:var(--font-meta-size)]">{label}</span>
+      <ActionStatus state="pending" announce={false} icon={null} className="text-[length:var(--font-meta-size)]">{label}</ActionStatus>
     </div>
   );
 }

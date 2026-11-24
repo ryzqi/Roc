@@ -158,14 +158,20 @@
   --control-gap: 8px;
   --control-hit-min: 28px;
 
-  /* Motion */
+  /* Motion: the seconds mapping and event presets live in shared/motion.ts. */
+  --duration-micro: 80ms;
   --duration-fast: 120ms;
   --duration-base: 180ms;
-  --duration-slow: 320ms;
-  --easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-overlay: 200ms;
+  --duration-legacy-slow: 320ms;
+  --duration-slow: var(--duration-legacy-slow);
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-base: var(--duration-base) var(--easing-standard);
-  --transition-fast: var(--duration-fast) var(--easing-standard);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /* Existing names keep their values while callers migrate to event presets. */
+  --easing-standard: var(--ease-standard);
+  --transition-base: var(--duration-base) var(--ease-standard);
+  --transition-fast: var(--duration-fast) var(--ease-standard);
 
   /* Typography: system stacks only — no web fonts are ever loaded. */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;

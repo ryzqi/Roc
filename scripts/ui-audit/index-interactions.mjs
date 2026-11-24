@@ -25,7 +25,7 @@ if (flags.some(flag => !['--write', '--check', '--list'].includes(flag) && !flag
 const controls = new Set([
   'button', 'details', 'summary', 'dialog', 'select', 'input', 'textarea', 'a',
   'ActionButton', 'PageListRow', 'TextField', 'NumberField', 'CheckboxField',
-  'SelectField', 'ModalShell', 'ConfirmDialog', 'Dialog.Root', 'Dialog.Trigger',
+  'SelectField', 'ActionStatus', 'TransientStatus', 'ModalShell', 'ConfirmDialog', 'Dialog.Root', 'Dialog.Trigger',
   'Dialog.Close', 'Dialog.Content'
 ]);
 const families = [

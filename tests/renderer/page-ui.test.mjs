@@ -19,7 +19,7 @@ before(async()=>{
     import {PageUiGallery} from ${JSON.stringify(join(process.cwd(),'tests/renderer/fixtures/page-ui-gallery.tsx'))};
     import './src/renderer/styles/index.css';
     window.actions=[];
-    createRoot(document.getElementById('root')).render(<PageUiGallery onAction={action=>window.actions.push(action)}/>);
+    createRoot(document.getElementById('root')).render(<React.StrictMode><PageUiGallery onAction={action=>window.actions.push(action)}/></React.StrictMode>);
   `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory,'data'))});
@@ -49,6 +49,26 @@ test('page composition preserves headings, native row actions and existing infor
   assert.deepEqual(await page.evaluate(()=>window.actions),['open','open']);
   await page.getByRole('button',{name:'重试',exact:true}).click();
   assert.equal(await page.evaluate(()=>window.actions.at(-1)),'retry');
+  assert.equal(await page.getByTestId('error-page').locator('[role="alert"], [role="status"]').count(),0);
+  assert.equal(await page.getByTestId('error-blocked').locator('[role="alert"], [role="status"]').count(),0);
+});
+
+test('feedback expires only real success, repeats on a new completion and clears with its object',async()=>{
+  const success=page.getByTestId('gallery-feedback-success');
+  const failure=page.getByTestId('gallery-feedback-error');
+  await expect(success).toHaveCount(0);
+  await page.getByTestId('gallery-feedback-complete').click();
+  await expect(success).toHaveText('笔记已保存');
+  await expect(success).toBeVisible();
+  assert.equal(await page.getByTestId('gallery-feedback-receipt').locator('[role="status"]').count(),0);
+  await expect(success).toHaveCount(0,{timeout:4000});
+  await expect(failure).toHaveText('保存失败，保留草稿后可重试。');
+  await expect(failure).toBeVisible();
+  await page.getByTestId('gallery-feedback-complete').click();
+  await expect(success).toBeVisible();
+  await page.getByTestId('gallery-feedback-switch').click();
+  await expect(success).toHaveCount(0);
+  await expect(failure).toBeVisible();
 });
 
 test('page patterns retain focus and long text at desktop and narrow container sizes',async()=>{
@@ -74,4 +94,6 @@ test('page patterns retain focus and long text at desktop and narrow container s
   assert.equal(await page.getByTestId('page-gallery').evaluate(element=>element.scrollWidth>element.clientWidth),false);
   await page.emulateMedia({reducedMotion:'reduce'});
   await expect(page.getByTestId('page-row')).toHaveAttribute('type','button');
+  await expect(page.getByTestId('gallery-feedback-error')).toBeVisible();
+  assert.equal(await page.getByTestId('gallery-feedback-error').evaluate(element=>getComputedStyle(element).animationName),'none');
 });

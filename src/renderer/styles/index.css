@@ -259,6 +259,34 @@
 }
 
 @layer utilities {
+  /* Choose the scale without changing the caller's transition properties or curve. */
+  .ui-motion-micro {
+    transition-duration: var(--duration-micro);
+  }
+
+  .ui-motion-fast {
+    transition-duration: var(--duration-fast);
+  }
+
+  .ui-motion-base {
+    transition-duration: var(--duration-base);
+  }
+
+  .ui-motion-overlay {
+    transition-duration: var(--duration-overlay);
+  }
+
+  @keyframes ui-feedback-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ui-feedback-enter {
+      animation: ui-feedback-enter var(--duration-fast) var(--ease-standard);
+    }
+  }
+
   /* Bias spare space above/below a modal while keeping its full shadow inside
      short windows. Both overlay implementations use the same geometry. */
   .ui-modal-layout {

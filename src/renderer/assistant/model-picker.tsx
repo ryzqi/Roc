@@ -198,7 +198,7 @@ export function ModelPicker({
         aria-label={`默认模型：${label}`}
         title="切换默认模型"
         data-testid="assistant-model-settings"
-        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control px-1 text-left text-text text-[length:var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
+        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control px-1 text-left text-text text-[length:var(--font-micro-size)] transition-colors ui-motion-fast hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
       >
         {pending ? (
           <Loader2 size={12} aria-hidden="true" className="shrink-0 animate-spin text-muted" />

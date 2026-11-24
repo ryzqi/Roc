@@ -134,7 +134,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, acti
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
   const animateEntry = shouldPlayEnter(message.key, message.source);
   const entering = useEnterTransition(message.key, animateEntry);
-  const motionClass = `transition-[opacity,transform] duration-[var(--duration-base)] ease-[var(--ease-soft)] motion-reduce:transition-none ${
+  const motionClass = `transition-[opacity,transform] ui-motion-base ease-[var(--ease-soft)] motion-reduce:transition-none ${
     animateEntry ? (entering ? ENTER_CLASS : ENTERED_CLASS) : ''
   }`;
 
@@ -270,7 +270,7 @@ function ChatInterruptView(input: {
     ? false
     : shouldPlayEnter(`approval:${interrupt.interruptId}`, input.source);
   const entering = useEnterTransition(`approval:${interrupt.interruptId}`, animateApproval);
-  const motionClass = `transition-opacity duration-[var(--duration-base)] motion-reduce:transition-none ${
+  const motionClass = `transition-opacity ui-motion-base motion-reduce:transition-none ${
     animateApproval ? (entering ? 'opacity-0' : 'opacity-100') : ''
   }`;
 

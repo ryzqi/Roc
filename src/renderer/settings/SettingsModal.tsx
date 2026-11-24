@@ -537,7 +537,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <div className="settings-form-content">{renderPanel(activeSection, store, props)}</div>
             </div>
 
-            <StickySaveBar dirtyCount={dirtyCount} savedOnce={store.savedAt !== null} highImpactCount={impacts.length} busy={busy} saving={store.save.pending} transientDirty={transientDirty}
+            <StickySaveBar dirtyCount={dirtyCount} savedAt={store.savedAt} highImpactCount={impacts.length} busy={busy} saving={store.save.pending} transientDirty={transientDirty}
               onDiscard={() => setDiscardIntent('reset')} onSave={requestSave} />
           </div>
         </div>
