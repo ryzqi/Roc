@@ -1,13 +1,14 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, BookOpen, Loader2, Plus, RefreshCw, Search} from 'lucide-react';
+import {ArrowLeft, BookOpen, Plus, RefreshCw, Search} from 'lucide-react';
 import {EmptyState} from '../shell/EmptyState';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import './knowledge-workspace.css';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {useDebouncedValue} from '../app/use-debounced-value';
-import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ActionButton, formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import type {WikiPage, WikiSection, WikiPaperKnowledgeSource} from '../../shared/schemas/research-wiki-pages';
 import {ScientificPaperKnowledge, ScientificStatementReference} from './ScientificPaperKnowledge';
@@ -22,6 +23,8 @@ const button = formSecondaryButtonClass;
 const field = formInputClass;
 const kinds = {source: '论文与来源', topic: '主题', comparison: '比较', dispute: '争议'};
 const jobs = {queued: '排队中', running: '编译中', ready: '已编译', failed: '编译失败'};
+const paperJobs = {queued: '排队中', running: '生成中', ready: '已生成', failed: '生成失败'};
+const jobStates = {queued: 'pending', running: 'pending', ready: 'success', failed: 'error'} as const;
 const reasons = {compile: '来源编译', human: '人工编辑', assistant: '助手草稿', rollback: '历史恢复'};
 type Props = {client: RocClient; projectId: string; snapshot?: ResearchWikiSnapshot; writable: boolean;
   onAskAssistant?: (prompt: string) => void; onLock: (locked: boolean) => void};
@@ -45,17 +48,18 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
       </label>
       <button type="button" className={formPrimaryButtonClass} disabled={locked || !writable}
         onClick={() => {onLock(true); setCreating(true); setBrowsing(false);}}><Plus size={14} aria-hidden="true"/>新建主题页</button>
-      <button type="button" className={button} onClick={pages.reload} aria-label="刷新列表" title="刷新列表"><RefreshCw size={14} aria-hidden="true"/></button>
+      <ActionButton variant="compact" loading={pages.status === 'loading'} loadingLabel={<span className="sr-only">正在刷新列表…</span>}
+        onClick={pages.reload} aria-label="刷新列表" title="刷新列表"><RefreshCw size={14} aria-hidden="true"/></ActionButton>
     </header>
-    {pages.error && <p role="alert" className="p-3">{pages.error}</p>}
-    {searchQuery && pages.data?.degradation === 'embedding_failed' && <p role="status" className="px-3 pb-2 text-xs text-subtle" data-testid="wiki-search-status">
+    {pages.error && <ActionStatus state="error" className="p-3">{pages.error}</ActionStatus>}
+    {searchQuery && pages.data?.degradation === 'embedding_failed' && <ActionStatus state="idle" role="status" className="px-3 pb-2 text-xs text-subtle" testId="wiki-search-status">
       语义检索暂不可用，已显示关键词结果。
-    </p>}
+    </ActionStatus>}
     <div className="knowledge-browser">
       <aside className="knowledge-directory" aria-label="持久页面列表">
         <div className="knowledge-directory-heading"><span>页面目录</span><span>{pages.data?.pages.length ?? 0} 页</span></div>
         <div className="knowledge-directory-scroll">
-        {pages.data === null && !pages.error && <p role="status" className="p-2 text-xs text-subtle">正在读取页面…</p>}
+        {pages.data === null && !pages.error && <ActionStatus state="pending" icon={null} className="p-2 text-xs text-subtle">正在读取页面…</ActionStatus>}
         {pages.data?.pages.length === 0 && <p className="p-2 text-xs text-subtle">{searchQuery ? '没有命中。可尝试原始文献检索。' : '暂无页面。先解析论文或捕获原始证据。'}</p>}
         {pages.data?.pages.map(page => <button key={page.id} disabled={locked} aria-current={selected === page.id ? 'page' : undefined}
           data-testid="wiki-page-row" className="knowledge-page-row"
@@ -151,9 +155,9 @@ function CreatePage({client, projectId, snapshot, writable, onClose, onCreated}:
           onChange={event => change({claimIds: event.target.checked ? [...current.current.claimIds, claim.id] :
             current.current.claimIds.filter(id => id !== claim.id)})}/><span>{claim.content.slice(0, 200)}</span></label>)}
     </details>
-    {create.error && <p role="alert">{create.error}</p>}
-    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} aria-busy={create.pending} disabled={disabled || title.trim() === '' || evidenceIds.length + claimIds.length === 0}>
-      {create.pending ? <Loader2 size={14} className="animate-spin" aria-hidden="true"/> : null}{create.pending ? '创建中…' : '创建草稿'}</button>
+    {create.error && <ActionStatus state="error">{create.error}</ActionStatus>}
+    <div className="flex flex-wrap gap-2"><ActionButton variant="primary" type="submit" aria-label="创建草稿" loading={create.pending} loadingLabel="正在创建草稿…"
+      disabled={disabled || title.trim() === '' || evidenceIds.length + claimIds.length === 0}>创建草稿</ActionButton>
       <button type="button" className={button} disabled={create.pending} onClick={() => editor.request(onClose, '继续将放弃尚未创建的 Wiki 主题草稿。')}>取消</button></div>
   </form>;
 }
@@ -192,26 +196,34 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
   };
   useVisiblePolling(page.reload, 3000, !locked);
   const data = page.data;
-  if (data === null) return <div><p role={page.error ? 'alert' : 'status'}>{page.error ?? '正在读取页面…'}</p><button className={button} onClick={page.reload}>重试读取</button></div>;
+  if (data === null) return <div><ActionStatus state={page.error ? 'error' : 'pending'} icon={page.error ? undefined : null}>{page.error ?? '正在读取页面…'}</ActionStatus>
+    <ActionButton variant="compact" aria-label="重试读取" loading={page.status === 'loading'} loadingLabel="正在读取页面…" onClick={page.reload}>重试读取</ActionButton></div>;
   // Routine provenance notes stay in the audit data; reading only surfaces actionable issues.
   const checks = [...new Map(data.lint.filter(issue => issue.code !== 'uncited' && issue.code !== 'isolated')
     .map(issue => [`${issue.code}:${issue.message}`, issue])).values()];
   return <article className="knowledge-article space-y-3" data-testid="wiki-page-detail" aria-busy={pending}>
     <h2 className="break-words text-[length:var(--font-h2-size)] font-medium">{data.page.title}</h2>
-    <p className="flex flex-wrap gap-x-2 text-xs text-subtle" data-testid="wiki-page-status">
+    <div className="flex flex-wrap gap-x-2 text-xs text-subtle" data-testid="wiki-page-status">
       <span>{kinds[data.page.kind]}</span><span>草稿</span>
-      <span>{data.page.job ? jobs[data.page.job.status] : '待编译'}</span>
-      {data.paperJob && data.paperJob.status !== 'ready' && <span>论文卡片：{data.paperJob.status === 'failed' ? '生成失败' : '生成中'}</span>}
+      <ActionStatus key={data.page.job ? `${data.page.job.generation}:${data.page.job.status}` : 'uncompiled'}
+        state={data.page.job ? jobStates[data.page.job.status] : 'idle'} announce={false}>
+        {data.page.job ? jobs[data.page.job.status] : '待编译'}
+      </ActionStatus>
+      {data.paperJob && data.paperJob.status !== 'ready' && <ActionStatus key={`${data.paperJob.generation}:${data.paperJob.status}`}
+        state={jobStates[data.paperJob.status]} announce={false}>论文卡片：{paperJobs[data.paperJob.status]}</ActionStatus>}
       {data.current && <span>{reasons[data.current.reason]}</span>}
-    </p>
+    </div>
     <div className="knowledge-page-actions">
-      <button className={button} disabled={locked} onClick={page.reload}>刷新页面</button>
+      <ActionButton variant="compact" aria-label="刷新页面" disabled={locked} loading={page.status === 'loading'}
+        loadingLabel="正在刷新页面…" onClick={page.reload}>刷新页面</ActionButton>
       <details className="knowledge-maintenance"><summary>页面操作</summary>
         <div className="knowledge-maintenance-actions">
-      <button className={button} disabled={!writable || locked || ['running', 'queued'].includes(data.page.job?.status ?? '')}
-        onClick={() => {void mutate(() => compile.run(data.page.revision));}}>重新编译</button>
-      {data.paperJob && <button className={button} disabled={!writable || locked || ['running', 'queued'].includes(data.paperJob.status)}
-        onClick={() => {void mutate(() => retryPaper.run());}}>重新生成论文卡片</button>}
+      <ActionButton variant="compact" aria-label="重新编译" loading={compile.pending} loadingLabel="正在提交编译…"
+        disabled={!writable || locked || ['running', 'queued'].includes(data.page.job?.status ?? '')}
+        onClick={() => {void mutate(() => compile.run(data.page.revision));}}>重新编译</ActionButton>
+      {data.paperJob && <ActionButton variant="compact" aria-label="重新生成论文卡片" loading={retryPaper.pending} loadingLabel="正在提交生成…"
+        disabled={!writable || locked || ['running', 'queued'].includes(data.paperJob.status)}
+        onClick={() => {void mutate(() => retryPaper.run());}}>重新生成论文卡片</ActionButton>}
       <button className={button} disabled={locked} aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)}>修订历史</button>
         </div>
       </details>
@@ -221,8 +233,9 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
       {onAskAssistant && <button className={button} disabled={locked} onClick={() => onAskAssistant(
         `请用 research_wiki_read 读取当前项目的 Wiki 页面 ${pageId}（${data.page.title}），核对 lint 与原始证据后综合主题草稿。每个事实注明原始 evidenceId；过期依据先回原文检索。可用 research_wiki_draft 保存生成章节，保留人工章节，不确认科学支持。`)}>交给助手综合</button>}
     </div>
+    {synthesize.pending && <ActionStatus state="pending" testId="wiki-synthesis-status">正在更新助手章节…</ActionStatus>}
     {(page.error || compile.error || retryPaper.error || synthesize.error || data.page.job?.error || data.paperJob?.error) &&
-      <p role="alert">{page.error ?? compile.error ?? retryPaper.error ?? synthesize.error ?? data.page.job?.error ?? data.paperJob?.error}</p>}
+      <ActionStatus state="error">{page.error ?? compile.error ?? retryPaper.error ?? synthesize.error ?? data.page.job?.error ?? data.paperJob?.error}</ActionStatus>}
     {historyOpen && <History key={data.page.revision} client={client} projectId={projectId} pageId={pageId} currentRevision={data.page.revision}
       writable={writable && !locked} onPending={onHistoryPending} onChanged={() => {page.reload(); onChanged();}}/>}
     {(data.page.kind === 'comparison' || data.page.kind === 'dispute') && <ClaimComparisonPanel client={client} projectId={projectId}/>}
@@ -315,9 +328,9 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
         <h4>实时预览</h4><LazyBoundary fallback={<p className="whitespace-pre-wrap">{body}</p>}><ScientificMarkdown text={body}/></LazyBoundary>
       </section>
     </div>
-    {save.error && <p role="alert">{save.error}</p>}
-    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} aria-busy={save.pending} disabled={disabled || !body.trim() || !title.trim()}>
-      {save.pending ? <Loader2 size={14} className="animate-spin" aria-hidden="true"/> : null}{save.pending ? '保存中…' : '保存人工章节'}</button>
+    {save.error && <ActionStatus state="error">{save.error}</ActionStatus>}
+    <div className="flex flex-wrap gap-2"><ActionButton variant="primary" type="submit" aria-label="保存人工章节" loading={save.pending}
+      loadingLabel="正在保存人工章节…" disabled={disabled || !body.trim() || !title.trim()}>保存人工章节</ActionButton>
       <button type="button" className={button} disabled={save.pending} onClick={() => editor.request(onClose, '继续将放弃尚未保存的 Wiki 人工章节。')}>取消编辑</button></div>
   </form>;
 }
@@ -340,8 +353,9 @@ function PaperOriginal({client, projectId, source}: {client: RocClient; projectI
   return <details>
     <summary className="cursor-pointer break-words text-xs">论文原文：{source.sectionPath.join(' / ') || source.locator}</summary>
     <p className="text-xs text-subtle">{source.locator}</p>
-    <button className={button} disabled={read.pending} onClick={() => {void read.run().then(result => {if (result.ok) setOriginal(result.data);});}}>读取原文上下文</button>
-    {read.error && <p role="alert" className="text-xs">{read.error}</p>}
+    <ActionButton variant="compact" aria-label="读取原文上下文" loading={read.pending} loadingLabel="正在读取原文上下文…"
+      onClick={() => {void read.run().then(result => {if (result.ok) setOriginal(result.data);});}}>读取原文上下文</ActionButton>
+    {read.error && <ActionStatus state="error" className="text-xs">{read.error}</ActionStatus>}
     {original && <blockquote className="ui-scroll-region max-h-60 whitespace-pre-wrap break-words border-l-[0.5px] border-line pl-3 text-xs">
       {original.context.content}{original.neighbors.map(context => `\n\n${context.locator ?? ''}\n${context.content}`).join('')}
     </blockquote>}
@@ -377,19 +391,22 @@ function History({client, projectId, pageId, currentRevision, writable, onPendin
   };
   return <section className="space-y-2 border-t-[0.5px] border-line pt-3" data-testid="wiki-history">
     <p className="text-xs">恢复会新增修订并保留旧依据；旧来源仍需核查。生成章节在下一次来源更新时可能重新编译。</p>
+    {history.status === 'loading' && <ActionStatus state="pending" className="text-xs">正在读取修订历史…</ActionStatus>}
     <div className="flex flex-wrap gap-2">{history.data?.map(item => <button key={item.revision} className={`${button} aria-pressed:bg-[var(--overlay-active)]`}
       aria-pressed={selected === item.revision} disabled={rollback.pending} onClick={() => setSelected(item.revision)}>
       <span className="tabular-nums">r{item.revision}</span><span>{reasons[item.reason]}</span>
     </button>)}</div>
-    {(history.error || old.error || rollback.error) && <p role="alert">{history.error ?? old.error ?? rollback.error}</p>}
+    {(history.error || old.error || rollback.error) && <ActionStatus state="error">{history.error ?? old.error ?? rollback.error}</ActionStatus>}
     <div className="flex flex-wrap gap-2"><button className={button} disabled={rollback.pending || offset === 0} onClick={() => setOffset(v => Math.max(0, v - 50))}>较新修订</button>
       <button className={button} disabled={rollback.pending || history.data?.length !== 50} onClick={() => setOffset(v => v + 50)}>更早修订</button></div>
+    {old.status === 'loading' && <ActionStatus state="pending" className="text-xs">正在读取历史 r{selected}…</ActionStatus>}
     {old.data && <div className="ui-scroll-region max-h-60 space-y-2" data-testid="wiki-history-content">
       <p className="flex flex-wrap gap-x-2 text-xs"><span className="tabular-nums">历史 r{old.data.revision}</span><span>以下为当时保存的内容与引用 ID</span></p>
       {old.data.sections.map(section => <div key={section.id}><h4>{section.title}</h4><p className="whitespace-pre-wrap break-words text-xs">{section.body}</p>
         <p className="break-all text-xs text-subtle">引用：{section.evidenceIds.join('、') || '无'}</p></div>)}</div>}
-    {selected !== null && selected !== currentRevision && <button className={button} disabled={!writable || rollback.pending || old.data === null}
-      onClick={() => {void restore();}}>恢复 r{selected} 为新修订</button>}
+    {selected !== null && selected !== currentRevision && <ActionButton variant="compact" aria-label={`恢复 r${selected} 为新修订`}
+      loading={rollback.pending} loadingLabel={`正在恢复 r${selected}…`} disabled={!writable || rollback.pending || old.data === null}
+      onClick={() => {void restore();}}>恢复 r{selected} 为新修订</ActionButton>}
   </section>;
 }
 import {ClaimComparisonPanel} from './ClaimComparisonPanel';

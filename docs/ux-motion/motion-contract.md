@@ -92,6 +92,23 @@ Composer 在提交时记录此次操作的展示意图：发送、回答、纠�
 清理状态变化也算展示变化，不能仅因后台 `status` 枚举相同而漏掉更新。
 取消请求已接收不表示资源已释放；清理失败保持可读，不提供虚假的完成或恢复反馈。
 
+## P5 业务操作反馈
+
+发现、导入、阅读工具、RAG/Wiki、文件与编译、Git、发布清单和技能管理复用
+`ActionButton/ActionStatus`。`variant="unstyled"` 仅保留原调用点的几何、焦点和按钮样式，
+loading 仍由调用者已有的 pending 决定；不增加请求锁、完成计时器或业务状态。
+同一个操作的按钮已有持续图标时，邻近状态只显示文字；外层已有 live region 时
+内层不重复播报。成功回执继续可查，复制等已有短反馈沿用原完成身份和计时器。
+
+题录收录、后台处理、索引发布和助手移交分别反馈；移交或提交不表示全链完成。
+处理作业按真实 job ID 显示一次提交状态，不让所有可用操作同时旋转。
+Zotero 暂停与当前题录收录/取消保留独立锁，取消请求等待最终回执；编译和逐段翻译
+同样等待真实终态或当前段返回。Wiki 的来源、BasisDigest、修订和发布身份、
+工件的 sourceHash 和 expectedRevision 不作为动画计时或虚构成功的依据。
+
+文献虚拟行、PDF 正文、图谱、CodeMirror、Git diff 和 xterm 不扩大动效范围；
+选择、滚动定位、草稿、来源检视和后端授权继续由原模块控制。
+
 ## 静态约束
 
 禁止 `transition-all` 和任意写死的 Tailwind `duration-[…]`。优先声明 opacity、transform、color、background-color、border-color 等具体属性。高频输入路径不动画 filter、blur、shadow、width、height 或整个虚拟列表的 layout。原生披露尺寸过渡是明确例外。

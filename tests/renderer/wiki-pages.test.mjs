@@ -7,15 +7,18 @@ import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
-let directory,app,page,api,active,windowId;
-const fixtures=[],errors=[],holds=[],artifacts=join(process.cwd(),'.artifacts/knowledge-wiki');
+let directory,artifacts,captures,app,page,api,active,windowId;
+const fixtures=[],errors=[],holds=[];
 function deferred() {
   let release;
   const promise=new Promise(resolve=>{release=resolve;});
   const value={promise,release};holds.push(value);return value;
 }
 before(async()=>{
-  api=await loadResearchTestApi();directory=mkdtempSync(join(tmpdir(),'roc-wiki-pages-'));mkdirSync(artifacts,{recursive:true});
+  api=await loadResearchTestApi();directory=mkdtempSync(join(tmpdir(),'roc-wiki-pages-'));
+  artifacts=process.env.ROC_UI_AUDIT_DIR??join(directory,'audit');
+  captures=process.env.ROC_UI_CAPTURE_DIR??join(directory,'captures');
+  mkdirSync(artifacts,{recursive:true});mkdirSync(captures,{recursive:true});
   await buildViteRenderer({directory,script:`
     import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
@@ -145,7 +148,7 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
     await page.setViewportSize({width,height:800});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     const audit=await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);writeFileSync(join(artifacts,`pages-${theme}-${width}.json`),JSON.stringify(audit));
     assert.equal(audit.cut,0);assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
-    await page.screenshot({path:join(artifacts,`pages-${theme}-${width}.png`)});
+    await page.screenshot({path:join(captures,`pages-${theme}-${width}.png`)});
   }
 });
 test('routine audit notes stay out of reading while source problems remain accessible and deduplicated',async()=>{

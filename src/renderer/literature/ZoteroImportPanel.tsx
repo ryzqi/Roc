@@ -3,7 +3,8 @@ import {AlertTriangle} from 'lucide-react';
 import type {ZoteroItem, ZoteroPageRequest, ZoteroPreviewPage, ZoteroScope, ZoteroReview} from '../../shared/schemas/research-zotero';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
-import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ActionButton, formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import type {ZoteroImportJob} from './use-zotero-import-job';
 import type {ZoteroSync, ZoteroSyncCapturedPage} from '../../shared/schemas/research-zotero-sync';
 import {ZoteroOriginalSource} from './ZoteroSourceStatePanel';
@@ -37,10 +38,11 @@ export function ZoteroImportPanel({client, job, attachments, draftGuard}: {
   return <div className="flex flex-col gap-3 text-[length:var(--font-meta-size)]" data-testid="literature-import-panel-zotero">
     <div className="flex items-center justify-between gap-2">
       <span className="text-muted">{connection?.status === 'connected' ? 'Zotero 已连接' : 'Zotero 本地文库'}</span>
-      <button type="button" className={buttonClass} disabled={sourceBusy || probe.status === 'loading' || job.pending || job.cancelling}
+      <ActionButton variant="unstyled" className={buttonClass} disabled={sourceBusy || job.pending || job.cancelling}
+        loading={probe.status === 'loading'} loadingLabel="连接中…"
         data-testid="literature-zotero-connect" onClick={() => changeSource(() => setAttempt(current => current + 1))}>
-        {probe.status === 'loading' ? '连接中…' : '连接 Zotero'}
-      </button>
+        连接 Zotero
+      </ActionButton>
     </div>
     {probe.error === null ? null : <Failure message={probe.error} />}
     {connection === null || connection.status === 'connected' ? null : <Failure message={connectionLabels[connection.status]} />}
@@ -307,29 +309,35 @@ function LibraryPreview({client, scope, libraryName, job, attachments, draftGuar
     {collections.error === null ? null : <Failure message={collections.error} />}
     <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="逐页核对" data-testid="literature-zotero-sync">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
-          data-testid="literature-zotero-sync-start" onClick={() => draftGuard.request(() => void start('incremental'))}>增量逐页核对</button>
-        <button type="button" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
-          data-testid="literature-zotero-sync-full" onClick={() => draftGuard.request(() => void start('full'))}>完整重新核对</button>
-        {sync?.status !== 'reset_required' ? null : <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-sync-rebaseline" onClick={() => draftGuard.request(() => void start('rebaseline'))}>按当前来源重新建立检查点</button>}
-        {sync?.status === 'active' ? <button type="button" className={buttonClass} disabled={job.cancelling || control.pending || (localBusy && operation.current === 'other')}
-          data-testid="literature-zotero-sync-pause" onClick={() => void controlSync('pause')}>暂停核对</button> : null}
-        {sync?.status === 'paused' ? <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-sync-resume" onClick={() => void controlSync('resume')}>继续核对</button> : null}
-        {ongoing ? <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-sync-abandon" onClick={() => draftGuard.request(() => void controlSync('abandon'))}>结束本次核对</button> : null}
-        {sync === null ? null : <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-sync-refresh" onClick={() => void refreshSync()}>刷新核对状态</button>}
-        {sync?.pendingPreviewId === null || sync === null ? null : <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-sync-open" onClick={() => draftGuard.request(() => void openPending())}>打开待核对页</button>}
+        <ActionButton variant="unstyled" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
+          data-testid="literature-zotero-sync-start" onClick={() => draftGuard.request(() => void start('incremental'))}>增量逐页核对</ActionButton>
+        <ActionButton variant="unstyled" className={buttonClass} disabled={busy || ongoing || lookup.status !== 'ready'}
+          data-testid="literature-zotero-sync-full" onClick={() => draftGuard.request(() => void start('full'))}>完整重新核对</ActionButton>
+        {sync?.status !== 'reset_required' ? null : <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-rebaseline" onClick={() => draftGuard.request(() => void start('rebaseline'))}>按当前来源重新建立检查点</ActionButton>}
+        {sync?.status === 'active' ? <ActionButton variant="unstyled" className={buttonClass} disabled={job.cancelling || control.pending || (localBusy && operation.current === 'other')}
+          data-testid="literature-zotero-sync-pause" onClick={() => void controlSync('pause')}>暂停核对</ActionButton> : null}
+        {sync?.status === 'paused' ? <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-resume" onClick={() => void controlSync('resume')}>继续核对</ActionButton> : null}
+        {ongoing ? <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          data-testid="literature-zotero-sync-abandon" onClick={() => draftGuard.request(() => void controlSync('abandon'))}>结束本次核对</ActionButton> : null}
+        {sync === null ? null : <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          loading={readState.pending} loadingLabel="正在刷新核对状态…"
+          data-testid="literature-zotero-sync-refresh" onClick={() => void refreshSync()}>刷新核对状态</ActionButton>}
+        {sync?.pendingPreviewId === null || sync === null ? null : <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          loading={readPending.pending} loadingLabel="正在恢复待核对页…"
+          data-testid="literature-zotero-sync-open" onClick={() => draftGuard.request(() => void openPending())}>打开待核对页</ActionButton>}
       </div>
-      {sync === null ? <p className="text-subtle">逐页收录或明确跳过后才推进检查点；中断后可继续。</p> : <p className="tabular-nums break-words text-muted" role="status">
+      {begin.pending || control.pending ? <ActionStatus state="pending" className="text-muted" testId="literature-zotero-sync-pending">
+        {begin.pending ? '正在建立逐页核对…' : '正在提交核对操作…'}
+      </ActionStatus> : null}
+      {sync === null ? <p className="text-subtle">逐页收录或明确跳过后才推进检查点；中断后可继续。</p> : <ActionStatus
+        state={sync.status === 'completed' ? 'success' : 'idle'} className="tabular-nums text-muted" role="status">
         {sync.status === 'active' ? '核对中' : sync.status === 'paused' ? '已暂停' : sync.status === 'completed' ? '本次核对完成' : '需要重新建立核对'}
         {'，'}已确认 {sync.nextOffset.toLocaleString('zh-CN')} 个对象，
         {sync.checkpointVersion === null ? '完整检查点尚未建立' : '完整检查点已建立'}
         {sync.errorCode === null ? null : `，${sync.errorCode}`}
-      </p>}
+      </ActionStatus>}
       {sync === null ? null : <details className="text-subtle" data-testid="literature-zotero-sync-diagnostics">
         <summary className="cursor-pointer">核对诊断</summary>
         <p className="tabular-nums py-1">核对修订 {sync.revision}，完整版本 {sync.checkpointVersion ?? '尚未建立'}
@@ -340,10 +348,11 @@ function LibraryPreview({client, scope, libraryName, job, attachments, draftGuar
         .filter((message): message is string => message !== null).map((message, index) => <Failure key={index} message={message} />)}
     </section>
     <div className="flex items-center gap-2">
-      <button type="button" className={buttonClass} disabled={busy || collectionPage === null || sync?.status === 'paused'}
+      <ActionButton variant="unstyled" className={buttonClass} disabled={busy || collectionPage === null || sync?.status === 'paused'}
+        loading={capture.pending || syncPage.pending} loadingLabel="读取中…"
         data-testid="literature-zotero-preview" onClick={() => draftGuard.request(() => void preview(0))}>
-        {capture.pending || syncPage.pending ? '读取中…' : ongoing ? sync.pendingPreviewId === null ? '读取下一页并预览' : '重新读取本页' : '读取并预览'}
-      </button>
+        {ongoing ? sync.pendingPreviewId === null ? '读取下一页并预览' : '重新读取本页' : '读取并预览'}
+      </ActionButton>
       <span className="min-w-0 break-all text-muted">{libraryName}{collection === null ? '' : ` / ${collection.name}`}</span>
     </div>
     {capture.error === null ? null : <Failure message={capture.error} />}
@@ -365,19 +374,21 @@ function LibraryPreview({client, scope, libraryName, job, attachments, draftGuar
           });}} />)}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
-        {snapshot.page.nextPreviewOffset === null ? null : <button type="button" className={buttonClass} disabled={busy}
-          data-testid="literature-zotero-more-preview" onClick={() => void more()}>显示本次预览更多对象</button>}
-        <button type="button" className={`${formPrimaryButtonClass} tabular-nums border-[0.5px]`} disabled={busy || selected.size === 0 || reviewed === null || blocked}
+        {snapshot.page.nextPreviewOffset === null ? null : <ActionButton variant="unstyled" className={buttonClass} disabled={busy}
+          loading={readMore.pending} loadingLabel="正在显示更多预览对象…"
+          data-testid="literature-zotero-more-preview" onClick={() => void more()}>显示本次预览更多对象</ActionButton>}
+        <ActionButton variant="primary" className="tabular-nums" disabled={busy || selected.size === 0 || reviewed === null || blocked}
+          loading={localBusy && operation.current === 'job'} loadingLabel="正在提交收录…"
           data-testid="literature-zotero-import" onClick={() => void importSelection()}>
           收录选中 {selected.size.toLocaleString('zh-CN')} 篇
-        </button>
+        </ActionButton>
         <button type="button" className={buttonClass} disabled={busy || selected.size === 0}
           onClick={() => {if (!isLocked()) setSelected(new Set());}}>取消选择</button>
-        <button type="button" className={buttonClass}
+        <ActionButton variant="unstyled" className={buttonClass}
           disabled={busy || ongoing || snapshot.page.sourcePage.nextOffset === null || selected.size > 0}
-          data-testid="literature-zotero-next-source" onClick={() => void preview(snapshot.page.sourcePage.nextOffset!)}>下一页来源</button>
+          data-testid="literature-zotero-next-source" onClick={() => void preview(snapshot.page.sourcePage.nextOffset!)}>下一页来源</ActionButton>
       </div>
-      {selected.size > 0 && reviewed === null && review.error === null ? <p role="status" className="text-muted">正在核对选中题录与本地字段…</p> : null}
+      {selected.size > 0 && reviewed === null && review.error === null ? <ActionStatus state="pending" className="text-muted">正在核对选中题录与本地字段…</ActionStatus> : null}
       {review.error === null ? null : <Failure message={review.error} />}
       {reviewed === null ? null : <SourceReview review={reviewed} client={client} projectId={job.projectId} collectionKey={collection?.key ?? null} attachments={attachments} />}
       {sync?.status !== 'active' || sync.pendingPreviewId !== snapshot.page.previewId ? null : <div className="flex flex-col gap-2">
@@ -387,11 +398,11 @@ function LibraryPreview({client, scope, libraryName, job, attachments, draftGuar
           <input className={inputClass} value={skipReason} maxLength={500} disabled={busy}
             data-testid="literature-zotero-sync-skip-reason" onChange={event => {if (!isLocked()) changeSkipReason(event.target.value);}} />
         </label>}
-        <button type="button" className={`${formPrimaryButtonClass} border-[0.5px]`}
+        <ActionButton variant="primary" loading={acknowledge.pending} loadingLabel="正在确认本页核对…"
           data-testid="literature-zotero-sync-confirm" disabled={busy || selected.size > 0 ||
             snapshot.records.length !== snapshot.page.capturedTotal ||
             (snapshot.page.capturedTotal !== snapshot.importedKeys.length && skipReason.trim() === '')}
-          onClick={() => void confirmPage()}>确认本页核对</button>
+          onClick={() => void confirmPage()}>确认本页核对</ActionButton>
         {snapshot.records.length !== snapshot.page.capturedTotal ? <p className="text-subtle">先显示本次预览全部对象，再确认本页。</p> : null}
       </div>}
       <p className="text-subtle">每次最多收录 30 篇。翻页前先收录或取消本页选择；附件需另行授权。</p>
@@ -439,7 +450,7 @@ function ImportedSource({client, attachments, previewId, itemKey, collectionKey}
   return <details className="mt-2 pl-5" data-testid="literature-zotero-imported-source"
     onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="cursor-pointer text-ink">查看已收录来源与附件</summary>
-    {review.status === 'loading' ? <p role="status">正在读取已收录来源…</p> : null}
+    {review.status === 'loading' ? <ActionStatus state="pending">正在读取已收录来源…</ActionStatus> : null}
     {review.error === null ? null : <Failure message={review.error} />}
     {review.status !== 'ready' || review.data === null ? null : <SourceReview review={review.data} client={client}
       projectId={attachments.projectId} collectionKey={collectionKey} attachments={attachments} />}
@@ -510,20 +521,22 @@ function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null 
     skipped_archived: '已归档，未恢复', failed: '失败', cancelled: '已取消', not_processed: '未处理'};
   return <>
     {job.pending ? <div className="flex flex-wrap items-center gap-2" role="status" data-testid="literature-zotero-import-running">
-      <span>收录中 {job.selection.length} 篇</span>
-      <button type="button" className={buttonClass} disabled={job.cancelling || job.cancelRequested}
+      <ActionStatus state="pending" announce={false}>收录中 {job.selection.length} 篇</ActionStatus>
+      <ActionButton variant="unstyled" className={buttonClass} disabled={job.cancelRequested}
+        loading={job.cancelling} loadingLabel={job.cancelRequested ? '已请求取消' : '请求取消中…'}
         data-testid="literature-zotero-cancel-import" onClick={() => void job.requestCancel()}>
-        {job.cancelRequested ? '已请求取消' : job.cancelling ? '请求取消中…' : '取消收录'}
-      </button>
+        {job.cancelRequested ? '已请求取消' : '取消收录'}
+      </ActionButton>
       <span className="text-subtle">关闭弹窗后作业继续；重新打开 Zotero 可查看结果。</span>
     </div> : null}
     {job.error === null ? null : <Failure message={job.error} />}
     {job.cancelError === null ? null : <Failure message={job.cancelError} />}
     {job.result === null ? null : <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2"
       data-testid="literature-zotero-import-result" role="status">
-      <p className="text-muted">已收录 {job.result.counts.created}，已关联 {job.result.counts.linked}，
+      <ActionStatus state={job.result.status === 'completed' ? 'success' : job.result.counts.failed > 0 ? 'error' : 'idle'}
+        announce={false} className="text-muted">已收录 {job.result.counts.created}，已关联 {job.result.counts.linked}，
         已存在 {job.result.counts.alreadyPresent}，失败 {job.result.counts.failed}，取消 {job.result.counts.cancelled}，
-        归档跳过 {job.result.counts.skippedArchived}。</p>
+        归档跳过 {job.result.counts.skippedArchived}。</ActionStatus>
       <ul className="max-h-36 overflow-y-auto px-1" aria-label="Zotero 收录结果" tabIndex={0}>
         {job.result.items.map(item => <li key={item.entryKey} className="border-b-[0.5px] border-line py-1">
           <span className="break-words text-ink">{job.selection[item.inputPositions[0]].title}</span>
@@ -532,15 +545,16 @@ function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null 
           {item.errorCode === null ? null : <span className="ml-2 break-all font-mono text-muted">{item.errorCode}</span>}
         </li>)}
       </ul>
-      {job.result.items.some(item => item.retryable) ? <button type="button" className={buttonClass} disabled={job.pending || job.cancelling}
+      {job.result.items.some(item => item.retryable) ? <ActionButton variant="unstyled" className={buttonClass} disabled={job.pending || job.cancelling}
         data-testid="literature-zotero-retry" onClick={() => void job.submit(job.result!.items
-          .filter(item => item.retryable).map(item => job.selection[item.inputPositions[0]]))}>重试可重试条目</button> : null}
+          .filter(item => item.retryable).map(item => job.selection[item.inputPositions[0]]))}>重试可重试条目</ActionButton> : null}
     </div>}
   </>;
 }
 
 function Failure({message}: {message: string}): React.JSX.Element {
-  return <p role="alert" className="flex items-start gap-1 text-[length:var(--font-meta-size)] text-[var(--st-warn)]">
-    <AlertTriangle size={14} aria-hidden="true" className="shrink-0" /><span className="min-w-0 break-words">{message}</span>
-  </p>;
+  return <ActionStatus state="error" className="text-[length:var(--font-meta-size)] text-[var(--st-warn)]"
+    icon={<AlertTriangle size={14} aria-hidden="true" className="mt-0.5 shrink-0" />}>
+    {message}
+  </ActionStatus>;
 }

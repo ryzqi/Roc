@@ -1,5 +1,6 @@
-import {Loader2, TriangleAlert} from 'lucide-react';
+import {TriangleAlert} from 'lucide-react';
 import type {LiteratureCandidate} from '../../shared/schemas/literature-import';
+import {ActionButton} from '../shared/form-ui';
 
 const fields = {doi: 'DOI', title: '标题', authors: '作者', publishedYear: '年份',
   citationCount: '引用量', url: '来源链接', openAccessUrl: '开放获取链接'} as const;
@@ -47,13 +48,13 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
           <span>{candidate.record.openAccessUrl === null ? '未提供全文链接' : '提供全文链接'}</span>
         </div>
       </div>
-      {preview ? null : <button type="button" disabled={pending || inLibrary || candidate.archived} onClick={onAdd} aria-busy={adding}
+      {preview ? null : <ActionButton variant="unstyled" disabled={pending || inLibrary || candidate.archived}
+        onClick={onAdd} loading={adding} loadingLabel="添加中"
         title={candidate.archived ? '文献已归档，请先在文献库恢复' : inLibrary ? '已在当前项目文献库' : '加入文献库并提交后台全文处理'}
         data-testid={`literature-import-hit-${candidate.record.id}`}
         className="inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] disabled:opacity-40">
-        {adding ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
-        {adding ? '添加中' : candidate.archived ? '已归档' : inLibrary ? '已在文献库' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
-      </button>}
+        {candidate.archived ? '已归档' : inLibrary ? '已在文献库' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
+      </ActionButton>}
     </div>
     {hasConflicts || retracted || updates.length > 0 ? <p className="mt-2 flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
       <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />

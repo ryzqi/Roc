@@ -206,3 +206,47 @@ RAF P95 最大 10.2ms、P99 最大 16.3ms、反馈代理最大 5.5ms。全部 �
 heap/process 指标仅为点采样，不据此声称长期资源稳定或屏显 120Hz 达标。
 P3 已覆盖 500 历史五轮，本阶段不重复相同负载；最终对照、完整 Renderer 和物理
 触控板/IME/VoiceOver、另一台 Mac、真人旅程及外部服务范围在 P6 明确列出。
+
+## P5：文献、阅读、创作与工件的真实反馈
+
+状态：**Verified passing（定向自动化范围）**，2026-11-25。
+
+发现搜索、候选、批量引用、导入/处理和 Zotero，PDF 工具/译文、RAG/Wiki，
+编译、文件保存、Git、终端以及发布清单和技能管理接入共享受控反馈。
+`ActionButton` 的 `unstyled` 变体保留调用者的几何与焦点样式，仍有原生
+loading/disabled/aria-busy 合同。相邻按钮旋转时状态文字不重复 spinner，
+终端 overlay 不重复顶部 live 播报；历史回执、错误和已保存来源不新增到期计时器。
+
+入库回执不表示索引完成；翻译准备不表示译文完成；取消等待真实终态；另存框
+返回 null 不报导出成功；文件保存依据实际 recoveryPoint；发布请求接受不表示
+ZIP 已交付。复用现有 job/source/generation/revision、busyRef、请求和草稿守卫，
+没有新增服务状态或锁。虚拟行、PDF 翻页/选区/阅读恢复、图谱、CodeMirror 和
+终端正文保持原行为，不做整列、整图或字符动画。
+
+以下命令均在仓库根执行。本次可选截图环境指向
+`/tmp/roc-ux-p5-20261125-vS2WgA/captures`，普通性能采样留到 P6，
+没有重跑 P0–P4 的相同定向门禁。
+
+| 检查命令 | 结果 |
+| --- | --- |
+| `pnpm build`、`pnpm check:renderer-chunks` | 最终源码普通生产构建/typecheck 通过；eager JS 530736 bytes / 32 files |
+| `ROC_UI_AUDIT_DIR=/tmp/roc-ux-p5-20261125-vS2WgA/captures node --test --test-concurrency=1 tests/renderer/discovery-search.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/literature-import-state.test.mjs tests/renderer/zotero-import.test.mjs` | 45/45；搜索、候选、导入引用键、拒绝/失效/取消和实际 Zotero 回执 |
+| `node --test --test-concurrency=1 --test-name-pattern='^discovery \|^library citation\|^progress is \|^retry prevents\|^successful retry\|^manual PDF supplement\|^failed import\|^replacement retry\|^project switch\|^a cancellation race\|^unmount ignores\|^readonly project\|^light/dark and narrow canvas\|^empty and failed literature\|^narrow literature\|^large result sets' tests/renderer/literature-action-guards.test.mjs tests/renderer/literature-processing.test.mjs tests/renderer/literature-list-layout.test.mjs` | 19/19；复制失败重试、处理/取消竞争、旧项目响应隔离及列表布局 |
+| `node --test --test-concurrency=1 tests/renderer/reading-tool-guards.test.mjs tests/renderer/retrieval-workspace.test.mjs tests/renderer/wiki-pages.test.mjs` | 27/27；PDF/译文草稿、停止、检索失败保留证据、Wiki 来源/版本/历史和换对象 |
+| `node --test --test-concurrency=1 --test-name-pattern='^file reading \|^writing saves \|^Git gives \|^terminal \|^hidden terminal \|^truncated terminal \|^tool surfaces \|^skills \|^management content' tests/renderer/authoring-tools-layout.test.mjs tests/renderer/management-draft-guards.test.mjs` | 19/19；保存/编译/取消、Git 草稿、终端隐藏恢复/截断及管理布局 |
+| `ROC_UI_AUDIT_DIR=/tmp/roc-ux-p5-20261125-vS2WgA/captures node --test --test-concurrency=1 tests/renderer/file-preview-dialog.test.mjs tests/renderer/export-publication.test.mjs tests/renderer/builtin-skills.test.mjs` | 15/15；文件保存失败和离开守卫、预览/许可/来源/重复回执、内置技能同版本安装及失败重试 |
+| `pnpm audit:motion` | 405 files，0 violations / 0 input failures |
+| `node scripts/ui-audit/index-interactions.mjs --write`、`--check` | 405 源文件、238 个含控件文件、2258 模板/路由、35 合同，静态快照一致 |
+| `git diff --check` | 通过 |
+
+合计 125 项定向业务回归通过。深浅/宽窄布局与裁切沿用业务审计；读回文献 320px、
+RAG 420px、Wiki 560px、发布 650px、文件 820px、Git 440px 和技能 480px 的代表截图。
+写作/管理夹具使用 `MotionConfig reducedMotion="always"`，发布窄窗显式模拟
+reduce；局部共享反馈的减少动态效果合同沿用 P2，不据此声称每个业务状态全组合
+或系统设置切换已经验收。
+
+五个本次涉及的测试将默认截图/审计目录放入已有临时目录，保留显式输出环境变量，
+原业务断言未改。核验后清理本次截图、日志和临时目录；正式业务文档和状态证据保留。
+PaperReader/PaperPdfView、LibraryVirtualizedRows、KnowledgeGraphView、
+其它工件/设置/管理入口沿用已有反馈，没有为数量覆盖而重写。完整回归、长时资源、
+最终帧对照及物理输入/真实服务缺口由 P6 汇总。

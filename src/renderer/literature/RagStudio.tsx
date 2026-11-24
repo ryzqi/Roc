@@ -9,6 +9,8 @@ import { useWorkspaceScope } from '../app/workspace-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { useImeGuard } from '../shared/hooks/use-ime-guard';
 import { useSettingsRevision } from '../shared/settings-events';
+import {ActionButton} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
@@ -369,7 +371,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
           <h2>{indexOpen ? '管理索引' : '问我的资料'}</h2>
         </div>
         {indexOpen ? null : <button type="button" className="rag-button" onClick={() => setIndexOpen(true)} data-testid="rag-index-toggle">
-          {busy ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <DatabaseZap size={14} aria-hidden="true" />}
+          <DatabaseZap size={14} aria-hidden="true" />
           管理索引
           {counts && counts.failed > 0 ? <span className="text-[var(--st-warn)] tabular-nums">{counts.failed.toLocaleString()} 项失败</span> : null}
         </button>}
@@ -379,45 +381,54 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
         <div className="rag-body rag-index-panel" data-testid="rag-index-panel">
           <section className="rag-index-summary">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-2" data-testid="rag-phase" data-phase={status?.phase ?? 'loading'}>
-                {statusResource.status === 'loading' ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
+              <ActionStatus announce={false} testId="rag-phase" data-phase={status?.phase ?? 'loading'}
+                state={statusResource.status==='error'||status?.phase==='failed'?'error':statusResource.status==='loading'||busy?'pending':'idle'}>
                 {status === null ? statusResource.status === 'error' ? '索引状态不可用' : '读取索引状态…' : PHASE_LABELS[status.phase]}
-              </span>
+              </ActionStatus>
               {counts === null ? null : <span className="text-muted tabular-nums" data-testid="rag-counts">
                 {counts.total.toLocaleString()} 个工作区文件，已索引 {counts.ready.toLocaleString()}，排队 {counts.queued.toLocaleString()}，进行中 {counts.running.toLocaleString()}，失败 {counts.failed.toLocaleString()}
               </span>}
             </div>
         <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
+          <ActionButton
+            variant="unstyled"
+            aria-label="增量扫描"
+            loading={controlIntent?.action === 'scan'}
+            loadingLabel="正在提交扫描"
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: 'scan' })}
             data-testid="rag-scan"
             className="rag-button rag-open-source"
           >
-            {controlIntent?.action === 'scan' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <RefreshCw size={12} aria-hidden="true" />}
+            <RefreshCw size={12} aria-hidden="true" />
             增量扫描
-          </button>
-          <button
-            type="button"
+          </ActionButton>
+          <ActionButton
+            variant="unstyled"
+            aria-label="重建"
+            loading={controlIntent?.action === 'rebuild'}
+            loadingLabel="正在提交重建"
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: 'rebuild' })}
             data-testid="rag-rebuild"
             className="rag-button rag-open-source"
           >
-            {controlIntent?.action === 'rebuild' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Play size={12} aria-hidden="true" />}
+            <Play size={12} aria-hidden="true" />
             重建
-          </button>
-          <button
-            type="button"
+          </ActionButton>
+          <ActionButton
+            variant="unstyled"
+            aria-label={status?.phase === 'paused' ? '继续' : '暂停'}
+            loading={controlIntent?.action === 'pause' || controlIntent?.action === 'resume'}
+            loadingLabel={controlIntent?.action === 'resume' ? '正在提交继续' : '正在提交暂停'}
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: status?.phase === 'paused' ? 'resume' : 'pause' })}
             data-testid="rag-toggle-pause"
             className="rag-button rag-open-source"
           >
-            {controlIntent?.action === 'pause' || controlIntent?.action === 'resume' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Square size={12} aria-hidden="true" />}
+            <Square size={12} aria-hidden="true" />
             {status?.phase === 'paused' ? '继续' : '暂停'}
-          </button>
+          </ActionButton>
         </div>
           </section>
           {statusResource.status === 'error' ? <ErrorBar error={{level: 'page', message: statusResource.error ?? '读取索引状态失败', retry: reloadStatus}} /> : null}
@@ -437,7 +448,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
           </div>
           {filesResource.status === 'error' ? (
             <ErrorBar error={{ level: 'page', message: filesResource.error ?? '读取索引文件失败', retry: reloadFiles }} />
-          ) : filesResource.status === 'loading' ? <p role="status">正在读取索引文件…</p> : indexedFiles.length === 0 ? (
+          ) : filesResource.status === 'loading' ? <ActionStatus state="pending">正在读取索引文件…</ActionStatus> : indexedFiles.length === 0 ? (
             <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-files">
               暂无已索引文件，选择「增量扫描」添加。
             </p>
@@ -476,7 +487,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
           <h3 className="mb-2 text-muted text-[length:var(--font-meta-size)]">索引作业</h3>
           {jobsResource.error ? (
             <ErrorBar error={{level: 'page', message: jobsResource.error, retry: reloadJobs}} />
-          ) : jobsResource.status === 'loading' ? <p role="status">正在读取索引作业…</p> : jobs.length === 0 ? (
+          ) : jobsResource.status === 'loading' ? <ActionStatus state="pending">正在读取索引作业…</ActionStatus> : jobs.length === 0 ? (
             <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-jobs">
               还没有索引作业记录。
             </p>
@@ -495,16 +506,18 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                       <p className="tabular-nums">索引代次 {job.generation}</p>
                     </details>
                   </div>
-                  <button
-                    type="button"
+                  <ActionButton
+                    variant="unstyled"
+                    aria-label="重试"
+                    loading={controlIntent?.action === 'retry' && controlIntent.fileId === job.fileId}
+                    loadingLabel="正在提交重试"
                     disabled={revision === null || actionPending}
                     onClick={() => void runControl({ action: 'retry', fileId: job.fileId })}
                     data-testid={`rag-job-retry-${job.id}`}
                     className="rag-button rag-open-source"
                   >
-                    {controlIntent?.action === 'retry' && controlIntent.fileId === job.fileId ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                     重试
-                  </button>
+                  </ActionButton>
                 </li>
               ))}
             </ul>
@@ -573,17 +586,17 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                   onKeyDown={event => {if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault();}}
                   placeholder="输入问题、关键词或原文片段" data-testid="rag-query" />
               </label>
-              <button type="submit" disabled={!query.trim() || searching || asking || literature.assistant.pending} aria-busy={asking} data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">
-                {asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
-                {asking ? '提交中' : '提问'}
-              </button>
+              <ActionButton variant="unstyled" type="submit" aria-label="提问" disabled={!query.trim() || searching || asking || literature.assistant.pending}
+                loading={asking || literature.assistant.pending} loadingLabel={searching ? '检索中' : '正在移交助手'}
+                data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">提问</ActionButton>
             </form>
             <div className="rag-search-options">
-              <button type="button" disabled={!query.trim() || searching || asking} aria-busy={searching && !asking} onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button">
-                {searching && !asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <Search size={14} aria-hidden="true" />}
-                {searching && !asking ? '检索中' : '检索证据'}
-              </button>
-              <span className="text-muted">答案在助手中生成</span>
+              <ActionButton variant="unstyled" aria-label="检索证据" disabled={!query.trim() || searching || asking} loading={searching && !asking} loadingLabel="检索中"
+                onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button"><Search size={14} aria-hidden="true" />检索证据</ActionButton>
+              <ActionStatus state={asking || literature.assistant.pending ? 'pending' : 'idle'} icon={null}
+                className="text-muted" testId="rag-ask-status">
+                {asking || literature.assistant.pending ? searching ? '正在检索证据…' : '正在移交助手…' : '答案在助手中生成'}
+              </ActionStatus>
               <details className="rag-options" data-testid="rag-search-options">
                 <summary><Settings2 size={13} aria-hidden="true" />检索选项<ChevronDown size={12} aria-hidden="true" /></summary>
                 <fieldset disabled={searching || asking}>
@@ -594,22 +607,23 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                 <p>检索范围：项目文献、笔记与工作区文件</p>
               </details>
             </div>
-            <p className="rag-availability text-muted" data-testid="rag-availability" role="status">
+            <ActionStatus className="rag-availability text-muted" testId="rag-availability"
+              state={statusResource.error ? 'error' : status === null || busy ? 'pending' : 'idle'}>
               {statusResource.error ? '工作区文件索引状态读取失败，可在管理索引中重试。'
                 : status === null ? '正在读取工作区文件可用性…'
                   : status.phase === 'unavailable' ? '未绑定工作目录，可检索已收录的文献与笔记。'
                     : `工作区文件可检索 ${status.counts.ready.toLocaleString()} 个${busy ? '，索引处理中' : status.counts.failed > 0 ? `，${status.counts.failed.toLocaleString()} 个失败` : ''}`}
-            </p>
-            {literature.assistant.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]" data-testid="rag-ask-error">{literature.assistant.error}</p> : null}
-            {result?.ranking?.degradation ? <p role="status" className="rag-feedback" data-testid="rag-degraded">
-              <AlertCircle size={14} aria-hidden="true" />
+            </ActionStatus>
+            {literature.assistant.error ? <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]" testId="rag-ask-error">{literature.assistant.error}</ActionStatus> : null}
+            {result?.ranking?.degradation ? <ActionStatus state="idle" role="status" className="rag-feedback" testId="rag-degraded" icon={<AlertCircle size={14} aria-hidden="true" />}>
               语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
-            </p> : null}
-            {searchError === null ? null : <p role="alert" className="rag-feedback text-[var(--st-bad)]" data-testid="rag-search-error">
-              <AlertCircle size={14} aria-hidden="true" />{searchError}
-            </p>}
-            {note === null && literature.action.error === null ? null : <p role="status" className="rag-feedback" data-testid="rag-note">{note ?? literature.action.error}</p>}
-            {hitCopy.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</p> : null}
+            </ActionStatus> : null}
+            {searchError === null ? null : <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]" testId="rag-search-error">{searchError}</ActionStatus>}
+            {literature.action.pending ? <ActionStatus state="pending" className="rag-feedback">正在写入资料…</ActionStatus> : null}
+            {note === null && literature.action.error === null ? null : <ActionStatus state={literature.action.error === null ? 'success' : 'error'} className="rag-feedback" testId="rag-note">
+              {literature.action.error ?? note}
+            </ActionStatus>}
+            {hitCopy.error ? <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</ActionStatus> : null}
           </section>
 
           <div className="rag-results-layout" data-has-evidence={Boolean(result?.hits.length)}>
@@ -619,7 +633,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                 title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
             ) : <>
               <div className="rag-results-heading">
-                <p role="status" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></p>
+                <ActionStatus state="success" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></ActionStatus>
                 <details className="rag-result-details" data-testid="rag-result-details" data-reading-detail="result">
                   <summary>检索详情</summary>
                   <div className="text-muted" data-testid="rag-search-meta">
@@ -654,15 +668,15 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                         {['document:', 'library:', 'project-index:'].some(prefix => hit.documentId.startsWith(prefix)) ? <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
                           <ExternalLink size={13} aria-hidden="true" />{hit.documentId.startsWith('project-index:') ? '打开来源文件' : hit.documentId.startsWith('library:') ? '查看文献信息' : '在阅读器里定位'}
                         </button> : <span className="rag-source-unavailable">此来源暂无可定位原文</span>}
-                        <button type="button" onClick={() => {hitCopy.copy(hit.content); setCopiedChunkId(hit.chunkId);}}
+                        <ActionButton variant="unstyled" onClick={() => {hitCopy.copy(hit.content); setCopiedChunkId(hit.chunkId);}}
                           data-testid={`rag-hit-copy-${hit.chunkId}`} className="rag-button">
                           {hitCopy.copied && copiedChunkId === hit.chunkId ? <Check size={13} aria-hidden="true" /> : <ClipboardCopy size={13} aria-hidden="true" />}
                           {hitCopy.copied && copiedChunkId === hit.chunkId ? '已复制' : '复制'}
-                        </button>
-                        <button type="button" disabled={literature.action.pending || !scope.writable} onClick={() => captureHit(hit)}
-                          data-testid={`rag-hit-capture-${hit.chunkId}`} className="rag-button"><FlaskConical size={13} aria-hidden="true" />存为证据</button>
-                        <button type="button" disabled={literature.action.pending || !scope.writable} onClick={() => saveHitAsNote(hit)}
-                          data-testid={`rag-hit-save-${hit.chunkId}`} className="rag-button"><Bookmark size={13} aria-hidden="true" />写入知识库</button>
+                        </ActionButton>
+                        <ActionButton variant="unstyled" disabled={literature.action.pending || !scope.writable} onClick={() => captureHit(hit)}
+                          data-testid={`rag-hit-capture-${hit.chunkId}`} className="rag-button"><FlaskConical size={13} aria-hidden="true" />存为证据</ActionButton>
+                        <ActionButton variant="unstyled" disabled={literature.action.pending || !scope.writable} onClick={() => saveHitAsNote(hit)}
+                          data-testid={`rag-hit-save-${hit.chunkId}`} className="rag-button"><Bookmark size={13} aria-hidden="true" />写入知识库</ActionButton>
                       </footer>
                       <details className="rag-hit-ranking" data-reading-detail={`ranking:${hit.chunkId}`}><summary>匹配依据</summary>
                         <span>融合分数 {hit.rrfScore.toFixed(4)}</span>

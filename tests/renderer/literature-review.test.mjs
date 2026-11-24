@@ -8,9 +8,8 @@ import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 
-let directory, app, page;
+let directory, app, page, artifacts;
 const errors = [];
-const artifacts = join(process.cwd(), '.artifacts/research-optimization/review-ui');
 const timestamp = '2026-11-03T00:00:00.000Z';
 function candidate(overrides = {}) {
   const record = {id: 'crossref:review', externalId: '10.1234/review', source: 'crossref', doi: '10.1234/review',
@@ -36,6 +35,7 @@ function candidate(overrides = {}) {
 }
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-review-ui-'));
+  artifacts = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');
   mkdirSync(artifacts, {recursive: true});
   await esbuild.build({stdin: {contents: `
     import React, {useState} from 'react';

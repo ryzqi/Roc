@@ -7,11 +7,11 @@ import * as esbuild from 'esbuild';
 import electronPath from 'electron';
 import {_electron, expect} from '@playwright/test';
 
-let directory, app, page;
+let directory, artifacts, app, page;
 const errors = [];
-const artifacts = join(process.cwd(), '.artifacts/research-optimization/zotero-import-ui');
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-zotero-import-ui-'));
+  artifacts = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');
   mkdirSync(artifacts, {recursive: true});
   await esbuild.build({stdin: {contents: `
     import React, {useState} from 'react';

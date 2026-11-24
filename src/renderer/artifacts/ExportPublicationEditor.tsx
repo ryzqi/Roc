@@ -6,7 +6,8 @@ import {researchExportPrepareRequestSchema, type ResearchExportExecution, type R
 import {researchCrateProfile, researchCrateVersion} from '../../shared/schemas/research-ro-crate';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction} from '../app/use-async-resource';
-import {formPrimaryButtonClass, formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
+import {ActionButton, formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import {emptyExportLicense, emptyExportMetadata, exportLicenseInput, exportMetadataInput, exportOptionalText,
   ExportLicenseFields, ExportMetadataFields, ExportTextField} from './ExportMetadataFields';
 import {ExportResourceEditor, type ExportResourceDraft} from './ExportResourceEditor';
@@ -117,10 +118,12 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
         }}/>
       </section>}
     </fieldset>
-    {validation === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{validation}</p>}
-    {recapture.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{recapture.error}</p>}
-    {prepare.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{prepare.error}</p>}
-    {pending ? <p role="status">{recapture.pending ? '正在核对当前来源…' : '正在提交生成请求…'}</p> : null}
+    {validation === null ? null : <ActionStatus state="error" className="text-[var(--st-warn)]">{validation}</ActionStatus>}
+    {recapture.error === null ? null : <ActionStatus state="error" className="text-[var(--st-warn)]">{recapture.error}</ActionStatus>}
+    {prepare.error === null ? null : <ActionStatus state="error" className="text-[var(--st-warn)]">{prepare.error}</ActionStatus>}
+    {pending ? <ActionStatus state="pending" icon={null}>
+      {recapture.pending ? '正在核对当前来源…' : '正在提交生成请求…'}
+    </ActionStatus> : null}
     <fieldset className="flex flex-col gap-2" disabled={!writable || pending}>
       <legend>附加转换稿</legend>
       {(['docx', 'html'] as const).map(format => <label key={format} className="flex items-center gap-2">
@@ -135,7 +138,8 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
       <ExportPublicationReceipt review={preview.publicationReview}/>
     </section>}
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={`${formSecondaryButtonClass} border-[0.5px]`} disabled={pending || !writable}
+      <ActionButton variant="compact" className="border-[0.5px]" disabled={pending || !writable}
+        loading={recapture.pending} loadingLabel="正在核对当前来源…"
         data-testid="artifact-export-preview-button" onClick={() => {
           if (!writable || busy.current) return;
           const missing = resources.findIndex((value, index) => value.delivery === '' || value.kind === '' ||
@@ -172,9 +176,10 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
             }
             setPreview(parsed.data);
           });
-        }}>预览并核对当前来源</button>
-      <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px]`} disabled={pending || !writable || preview === null}
-        data-testid="artifact-export-prepare">确认清单并生成 ZIP</button>
+        }}>预览并核对当前来源</ActionButton>
+      <ActionButton type="submit" variant="primary" className="border-[0.5px]" disabled={pending || !writable || preview === null}
+        loading={prepare.pending} loadingLabel="正在提交生成请求…"
+        data-testid="artifact-export-prepare">确认清单并生成 ZIP</ActionButton>
       <button type="button" className={`${formSecondaryButtonClass} border-[0.5px]`} disabled={pending}
         data-testid="artifact-export-discard" onClick={() => {onDirty(false); onDiscard();}}>放弃本次编辑</button>
     </div>

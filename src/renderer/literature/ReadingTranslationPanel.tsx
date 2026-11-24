@@ -5,6 +5,8 @@ import {useAsyncAction,useAsyncResource} from '../app/use-async-resource';
 import {BEFORE_NAVIGATE,type NavigationRequest} from '../app/navigation-guard';
 import {ConfirmDialog} from '../shell/ConfirmDialog';
 import type {RocClient} from '../shared/roc-client';
+import {ActionButton} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 type Settings=z.infer<typeof translationSettingsSchema>;
 type Provider=Settings['provider'];
 type Draft=Omit<Settings,'keyConfigured'>&{apiKey:string};
@@ -95,29 +97,37 @@ export default function ReadingTranslationPanel({client,projectId,segments,label
   return <section className="max-h-[55%] min-h-0 overflow-auto border-b-[0.5px] border-line" data-testid="reader-translation" aria-label="阅读翻译">
     <div className="reading-toolbar"><strong>{label}</strong><select aria-label="翻译目标语言" value={target} disabled={!ready||busy} onChange={event=>updateDraft({target:event.target.value})}>
       <option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="fr">Français</option></select>
-      <button type="button" disabled={!ready||busy||dirty()} onClick={()=>void translate()}>开始翻译</button>
-      <button type="button" aria-expanded={settings} disabled={!ready||busy} onClick={()=>{
+      <ActionButton variant="unstyled" aria-label="开始翻译" disabled={!ready||busy||dirty()} loading={operation==='translating'}
+        loadingLabel={stopping?'等待当前段返回':'正在翻译'} onClick={()=>void translate()}>开始翻译</ActionButton>
+      <ActionButton variant="unstyled" aria-expanded={settings} disabled={!ready||busy} onClick={()=>{
         if(settings)request(()=>{settingsRef.current=false;setSettings(false);});
         else {settingsRef.current=true;setSettings(true);}
-      }}>翻译设置</button>
-      {operation==='translating'?<button type="button" disabled={stopping} onClick={()=>{
+      }}>翻译设置</ActionButton>
+      {operation==='translating'?<ActionButton variant="unstyled" aria-label="停止后续翻译" loading={stopping} loadingLabel="等待当前段返回" onClick={()=>{
         if(operationRef.current!=='translating')return;
         stopRequested.current=true;setStopping(true);
-      }}>停止后续翻译</button>:null}
-      <button type="button" disabled={operation==='saving'} onClick={()=>request(onClose)}>关闭</button>
+      }}>停止后续翻译</ActionButton>:null}
+      <ActionButton variant="unstyled" disabled={operation==='saving'} onClick={()=>request(onClose)}>关闭</ActionButton>
     </div>
     {settings?<fieldset disabled={busy} className="reading-toolbar"><select aria-label="翻译渠道" value={provider} onChange={event=>changeProvider(event.target.value as Provider)}>{Object.entries(providers).map(([id,value])=><option key={id} value={id}>{value.label}</option>)}</select>
       {!['google','tencent'].includes(provider)?<><input aria-label="翻译 API 地址" value={baseUrl} onChange={event=>updateDraft({baseUrl:event.target.value})}/>{provider==='openai'?<input aria-label="翻译模型" placeholder="模型名称" value={model} onChange={event=>updateDraft({model:event.target.value})}/>:null}{provider==='azure'?<input aria-label="Azure 区域" placeholder="例如 eastasia" value={region} onChange={event=>updateDraft({region:event.target.value})}/>:null}
       <input aria-label="翻译 API Key" type="password" autoComplete="off" placeholder={configured?'已保存；留空保留':'API Key'} value={apiKey} onChange={event=>updateDraft({apiKey:event.target.value})}/></>:null}
-      <button type="button" onClick={()=>void saveSettings()}>保存翻译设置</button></fieldset>:null}
-    {error?<div role="alert" className="p-2 text-[var(--st-warn)]">{error}{resource.status==='error'?<button type="button" className="ml-2 underline" onClick={resource.reload}>重试</button>:null}</div>:null}
-    <p role="status" className="px-3 text-muted tabular-nums">{resource.status==='error'?'翻译设置读取失败':!ready?'读取翻译设置…':operation==='saving'?'保存翻译设置…':
+      <ActionButton variant="unstyled" aria-label="保存翻译设置" loading={operation==='saving'} loadingLabel="正在保存翻译设置"
+        onClick={()=>void saveSettings()}>保存翻译设置</ActionButton></fieldset>:null}
+    {error?<ActionStatus state="error" className="p-2 text-[var(--st-bad)]">{error}{resource.status==='error'?
+      <ActionButton variant="unstyled" className="ml-2 underline" onClick={resource.reload}>重试</ActionButton>:null}</ActionStatus>:null}
+    <ActionStatus role="status" icon={busy ? null : undefined} testId="reader-translation-status" className="px-3 text-muted tabular-nums"
+      state={busy||(!ready&&resource.status!=='error')?'pending':ready&&output.length>0&&!stopped&&!dirty()&&saveAction.error===null&&translateAction.error===null?'success':'idle'}>
+      {resource.status==='error'?'翻译设置读取失败':!ready?'读取翻译设置…':operation==='saving'?'保存翻译设置…':
       stopping?`已请求停止，等待当前段返回（${output.length} / ${segments.length} 段）`:
       operation==='translating'?`已翻译 ${output.length} / ${segments.length} 段`:
       stopped?`已停止，保留 ${output.length} / ${segments.length} 段`:
-      dirty()?'请先保存翻译设置':`${providers[baseline.current?.provider??provider].label}，${segments.length} 段`}</p>
+      translateAction.error!==null?`翻译未完成，已保留 ${output.length} / ${segments.length} 段`:
+      dirty()?'请先保存翻译设置':output.length?`已翻译 ${output.length} / ${segments.length} 段`:
+      `${providers[baseline.current?.provider??provider].label}，${segments.length} 段`}</ActionStatus>
     {output.map((part,index)=><div key={index} className="grid grid-cols-2 gap-3 border-b-[0.5px] border-line p-3"><div><b>{part.label}，原文</b><p className="mt-1 whitespace-pre-wrap">{part.source}</p></div><div><b>译文</b><p className="mt-1 whitespace-pre-wrap">{part.text}</p></div></div>)}
-    {output.length?<div className="reading-toolbar"><button type="button" disabled={!writable} onClick={()=>onNote(output.map(part=>`## ${part.label}\n\n${part.text}`).join('\n\n'))}>译文存为笔记</button></div>:null}
+    {output.length?<div className="reading-toolbar"><ActionButton variant="unstyled" disabled={!writable}
+      onClick={()=>onNote(output.map(part=>`## ${part.label}\n\n${part.text}`).join('\n\n'))}>译文存为笔记</ActionButton></div>:null}
     <ConfirmDialog open={confirmation!==null} title="放弃翻译设置草稿？" message={confirmation?.message??''}
       confirmLabel="放弃草稿" confirmDisabled={operation==='saving'} testId="translation-discard-dialog"
       onCancel={()=>setConfirmation(null)} onConfirm={()=>{

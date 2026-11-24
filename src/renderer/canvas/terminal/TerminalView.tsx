@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { Loader2, RefreshCw, TerminalSquare } from 'lucide-react';
+import { RefreshCw, TerminalSquare } from 'lucide-react';
 import type { TerminalSessionSnapshot, TerminalSessionOutputEvent, TerminalSessionExitEvent, TerminalSessionAttachment } from '../../../shared/types';
 import { useWorkspaceScope } from '../../app/workspace-scope';
 import type { RocClient } from '../../shared/roc-client';
@@ -12,6 +12,7 @@ import { ErrorBar } from '../../shell/ErrorBar';
 import {ConfirmDialog} from '../../shell/ConfirmDialog';
 import {useViewActive} from '../../shared/view-activity';
 import {TerminalOutputCursor} from './terminal-output-cursor';
+import {ActionStatus} from '../../shared/action-status';
 
 /** The main process owns PTYs; this view owns only an attached xterm display. */
 export type TerminalSessionViewProps = {
@@ -314,13 +315,13 @@ export function TerminalSessionView({ client, projectId = null, workspacePath, w
           className="h-full w-full px-3 py-2"
         />
         {phase === 'starting' ? (
-          <p
-            className="pointer-events-none absolute left-3 top-2 flex items-center gap-2 text-[var(--terminal-text)] text-[length:var(--font-meta-size)]"
-            role="status"
+          <ActionStatus
+            state="pending"
+            announce={false}
+            className="pointer-events-none absolute left-3 top-2 text-[var(--terminal-text)] text-[length:var(--font-meta-size)]"
           >
-            <Loader2 size={12} aria-hidden="true" className="animate-spin" />
             正在启动 {session?.shell ?? 'shell'}…
-          </p>
+          </ActionStatus>
         ) : null}
       </div>
 

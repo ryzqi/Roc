@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Search, TriangleAlert } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { LiteratureSearchResult, LiteratureCandidate } from '../../shared/schemas/literature-import';
 import type { LiteratureImportActions } from './use-literature-import-actions';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
@@ -7,7 +7,8 @@ import { ModalShell } from '../shell/ModalShell';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
 import { runIpcAction } from '../app/loaded-state';
-import { formInputClass, formPrimaryButtonClass, formSecondaryButtonClass } from '../shared/form-ui';
+import { ActionButton, formInputClass, formSecondaryButtonClass } from '../shared/form-ui';
+import { ActionStatus } from '../shared/action-status';
 import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
@@ -391,15 +392,14 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </label>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <ActionButton
                 onClick={() => void pick(setDocumentPath)}
                 data-testid="literature-import-pick-document"
-                className={`${formSecondaryButtonClass} min-h-[var(--control-height)] px-3`}
+                loading={operation === 'pick'}
+                loadingLabel="正在选择文件…"
               >
-                {operation === 'pick' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                 选择文件…
-              </button>
+              </ActionButton>
               <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-document-path">
                 {documentPath === null ? '未选择' : `${documentPath}（${documentKindLabel(documentPath)}）`}
               </span>
@@ -438,18 +438,20 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   </button>
                 )}
                 {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
-                  <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+                  <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                     引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
-                  </p>
+                  </ActionStatus>
                 ) : null}
                 {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
                   <p className="text-muted text-[length:var(--font-micro-size)]">无法从题名生成引用键，请填写引用键。</p>
                 ) : null}
               </>
             ) : null}
-            <button
-              type="button"
+            <ActionButton
+              variant="primary"
               disabled={!documentReady || pending}
+              loading={operation === 'import'}
+              loadingLabel="正在添加文档…"
               onClick={() => {
                 const path = documentPath;
                 if (path === null) {
@@ -467,11 +469,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 });
               }}
               data-testid="literature-import-document-submit"
-              className={`${formPrimaryButtonClass} mt-1 self-start`}
+              className="mt-1 self-start"
             >
-              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
               添加文档
-            </button>
+            </ActionButton>
           </div>
         ) : null}
 
@@ -489,13 +490,15 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-doi"
             />
             {doiInput.trim().length > 0 && normalizedDoi === null ? (
-              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+              <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 请输入有效 DOI 或 doi.org 链接，例如 10.xxxx/yyyy。
-              </p>
+              </ActionStatus>
             ) : null}
-            <button
-              type="button"
+            <ActionButton
+              variant="primary"
               disabled={normalizedDoi === null || pending}
+              loading={operation === 'import'}
+              loadingLabel="正在添加文献…"
               onClick={() => {
                 if (normalizedDoi === null) {
                   return;
@@ -503,11 +506,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importDoi(normalizedDoi));
               }}
               data-testid="literature-import-doi-submit"
-              className={`${formPrimaryButtonClass} mt-1 self-start`}
+              className="mt-1 self-start"
             >
-              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
               添加文献
-            </button>
+            </ActionButton>
           </div>
         ) : null}
 
@@ -533,22 +535,23 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <ActionButton
                 onClick={() => void pick(setBibliographyPath)}
                 data-testid="literature-import-pick-bibliography"
-                className={`${formSecondaryButtonClass} min-h-[var(--control-height)] px-3`}
+                loading={operation === 'pick'}
+                loadingLabel="正在选择文件…"
               >
-                {operation === 'pick' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                 选择文件…
-              </button>
+              </ActionButton>
               <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-bibliography-path">
                 {bibliographyPath ?? '未选择'}
               </span>
             </div>
-            <button
-              type="button"
+            <ActionButton
+              variant="primary"
               disabled={bibliographyPath === null || pending}
+              loading={operation === 'import'}
+              loadingLabel="正在导入引用文件…"
               onClick={() => {
                 const path = bibliographyPath;
                 if (path === null) {
@@ -557,11 +560,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importBibliographyFile(path, bibliographyFormat));
               }}
               data-testid="literature-import-bibliography-submit"
-              className={`${formPrimaryButtonClass} mt-1 self-start`}
+              className="mt-1 self-start"
             >
-              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
               添加引用文件
-            </button>
+            </ActionButton>
           </div>
         ) : null}
 
@@ -648,13 +650,15 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-manual-key"
             />
             {effectiveManualKey.length > 0 && !isCitationKeyValid(effectiveManualKey) ? (
-              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+              <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
-              </p>
+              </ActionStatus>
             ) : null}
-            <button
-              type="button"
+            <ActionButton
+              variant="primary"
               disabled={!manualReady || pending}
+              loading={operation === 'import'}
+              loadingLabel="正在添加文献…"
               onClick={() => {
                 const year = manualYearParsed;
                 const doi = manualDoi.trim().length === 0 ? null : normalizeDoi(manualDoi);
@@ -675,11 +679,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 );
               }}
               data-testid="literature-import-manual-submit"
-              className={`${formPrimaryButtonClass} mt-1 self-start`}
+              className="mt-1 self-start"
             >
-              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
               添加文献
-            </button>
+            </ActionButton>
           </div>
         ) : null}
 
@@ -699,9 +702,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 className={fieldClass}
                 data-testid="literature-import-search"
               />
-              <button
-                type="button"
+              <ActionButton
+                variant="primary"
                 disabled={searchQuery.trim().length === 0 || pending}
+                loading={operation === 'search'}
+                loadingLabel="正在检索…"
                 onClick={() => {
                   const query = arxivId ?? searchQuery.trim();
                   const sources: LiteratureSearchSource[] = arxivId === null ? SEARCH_SOURCES : ['arxiv'];
@@ -720,11 +725,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                     });
                 }}
                 data-testid="literature-import-search-submit"
-                className={formPrimaryButtonClass}
               >
-                {operation === 'search' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Search size={12} aria-hidden="true" />}
-                检索
-              </button>
+                <Search size={12} aria-hidden="true" />检索
+              </ActionButton>
             </div>
             {arxivId === null ? null : (
               <p className="text-muted text-[length:var(--font-micro-size)]">
@@ -732,15 +735,16 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </p>
             )}
             {searchError === null ? null : (
-              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+              <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 {searchError}
-              </p>
+              </ActionStatus>
             )}
             {searchResult === null ? null : (
-              <p role="status" className="text-muted tabular-nums text-[length:var(--font-micro-size)]">
+              <ActionStatus state={searchResult.status === 'failed' ? 'error' : searchResult.status === 'partial' ? 'idle' : 'success'}
+                role="status" className="text-muted tabular-nums text-[length:var(--font-micro-size)]">
                 {searchResult.status === 'failed' ? '检索失败，请稍后重试。' : searchResult.status === 'partial' ? '部分来源未完成，以下为可用结果。' : `找到 ${searchResult.total} 篇候选，尚未加入文献库。`}
                 {searchResult.warnings.join(' ')}
-              </p>
+              </ActionStatus>
             )}
             {searchHits.length === 0 ? null : (
               <ul className="flex flex-col pe-1" aria-label="检索结果" tabIndex={0}>
@@ -756,23 +760,22 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         ) : null}
 
         {pending ? (
-          <p role="status" className="flex items-center gap-2 text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-pending">
-            <Loader2 size={12} aria-hidden="true" className="animate-spin" />
+          <ActionStatus state="pending" icon={tab === 'search' && operation === 'import' ? undefined : null}
+            className="text-muted text-[length:var(--font-micro-size)]" testId="literature-import-pending">
             {operationLabels[operation!]}
-          </p>
+          </ActionStatus>
         ) : null}
 
         {message === null ? null : (
-          <p
-            role={message.tone === 'ok' ? 'status' : 'alert'}
-            data-testid="literature-import-message"
-            className={`flex items-center gap-2 text-[length:var(--font-meta-size)] ${
+          <ActionStatus
+            state={message.tone === 'ok' ? 'success' : 'error'}
+            testId="literature-import-message"
+            className={`text-[length:var(--font-meta-size)] ${
               message.tone === 'ok' ? 'text-[var(--st-ok)]' : 'text-[var(--st-bad)]'
             }`}
           >
-            {message.tone === 'ok' ? <CheckCircle2 size={12} aria-hidden="true" /> : <TriangleAlert size={12} aria-hidden="true" />}
             {message.text}
-          </p>
+          </ActionStatus>
         )}
 
         </div>

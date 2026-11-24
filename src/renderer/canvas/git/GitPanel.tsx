@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GitBranch, History, Loader2, RefreshCw, Upload, X } from 'lucide-react';
+import { GitBranch, History, LoaderCircle, RefreshCw, Upload, X } from 'lucide-react';
 import { BACKEND_ERROR_CODES } from '../../app/loaded-state';
 import type { RocClient } from '../../shared/roc-client';
 import { ErrorBar } from '../../shell/ErrorBar';
@@ -19,6 +19,8 @@ import { GitBranchSwitcher } from './GitBranchSwitcher';
 import { GitChangeLists } from './GitChangeLists';
 import { GitFileDiff } from './GitFileDiff';
 import {useGitCommitDraftGuard, type GitCommitDrafts} from './git-commit-draft';
+import {ActionButton} from '../../shared/form-ui';
+import {ActionStatus} from '../../shared/action-status';
 import '../tools-workspace.css';
 
 /**
@@ -164,7 +166,11 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
           title={git.cancellingPush ? '正在请求取消当前推送' : '停止当前推送'}
           className="flex min-h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         >
-          <X size={12} aria-hidden="true" />
+          {git.cancellingPush ? (
+            <span className="inline-flex shrink-0 motion-safe:animate-spin">
+              <LoaderCircle size={12} aria-hidden="true" />
+            </span>
+          ) : <X size={12} aria-hidden="true" />}
           <span className="text-[length:var(--font-micro-size)]">{git.cancellingPush ? '请求取消中…' : '取消'}</span>
         </button>
       ) : (
@@ -180,20 +186,18 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
           <span className="text-[length:var(--font-micro-size)]">推送</span>
         </button>
       )}
-      <button
-        type="button"
+      <ActionButton
+        variant="unstyled"
         disabled={busy || workspacePath === null}
+        loading={git.pending === 'refresh'}
+        loadingLabel=""
         onClick={() => void git.refresh()}
         aria-label="刷新 Git 状态"
         data-testid="git-refresh"
         className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] items-center justify-center rounded-control text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
       >
-        {git.pending === 'refresh' ? (
-          <Loader2 size={12} aria-hidden="true" className="animate-spin" />
-        ) : (
-          <RefreshCw size={12} aria-hidden="true" />
-        )}
-      </button>
+        <RefreshCw size={12} aria-hidden="true" />
+      </ActionButton>
     </div>
   );
 
@@ -217,17 +221,17 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
         className="w-full resize-none rounded-control border-[0.5px] border-line bg-surface px-2 py-1.5 text-ink placeholder:text-subtle disabled:opacity-60"
       />
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <ActionButton
+          variant="unstyled"
           disabled={!commitState.enabled}
+          loading={git.pending === 'commit'}
+          loadingLabel={<span>提交中…</span>}
           onClick={() => void runCommit()}
           data-testid="git-commit"
-          aria-busy={git.pending === 'commit'}
           className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 disabled:opacity-40"
         >
-          {git.pending === 'commit' ? <Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : null}
-          <span>{git.pending === 'commit' ? '提交中…' : <>提交（<bdi className="tabular-nums">{(git.snapshot?.changedFiles ?? 0).toLocaleString()}</bdi> 个文件）</>}</span>
-        </button>
+          <span>提交（<bdi className="tabular-nums">{(git.snapshot?.changedFiles ?? 0).toLocaleString()}</bdi> 个文件）</span>
+        </ActionButton>
         <span className="min-w-0 flex-1 truncate text-muted text-[length:var(--font-micro-size)]">
           {commitState.enabled || git.pending === 'commit' ? '' : commitState.reason}
         </span>
@@ -242,10 +246,10 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
         提交历史
       </h3>
       {git.lastCommit === null ? null : (
-        <p className="px-1 py-1 text-muted text-[length:var(--font-micro-size)]" data-testid="git-last-commit">
+        <ActionStatus state="success" className="w-full px-1 py-1 text-muted text-[length:var(--font-micro-size)]" testId="git-last-commit">
           本次会话提交 <span className="font-mono">{git.lastCommit.commitSha.slice(0, 8)}</span>，{' '}
           {git.lastCommit.commitMessage}
-        </p>
+        </ActionStatus>
       )}
     </section>
   );
@@ -273,9 +277,9 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
       )}
       {git.diffStatError === null ? null : <span className="text-[var(--st-warn)]">diff --stat：{git.diffStatError}</span>}
       {git.lastPush === null ? null : (
-        <span className="text-muted" data-testid="git-last-push">
+        <ActionStatus state="success" className="text-muted" testId="git-last-push">
           最近推送：{git.lastPush.remoteName}/{git.lastPush.branch}
-        </span>
+        </ActionStatus>
       )}
     </div>
   );
@@ -321,10 +325,9 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
   if (git.phase === 'loading' && git.snapshot === null) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-2 p-2" data-testid="git-panel" data-state="loading">
-        <p className="flex items-center gap-2 text-muted" role="status">
-          <Loader2 size={13} aria-hidden="true" className="animate-spin" />
+        <ActionStatus state="pending" className="text-muted">
           正在读取 Git 状态…
-        </p>
+        </ActionStatus>
         {footer}
       </div>
     );
@@ -402,6 +405,10 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
       data-state="ready"
     >
       {header}
+      {git.pending === 'push' ? <ActionStatus state="pending" icon={git.cancellingPush ? null : undefined}
+        className="shrink-0 px-1 text-muted text-[length:var(--font-micro-size)]" testId="git-push-status">
+        {git.cancellingPush ? '正在请求取消推送…' : '正在推送…'}
+      </ActionStatus> : null}
       {commitBox}
       {git.actionError === null || discardTarget !== null ? null : (
         <ErrorBar error={{level: 'page', message: git.actionError}} onDismiss={git.clearActionError} />

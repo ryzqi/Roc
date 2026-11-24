@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import type { LiteratureImportResult, LiteratureSearchResult, LiteratureSearchProgress } from '../../shared/schemas/literature-import';
-import { formButtonClass, formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
+import { ActionButton, formButtonClass, formInputClass } from '../shared/form-ui';
+import { ActionStatus } from '../shared/action-status';
 import { useImeGuard } from '../shared/hooks/use-ime-guard';
 import { EmptyState } from '../shell/EmptyState';
 import { LiteratureCandidateReview } from './LiteratureCandidateReview';
@@ -58,7 +59,7 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ result: LiteratureImportResult; titles: string[] } | null>(null);
   const receiptRef = useRef<HTMLElement>(null);
-  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (viewSelected && receipt !== null) {receiptRef.current?.focus(); receiptRef.current?.scrollIntoView({block: 'nearest'});}
   }, [receipt]);
@@ -143,11 +144,11 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
         <input id="discovery-query" value={query} disabled={pending !== null} onChange={event => setQuery(event.target.value)} className={formInputClass}
           onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
           onKeyDown={event => { if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault(); }} />
-        <button type="submit" disabled={pending !== null || query.trim() === '' || sources.length === 0}
-          className={selected.size > 0 ? formButtonClass : formPrimaryButtonClass} data-testid="discovery-submit" aria-busy={pending === 'search'}>
-          {pending === 'search' ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Search size={14} aria-hidden="true" />}
-          {pending === 'search' ? '搜索中' : '搜索'}
-        </button>
+        <ActionButton type="submit" variant={selected.size > 0 ? 'secondary' : 'primary'}
+          disabled={pending !== null || query.trim() === '' || sources.length === 0}
+          data-testid="discovery-submit" loading={pending === 'search'} loadingLabel="搜索中">
+          <Search size={14} aria-hidden="true" />搜索
+        </ActionButton>
       </div>
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="发表时间">
         {([0, 2, 5] as const).map(value => <button key={value} type="button" aria-pressed={years === value} disabled={pending !== null}
@@ -169,7 +170,7 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
 
     {viewSelected ? <div className="discovery-result-workspace" data-preview-open={previewOpen}>
     <div ref={resultList} className="discovery-result-list" aria-busy={pending === 'search'}>
-      {error === null ? null : <p ref={errorRef} tabIndex={-1} role="alert" className="mb-3 text-[var(--st-bad)]">{error}</p>}
+      {error === null ? null : <ActionStatus ref={errorRef} tabIndex={-1} state="error" className="mb-3 text-[var(--st-bad)]">{error}</ActionStatus>}
       {pending !== 'search' ? null : <section className="mb-4 flex flex-col gap-2" aria-label="来源检索进度" data-testid="discovery-source-progress">
         <ul className="flex flex-wrap gap-x-4 gap-y-2 text-muted">{sources.map(source => {
           const completed = progress.find(item => item.source.source === source)?.source;
@@ -187,7 +188,10 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
         icon={pending === 'search' ? Loader2 : Search} title={pending === 'search' ? '正在检索论文…' : '搜索论文后选择加入项目'} /> : <>
         <div role="status" className="flex flex-col gap-2" data-testid="discovery-source-report">
           <h3 className="break-words font-medium text-ink">{resultQuery}</h3>
-          <p className="tabular-nums text-ink">{result.status === 'failed' ? '各来源均未完成检索' : result.status === 'partial' ? '部分来源未完成，已保留可用结果' : '检索已返回'}，{result.total.toLocaleString('zh-CN')} 篇候选</p>
+          <ActionStatus state={result.status === 'failed' ? 'error' : result.status === 'partial' ? 'idle' : 'success'}
+            announce={false} className="tabular-nums text-ink">
+            {result.status === 'failed' ? '各来源均未完成检索' : result.status === 'partial' ? '部分来源未完成，已保留可用结果' : '检索已返回'}，{result.total.toLocaleString('zh-CN')} 篇候选
+          </ActionStatus>
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-muted">
             {result.sources.map(source => <li key={source.source}>
               {SOURCES.find(entry => entry.id === source.source)?.label ?? source.source}：{SOURCE_STATUS[source.status]}
@@ -218,15 +222,18 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
             onSelectionChange={checked => setSelected(current => {
               const next = new Set(current); if (checked && next.size < 30) next.add(candidate.candidateId); else if (!checked) next.delete(candidate.candidateId); return next;
             })} onAdd={() => void add([candidate.candidateId])} />)}</ul>
-          {result.nextOffset == null ? null : <button type="button" className={`${formButtonClass} my-3`} data-testid="discovery-load-more"
-            disabled={pending !== null} aria-busy={pending === 'more'} onClick={() => void loadMore()}>
-            {pending === 'more' ? '正在加载…' : `加载更多（${result.candidates.length} / ${result.total}）`}
-          </button>}
+          {result.nextOffset == null ? null : <ActionButton className="my-3" data-testid="discovery-load-more"
+            disabled={pending !== null} loading={pending === 'more'} loadingLabel="正在加载…" onClick={() => void loadMore()}>
+            加载更多（{result.candidates.length} / {result.total}）
+          </ActionButton>}
         </>}
       </>}
       {receipt === null ? null : <section ref={receiptRef} tabIndex={-1} aria-label="添加结果" data-testid="discovery-receipt" className="mt-4 border-t-[0.5px] border-line pt-4">
-        <p role="status" className="tabular-nums">已收录 {receipt.result.counts.created + receipt.result.counts.linked} 篇，重复 {receipt.result.counts.alreadyPresent} 篇，
-          需处理 {receipt.result.counts.skippedArchived + receipt.result.counts.cancelled + receipt.result.counts.notProcessed} 篇，失败 {receipt.result.counts.failed} 篇</p>
+        <ActionStatus state={receipt.result.status === 'completed' ? 'success' : receipt.result.counts.failed > 0 ? 'error' : 'idle'}
+          role="status" className="tabular-nums">
+          已收录 {receipt.result.counts.created + receipt.result.counts.linked} 篇，重复 {receipt.result.counts.alreadyPresent} 篇，
+          需处理 {receipt.result.counts.skippedArchived + receipt.result.counts.cancelled + receipt.result.counts.notProcessed} 篇，失败 {receipt.result.counts.failed} 篇
+        </ActionStatus>
         <p className="mt-2 text-muted">全文、解析与索引进度见文献库。</p>
         <ul className="mt-2 space-y-2">{receipt.result.items.map(item => <li key={item.entryKey} className="text-muted">
           {item.inputPositions.map(index => receipt.titles[index]).join('、')}：{DISPOSITION[item.disposition]}{item.errorCode === null ? '' : `（${item.errorCode}）`}
@@ -243,11 +250,11 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
       });}}/> : null}
     </div> : null}
     {selected.size === 0 ? null : <div className="flex shrink-0 items-center justify-end gap-2 border-t-[0.5px] border-line p-3">
-      <button type="button" className={formPrimaryButtonClass} disabled={pending !== null || !writable} aria-busy={pending === 'add'}
+      <ActionButton variant="primary" disabled={pending !== null || !writable}
+        loading={pending === 'add' && [...selected].every(id => addingIds.has(id))} loadingLabel="添加中"
         data-testid="discovery-add-selected" onClick={() => void add([...selected])}>
-        {pending === 'add' ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
-        {pending === 'add' ? '添加中' : `加入文献库（${selected.size} 篇）`}
-      </button>
+        加入文献库（{selected.size} 篇）
+      </ActionButton>
     </div>}
   </section></ReadingViewBoundary>;
 }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
-import { Copy, FileWarning, Loader2, Save, X } from 'lucide-react';
+import { Copy, FileWarning, Save, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import { ErrorBar } from '../../shell/ErrorBar';
 import { EmptyState } from '../../shell/EmptyState';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
-import { formPrimaryButtonClass, formSecondaryButtonClass } from '../../shared/form-ui';
+import { ActionButton, formPrimaryButtonClass, formSecondaryButtonClass } from '../../shared/form-ui';
+import {ActionStatus} from '../../shared/action-status';
 import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback';
 import { formatBytes } from '../../shared/format';
 import { isEditablePreviewKind, previewKindFor } from '../../workspace/paths';
@@ -77,7 +78,7 @@ export function FilePreview(props: FilePreviewProps): React.JSX.Element {
   if (previewKindFor(props.relativePath) === 'notebook') {
     return (
       <LazyBoundary resetKey={JSON.stringify([props.workspacePath, props.relativePath])}
-        fallback={<p role="status" className="p-3 text-muted">读取 Notebook 中…</p>}>
+        fallback={<ActionStatus state="pending" className="p-3 text-muted">读取 Notebook 中…</ActionStatus>}>
         <NotebookPreview client={props.client} projectId={props.projectId} workspacePath={props.workspacePath}
           relativePath={props.relativePath} writable={props.writable} onClose={props.onClose} />
       </LazyBoundary>
@@ -179,10 +180,9 @@ function OrdinaryFilePreview({
     if (resource.status === 'error' && resource.data === null) return null;
     if (resource.status === 'loading' && resource.data === null) {
       return (
-        <p className="flex items-center gap-2 p-4 text-muted" role="status" data-testid="file-preview-loading">
-          <Loader2 size={13} aria-hidden="true" className="animate-spin" />
+        <ActionStatus state="pending" className="p-4 text-muted" testId="file-preview-loading">
           正在读取文件…
-        </p>
+        </ActionStatus>
       );
     }
 
@@ -246,7 +246,7 @@ function OrdinaryFilePreview({
     }
 
     if (isMarkdown && renderMarkdown && loaded.kind === 'text') {
-      return <div className="tools-markdown-preview"><LazyBoundary fallback={<p role="status">正在渲染…</p>}><ScientificMarkdown text={draft ?? content}/></LazyBoundary></div>;
+      return <div className="tools-markdown-preview"><LazyBoundary fallback={<ActionStatus state="pending">正在渲染…</ActionStatus>}><ScientificMarkdown text={draft ?? content}/></LazyBoundary></div>;
     }
 
     if (editable && draft !== null) {
@@ -298,9 +298,9 @@ function OrdinaryFilePreview({
             未保存
           </span>
         ) : savedAt === null ? null : (
-          <span className="text-[var(--st-ok)] text-[length:var(--font-micro-size)]" data-testid="file-preview-saved">
+          <ActionStatus state="success" className="text-[var(--st-ok)] text-[length:var(--font-micro-size)]" testId="file-preview-saved">
             已保存
-          </span>
+          </ActionStatus>
         )}
         {onClose === undefined ? null : (
           <button
@@ -354,17 +354,18 @@ function OrdinaryFilePreview({
             >
               <span className="text-[length:var(--font-micro-size)]">放弃</span>
             </button>
-            <button
-              type="button"
+            <ActionButton
+              variant="unstyled"
               onClick={() => void save()}
               disabled={saving || !dirty}
+              loading={saving}
+              loadingLabel={<span className="text-[length:var(--font-micro-size)]">保存中…</span>}
               data-testid="file-preview-save"
-              aria-busy={saving}
               className={formPrimaryButtonClass}
             >
-              {saving ? <Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <Save size={12} aria-hidden="true" />}
-              <span className="text-[length:var(--font-micro-size)]">{saving ? '保存中…' : '保存'}</span>
-            </button>
+              <Save size={12} aria-hidden="true" />
+              <span className="text-[length:var(--font-micro-size)]">保存</span>
+            </ActionButton>
           </>
         )}
       </div>
@@ -388,9 +389,9 @@ function OrdinaryFilePreview({
       )}
 
       {copy.error === null ? null : (
-        <p role="alert" className="shrink-0 px-3 py-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+        <ActionStatus state="error" className="shrink-0 px-3 py-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
           {copy.error}
-        </p>
+        </ActionStatus>
       )}
 
       {resource.status === 'error' ? (

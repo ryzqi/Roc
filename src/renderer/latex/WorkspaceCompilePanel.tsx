@@ -1,10 +1,12 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Download, FileText, Loader2, Play, Square } from 'lucide-react';
+import { Download, FileText, Play, Square } from 'lucide-react';
 import type { WorkspaceLatexCompileResult } from '../../shared/schemas/research-production';
 import type { RocClient } from '../shared/roc-client';
 import { useAsyncAction } from '../app/use-async-resource';
 import { primaryButtonClass } from './panel-shell';
 import {WorkspaceProblems} from './WorkspaceProblems';
+import {ActionButton} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 
 type Props = {
   client: RocClient;
@@ -76,28 +78,38 @@ export function WorkspaceCompilePanel({ client, projectId, writable, files, befo
           {candidates.length === 0 ? <option value="">没有 LaTeX 主文件</option> : candidates.map(file => <option key={file.path} value={file.path}>{file.path}</option>)}
         </select>
       </label>
-      <button type="button" className={primaryButtonClass} disabled={busy || !writable || !entryPath}
+      <ActionButton variant="unstyled" className={primaryButtonClass} disabled={busy || !writable || !entryPath}
+        loading={busy} loadingLabel={requestId === null ? '正在保存…' : '正在编译…'}
         data-testid="writing-compile" onClick={() => void run()}>
-        {busy ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
-        {busy ? requestId === null ? '正在保存…' : '正在编译…' : '编译'}
-      </button>
-      {requestId !== null ? <button type="button" className="authoring-secondary" disabled={cancel.pending || cancelRequested}
-        onClick={() => void cancelRun()} data-testid="writing-compile-cancel"><Square size={14} aria-hidden="true" />{cancel.pending || cancelRequested ? '正在取消…' : '取消编译'}</button> : null}
+        <Play size={14} aria-hidden="true" />编译
+      </ActionButton>
+      {requestId !== null ? <ActionButton variant="unstyled" className="authoring-secondary"
+        loading={cancel.pending || cancelRequested} loadingLabel="正在取消…"
+        disabled={cancel.pending || cancelRequested}
+        onClick={() => void cancelRun()} data-testid="writing-compile-cancel">
+        <Square size={14} aria-hidden="true" />取消编译
+      </ActionButton> : null}
       {output?.outputPath && output.pdfHash ? <>
         <button type="button" className="authoring-secondary" disabled={busy} onClick={() => onPreview(output.outputPath!)}><FileText size={14} aria-hidden="true" />预览 PDF</button>
-        <button type="button" className="authoring-secondary" disabled={busy || exportPdf.pending} data-testid="writing-export"
+        <ActionButton variant="unstyled" className="authoring-secondary" disabled={busy || exportPdf.pending}
+          loading={exportPdf.pending} loadingLabel="正在导出…" data-testid="writing-export"
           onClick={() => { setExported(null); void exportPdf.run(output.outputPath!, output.pdfHash!).then(response => { if (response.ok) setExported(response.data.path); }); }}>
-          {exportPdf.pending ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}{exportPdf.pending ? '正在导出…' : '导出 PDF'}
-        </button>
+          <Download size={14} aria-hidden="true" />导出 PDF
+        </ActionButton>
       </> : null}
     </div>
-    {busy ? <p role="status">{requestId === null ? '正在保存当前草稿' : cancelRequested ? '正在停止编译，等待完成回执' : `正在编译 ${entryPath}`}</p> : null}
-    {result !== null ? <p role="status" data-testid="writing-compile-result">
+    {busy ? <ActionStatus state="pending" icon={null} className="mt-2 w-full text-muted">
+      {requestId === null ? '正在保存当前草稿' : cancelRequested ? '正在停止编译，等待完成回执' : `正在编译 ${entryPath}`}
+    </ActionStatus> : null}
+    {result !== null ? <ActionStatus
+      state={result.status === 'ready' ? 'success' : result.status === 'cancelled' ? 'idle' : 'error'}
+      role={result.status === 'cancelled' ? 'status' : undefined}
+      className="mt-2 w-full text-muted" testId="writing-compile-result">
       {result.status === 'ready' ? `上次编译成功：${result.entryPath}` : result.status === 'cancelled' ? '编译已取消' : '编译失败'}
       {result.outputPath ? <span className="authoring-output-path" title={result.outputPath}>{result.outputPath}</span> : null}
-    </p> : null}
-    {error ? <p role="alert">{error}</p> : null}
-    {exported ? <p role="status">已导出至 {exported}</p> : null}
+    </ActionStatus> : null}
+    {error ? <ActionStatus state="error" className="mt-2 w-full text-muted">{error}</ActionStatus> : null}
+    {exported ? <ActionStatus state="success" className="mt-2 w-full text-muted">已导出至 {exported}</ActionStatus> : null}
   </section>}
   {children}
   {result !== null && result.diagnostics.length > 0 ? <WorkspaceProblems key={result.requestId} result={result} onDiagnostic={onDiagnostic}/> : null}

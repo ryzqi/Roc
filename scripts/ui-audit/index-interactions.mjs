@@ -61,7 +61,7 @@ const families = [
   [/\/settings\/sections\/RagSection\.tsx$/, 'S30', 'rag-settings', 'F08', 'P1', 'P1;P5'],
   [/\/settings\//, 'S31', 'settings', 'F11', 'P0', 'P1;P3;P5'],
   [/\/artifacts\//, 'S32', 'artifacts', '', 'P0', 'P5'],
-  [/\/shared\//, 'S33', 'shared-feedback', 'F13;F14', 'P1', 'P2'],
+  [/\/shared\//, 'S33', 'shared-feedback', 'F13;F14', 'P1', 'P2;P5'],
   [/./, 'S34', 'startup-inline-commands', '', 'P1', 'P0;P5']
 ];
 const columns = [

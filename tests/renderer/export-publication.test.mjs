@@ -9,12 +9,13 @@ import {_electron} from '@playwright/test';
 import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
-let api, directory, app, page, active;
+let api, directory, artifacts, app, page, active;
 const fixtures = [], errors = [], calls = [];
-const artifacts = join(process.cwd(), '.artifacts/research-optimization/export-publication-ui');
 before(async () => {
   api = await loadResearchTestApi();
-  directory = mkdtempSync(join(tmpdir(), 'roc-export-ui-')); mkdirSync(artifacts, {recursive: true});
+  directory = mkdtempSync(join(tmpdir(), 'roc-export-ui-'));
+  artifacts = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');
+  mkdirSync(artifacts, {recursive: true});
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';

@@ -7,6 +7,8 @@ import type {PaperAcquisitionJob} from '../../shared/schemas/literature-acquisit
 import {useAsyncResource} from '../app/use-async-resource';
 import {runIpcAction} from '../app/loaded-state';
 import {useVisiblePolling} from '../shared/view-activity';
+import {ActionButton} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import type {RocClient} from '../shared/roc-client';
 import type {LiteratureImportOutcome} from './use-literature-store';
 import {acquisitionPageProgress, acquisitionStageLabels, acquisitionStatusLabels, canCancelAcquisition,
@@ -107,9 +109,9 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
       <button type="button" className={buttonClass} aria-expanded={preferences} onClick={() => setPreferences(value => !value)} hidden={!expanded && !preferences}>获取偏好</button>
     </div>
     {preferences ? <AcquisitionPreferences client={client} writable={writable}/> : null}
-    {page.error !== null ? <p role="alert" className="break-words px-3 py-1 text-[var(--st-bad)]">{page.error}</p> : null}
-    {actionError !== null ? <p role="alert" className="break-words px-3 py-1 text-[var(--st-bad)]">{actionError}</p> : null}
-    {notice !== null ? <p role="status" className="px-3 py-1 text-muted">{notice}</p> : null}
+    {page.error !== null ? <ActionStatus state="error" className="px-3 py-1 text-[var(--st-bad)]">{page.error}</ActionStatus> : null}
+    {actionError !== null ? <ActionStatus state="error" className="px-3 py-1 text-[var(--st-bad)]">{actionError}</ActionStatus> : null}
+    {notice !== null ? <ActionStatus state="success" className="px-3 py-1 text-muted">{notice}</ActionStatus> : null}
     <div id="literature-processing-details" hidden={!expanded} className="max-h-60 overflow-y-auto px-3 pb-2">
       {page.data !== null && jobs.length > 0 ? <p className="flex flex-wrap gap-x-4 gap-y-1 py-2 text-muted tabular-nums" aria-label="本页处理概况">
         <span>元数据 {progress.metadata} 篇</span><span>PDF {progress.pdf} 篇</span>
@@ -153,10 +155,10 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
           </div>
           <div className="flex flex-wrap gap-1">
             {job.receipt?.relativePath ? <button type="button" className={buttonClass} onClick={() => {if (job.receipt?.relativePath) onOpenPdf(job.receipt.relativePath);}} aria-label={`打开 PDF：${job.title}`}>打开 PDF</button> : null}
-            {canRetryAcquisition(job) ? <button type="button" data-processing-retry className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'retry')} aria-label={`重试处理：${job.title}`}>重试</button> : null}
-            {canCancelAcquisition(job) ? <button type="button" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'cancel')} aria-label={`取消处理：${job.title}`}>取消处理</button> : null}
-            {canRetryAcquisition(job) ? <button type="button" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'attach')} aria-label={`手动补充 PDF：${job.title}`}>手动补充 PDF</button> : null}
-            {pending === job.id ? <span className="self-center text-muted">正在提交…</span> : null}
+            {canRetryAcquisition(job) ? <ActionButton variant="unstyled" data-processing-retry className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'retry')} aria-label={`重试处理：${job.title}`}>重试</ActionButton> : null}
+            {canCancelAcquisition(job) ? <ActionButton variant="unstyled" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'cancel')} aria-label={`取消处理：${job.title}`}>取消处理</ActionButton> : null}
+            {canRetryAcquisition(job) ? <ActionButton variant="unstyled" className={buttonClass} disabled={!writable || pending !== null} onClick={() => void act(job, 'attach')} aria-label={`手动补充 PDF：${job.title}`}>手动补充 PDF</ActionButton> : null}
+            {pending === job.id ? <ActionStatus state="pending" className="self-center text-muted">正在提交…</ActionStatus> : null}
           </div>
         </li>)}
       </ul>

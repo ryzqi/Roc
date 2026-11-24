@@ -7,14 +7,14 @@ import electronPath from 'electron';
 import { _electron, expect } from '@playwright/test';
 import { buildViteRenderer } from './fixtures/build-vite-renderer.mjs';
 
-let directory, app, page;
+let directory, artifactDirectory, app, page;
 const errors = [];
-const artifactDirectory = join(process.cwd(), '.artifacts/file-preview-dialog');
 const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
 const receipts = [];
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-file-preview-dialog-'));
+  artifactDirectory = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');
   await mkdir(artifactDirectory, { recursive: true });
   await buildViteRenderer({ directory, style: 'html,body,#root{height:100%;margin:0}', script: `
     import React, {useState} from 'react';

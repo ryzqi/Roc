@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { DownloadCloud, Package, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
-import { FormNote, FormSection, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
+import { ActionButton, FormNote, FormSection, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
+import { ActionStatus } from '../../shared/action-status';
 import {
   builtinSourceActionLabel,
   builtinSourceSummary,
@@ -59,6 +60,10 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
   const builtin = skills.builtin;
   const builtinSnapshot = builtin.snapshot;
   const busy = skills.busy || builtinSnapshot?.updating === true;
+  const builtinPendingLabel = builtin.restore.pending ? '正在安装内置版本…' :
+    builtin.check.pending || builtinSnapshot?.updating === true ? '正在检查并同步内置技能源…' :
+      builtin.autoUpdate.pending ? '正在保存自动检查偏好…' :
+        builtin.status === 'loading' ? '正在读取内置技能源…' : null;
 
   return (
     <div className="management-skills" data-testid="mgmt-skills">
@@ -70,37 +75,44 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-skills-summary">
             {skillSummary(skills.skills)}
           </span>
-          <button
-            type="button"
+          <ActionButton
+            variant="compact"
             data-testid="mgmt-skills-reload"
-            disabled={skills.status === 'loading' || busy}
+            disabled={busy}
+            loading={skills.status === 'loading'}
+            loadingLabel="正在读取技能…"
             onClick={() => skills.reload()}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className="inline-flex items-center gap-1"
           >
             <RefreshCw size={11} aria-hidden="true" />
             重新读取
-          </button>
+          </ActionButton>
           {skills.error === null ? null : (
-            <FormNote tone="warn" testId="mgmt-skills-error">
+            <ActionStatus state="error" className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" testId="mgmt-skills-error">
               {skills.error}
-            </FormNote>
+            </ActionStatus>
           )}
           {/*启停 / 导入 / 删除共用一个错误状态：一处渲染，失败不会被吞掉。*/}
           {skills.toggleEnabled.error === null ? null : (
-            <FormNote tone="warn" testId="mgmt-skills-mutation-error">
+            <ActionStatus state="error" className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" testId="mgmt-skills-mutation-error">
               操作失败：{skills.toggleEnabled.error}
-            </FormNote>
+            </ActionStatus>
           )}
         </div>
+        {skills.status === 'loading' ? <ActionStatus state="pending" icon={null}
+          className="text-muted text-[length:var(--font-meta-size)]" testId="mgmt-skills-loading">
+          {skills.skills.length === 0 ? '正在读取技能目录…' : '正在更新技能目录…'}
+        </ActionStatus> : null}
+        {skills.toggleEnabled.pending ? <ActionStatus state="pending"
+          className="text-muted text-[length:var(--font-meta-size)]">正在更新技能启用状态…</ActionStatus> : null}
 
         <label className="management-search">
           <Search size={14} aria-hidden="true" />
           <span className="sr-only">搜索已安装技能</span>
           <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索技能名称或用途…" className={formInputClass} data-testid="mgmt-skills-search" />
         </label>
-        {skills.status === 'loading' && skills.skills.length === 0 ? (
-          <FormNote testId="mgmt-skills-loading">正在读取技能目录…</FormNote>
-        ) : visibleSkills.length === 0 ? <p className="management-list-empty" data-testid="mgmt-skills-empty">{skills.skills.length === 0 ? '尚未安装技能' : '没有符合条件的技能'}</p> : (
+        {skills.status === 'loading' && skills.skills.length === 0 ? null :
+          visibleSkills.length === 0 ? <p className="management-list-empty" data-testid="mgmt-skills-empty">{skills.skills.length === 0 ? '尚未安装技能' : '没有符合条件的技能'}</p> : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
             {visibleSkills.map((skill) => {
               const selected = browserOpen && skill.id === skills.selectedId;
@@ -202,21 +214,24 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <ActionButton
+            variant="compact"
             data-testid="mgmt-skills-import-run"
             disabled={busy || importRequired !== null}
+            loading={skills.importFrom.pending}
+            loadingLabel="导入中…"
             onClick={() => {
               void skills.importFrom.run(importPath);
             }}
-            className={formSecondaryButtonClass}
           >
-            {skills.importFrom.pending ? '导入中…' : '导入'}
-          </button>
+            导入
+          </ActionButton>
+          {skills.importFrom.pending ? <ActionStatus state="pending" icon={null}
+            className="text-muted text-[length:var(--font-micro-size)]">正在导入技能…</ActionStatus> : null}
           {skills.importFrom.lastImported === null ? null : (
-            <span className="text-muted text-[length:var(--font-micro-size)]" data-testid="mgmt-skills-import-result">
+            <ActionStatus state="success" className="text-muted text-[length:var(--font-micro-size)]" testId="mgmt-skills-import-result">
               已导入 {skills.importFrom.lastImported.name}（{skills.importFrom.lastImported.path}）
-            </span>
+            </ActionStatus>
           )}
         </div>
         {importRequired === null ? null : (
@@ -240,18 +255,20 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                 : '没有可用的内置技能源'
               : `${builtinSnapshot.sources.length} 个来源，上次检查 ${formatBuiltinTimestamp(builtinSnapshot.lastCheckedAt)}${builtinSnapshot.updating ? '，正在同步' : ''}`}
           </span>
-          <button
-            type="button"
+          <ActionButton
+            variant="compact"
             data-testid="mgmt-skills-builtin-check"
             disabled={busy}
+            loading={builtin.check.pending}
+            loadingLabel="检查中…"
             onClick={() => {
               void builtin.check.run(true);
             }}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+            className="inline-flex items-center gap-1"
           >
             <RefreshCw size={11} aria-hidden="true" />
-            {builtin.check.pending || builtinSnapshot?.updating === true ? '检查中…' : '立即检查更新'}
-          </button>
+            {builtinSnapshot?.updating === true ? '正在同步…' : '立即检查更新'}
+          </ActionButton>
           <label className="flex min-h-6 items-center gap-1 text-[length:var(--font-micro-size)] text-muted">
             <input
               type="checkbox"
@@ -266,26 +283,28 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
             每天自动检查
           </label>
         </div>
+        {builtinPendingLabel === null ? null : <ActionStatus state="pending"
+          icon={builtin.check.pending || builtin.restore.pending ? null : undefined}
+          className="text-muted text-[length:var(--font-meta-size)]">{builtinPendingLabel}</ActionStatus>}
 
         {builtin.status === 'error' ? (
-          <FormNote tone="warn" testId="mgmt-skills-builtin-error">
+          <ActionStatus state="error" className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" testId="mgmt-skills-builtin-error">
             {builtin.error}
-          </FormNote>
+          </ActionStatus>
         ) : null}
         {builtin.check.error === null ? null : (
-          <FormNote tone="warn" testId="mgmt-skills-builtin-action-error">
+          <ActionStatus state="error" className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" testId="mgmt-skills-builtin-action-error">
             {builtin.check.error}
-          </FormNote>
+          </ActionStatus>
         )}
         {builtin.check.lastChanged === true ? (
-          <FormNote testId="mgmt-skills-builtin-changed">已从上游同步到新版本。</FormNote>
+          <ActionStatus state="success" className="text-muted text-[length:var(--font-meta-size)]"
+            testId="mgmt-skills-builtin-changed">已从上游同步到新版本。</ActionStatus>
         ) : null}
         {builtin.restore.lastResult === null ? null : (
-          <div role="status" aria-live="polite">
-            <FormNote testId="mgmt-skills-builtin-restored">
-              已完成 {builtin.restore.lastResult.sourceName} 内置版本安装，共 {builtin.restore.lastResult.skillCount} 个技能。
-            </FormNote>
-          </div>
+          <ActionStatus state="success" className="text-muted text-[length:var(--font-meta-size)]" testId="mgmt-skills-builtin-restored">
+            已完成 {builtin.restore.lastResult.sourceName} 内置版本安装，共 {builtin.restore.lastResult.skillCount} 个技能。
+          </ActionStatus>
         )}
 
         {builtinSnapshot === null ? null : (
@@ -305,19 +324,18 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                       {source.license ?? '许可证未知'}
                     </span>
                   </span>
-                  <button
-                    type="button"
+                  <ActionButton
+                    variant="compact"
                     data-testid={`mgmt-skills-builtin-restore-${source.id}`}
                     disabled={busy}
+                    loading={builtin.restore.pending && builtin.restore.sourceId === source.id}
+                    loadingLabel="安装中…"
                     onClick={() => {
                       void builtin.restore.run(source.id);
                     }}
-                    className={formSecondaryButtonClass}
                   >
-                    {builtin.restore.pending && builtin.restore.sourceId === source.id
-                      ? '安装中…'
-                      : builtinSourceActionLabel(source)}
-                  </button>
+                    {builtinSourceActionLabel(source)}
+                  </ActionButton>
                 </div>
                 <span className="text-muted text-[length:var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-state-${source.id}`}>
                   {builtinSourceSummary(source)}，上游 {shortCommit(source.installedCommit)}，检查于{' '}

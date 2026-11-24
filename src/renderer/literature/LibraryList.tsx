@@ -8,7 +8,8 @@ import { formatAuthorList, formatYear, libraryItemTitle, readVenue } from './for
 import { useLiterature } from './literature-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import {useAsyncAction} from '../app/use-async-resource';
-import {formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
+import {ActionButton, formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import './library-list.css';
 import type {LiteratureStore} from './use-literature-store';
@@ -341,18 +342,17 @@ function BulkCitationActions({items, literature}: {items: ResearchLibraryItem[];
     ids: items.map(item => item.id), format: 'bibtex'
   }), {label: '导出引用'});
   return <div className="grid shrink-0 gap-2 border-t-[0.5px] border-line p-2" data-testid="literature-bulk-actions">
-    <p className="text-[length:var(--font-meta-size)] tabular-nums text-muted" role="status">
+    <ActionStatus state={copied ? 'success' : 'idle'} className="text-[length:var(--font-meta-size)] tabular-nums text-muted" role="status">
       {copied ? '已复制' : `已选 ${items.length.toLocaleString('zh-CN')} 篇`}
-    </p>
+    </ActionStatus>
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={formSecondaryButtonClass} disabled={exportAction.pending}
-        onClick={() => copy(items.map(item => item.bibliography.citationKey).join(','))}>复制引用键</button>
-      <button type="button" className={formSecondaryButtonClass} disabled={exportAction.pending} aria-busy={exportAction.pending}
+      <ActionButton variant="compact" disabled={exportAction.pending}
+        onClick={() => copy(items.map(item => item.bibliography.citationKey).join(','))}>复制引用键</ActionButton>
+      <ActionButton variant="compact" loading={exportAction.pending} loadingLabel="正在导出 BibTeX…"
         onClick={() => void exportAction.run().then(result => {if (result.ok) copy(result.data.content);})}>
-        {exportAction.pending ? <Loader2 size={12} aria-hidden="true" className="animate-spin"/> : <Copy size={12} aria-hidden="true"/>}
-        复制 BibTeX
-      </button>
+        <Copy size={12} aria-hidden="true"/>复制 BibTeX
+      </ActionButton>
     </div>
-    {error === null && exportAction.error === null ? null : <p role="alert" className="text-[length:var(--font-meta-size)] text-[var(--st-bad)]">{error ?? exportAction.error}</p>}
+    {error === null && exportAction.error === null ? null : <ActionStatus state="error" className="text-[length:var(--font-meta-size)] text-[var(--st-bad)]">{error ?? exportAction.error}</ActionStatus>}
   </div>;
 }

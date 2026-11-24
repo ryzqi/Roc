@@ -45,8 +45,8 @@ export const formPrimaryButtonClass =
   'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 motion-safe:enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 
 export type ActionButtonProps = ComponentPropsWithRef<'button'> & {
-  /** Secondary matches input height; compact is the existing toolbar button. */
-  variant?: 'primary' | 'secondary' | 'compact';
+  /** Unstyled retains caller geometry and focus classes; other variants supply them. */
+  variant?: 'primary' | 'secondary' | 'compact' | 'unstyled';
   loading?: boolean;
   loadingLabel?: ReactNode;
 };
@@ -54,7 +54,8 @@ export type ActionButtonProps = ComponentPropsWithRef<'button'> & {
 const actionButtonClasses = {
   primary: formPrimaryButtonClass,
   secondary: formButtonClass,
-  compact: formSecondaryButtonClass
+  compact: formSecondaryButtonClass,
+  unstyled: ''
 };
 
 /** Controlled presentation only: the caller owns pending state and command guards. */

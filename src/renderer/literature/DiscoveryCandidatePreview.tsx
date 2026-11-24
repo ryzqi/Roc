@@ -1,7 +1,8 @@
 import {useEffect, useRef} from 'react';
-import {ArrowLeft, Check, Copy, Loader2} from 'lucide-react';
+import {ArrowLeft, Check, Copy} from 'lucide-react';
 import type {LiteratureCandidate} from '../../shared/schemas/literature-import';
-import {formButtonClass} from '../shared/form-ui';
+import {ActionButton, formButtonClass} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import {useCopyFeedback} from '../shared/hooks/use-copy-feedback';
 import {LiteratureCandidateReview} from './LiteratureCandidateReview';
 
@@ -35,14 +36,13 @@ export function DiscoveryCandidatePreview({candidate, onBack, revealed, onAdd, p
         {copy.copied ? <Check size={14} aria-hidden="true"/> : <Copy size={14} aria-hidden="true"/>}
         {copy.copied ? '已复制链接' : '复制来源链接'}
       </button> : null}
-      {copy.error ? <p role="alert">{copy.error}</p> : null}
+      {copy.error ? <ActionStatus state="error">{copy.error}</ActionStatus> : null}
     </div>
     <div className="discovery-preview-heading">
-      <button type="button" className={formButtonClass} disabled={pending || inLibrary || candidate.archived}
-        aria-busy={adding} onClick={onAdd} data-testid="discovery-preview-add">
-        {adding ? <Loader2 size={14} aria-hidden="true" className="animate-spin"/> : null}
-        {adding ? '正在加入文献库' : candidate.archived ? '文献已归档' : inLibrary ? '已在当前项目' : '加入文献库'}
-      </button>
+      <ActionButton disabled={pending || inLibrary || candidate.archived} loading={adding} loadingLabel="正在加入文献库"
+        onClick={onAdd} data-testid="discovery-preview-add">
+        {candidate.archived ? '文献已归档' : inLibrary ? '已在当前项目' : '加入文献库'}
+      </ActionButton>
     </div>
   </aside>;
 }
