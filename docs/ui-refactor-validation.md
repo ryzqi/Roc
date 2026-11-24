@@ -1,5 +1,21 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.11：管理验收导航与路由门禁
+
+状态：**Verified passing**（管理验收路径与静态路由门禁范围）。最终完整管理验收首次在62条已通过记录后等待`canvas-task-category-background`超时，整轮失败。此前脚本一直处于写作画布，任务检查没有显式进入运行画布。补齐导航后，按钮出现但仍被`inert`阻止；有界真窗诊断确认`canvas-column`为inert，唯一可见dialog为`assistant-drawer`，地址仍带`assistant=1`。正常画布导航会收起窄窗覆盖助手，脚本手工改URL则保留了它。
+
+任务检查现在显式进入`view=runs&assistant=0`，继续通过真实控件创建、修改与立即运行后台任务。命令面板的记忆入口沿用当前管理抽屉，断言打开前后仍为同一画布，再切技能读取同一技能记录；关闭抽屉后继续检查命令检索。移除期待第二个管理画布的旧选择器，保留记忆草稿、调度事实、实际运行记录、MCP stdio子进程、重启与类型检查。
+
+定向单元检查随后发现静态门禁只读取业务面分类，把已经登记在壳路由`APP_VIEWS`中的`runs`误报为未知。门禁现显式接收该闭集，同时保留业务面分类判据；没有给`tasks`增加业务画布或放宽未知路由。新回归读取实际路由解析结果，验证运行画布可以通过；撤除闭集中的`runs`后仍拒绝它，拼错、旧`latex`、停放能力和无画布的`tasks`均保持拒绝。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。以下检查通过：
+
+- `ROC_SMOKE_TARGET=dist pnpm verify:p9-management`：完整**90/90记录**，其中**86/86断言、4条说明性记录**，实际provider请求3次，无Renderer错误，所有声明的闸门段落均执行。
+- `node --test tests/unit/surfaces.test.mjs`：**17/17**，包含全仓库闸门脚本的路由字面量扫描及真实运行画布回归。
+- `node --check scripts/verify-p9-management.mjs`、`node --check scripts/lib/gate-surfaces.mjs`、`node --check tests/unit/surfaces.test.mjs`、`git diff --check`通过。
+
+立即运行产生真实调度记录；本轮后台任务仍为running，删除分支按原合同记作说明，不计作通过的删除断言。临时诊断脚本已删除，隔离资料根由脚本清理，日志与`.artifacts/p9-gates`在最终结果落档后清理。此次只修改验收脚本及门禁，生产dist仍为348文件、19207642 bytes，SHA256 `4ca75fc5fe32d0d9d7a12726af1b70a0ad24695f0efd31771e29ab4407e70f09`；已通过的完整Renderer与功能smoke仍对应这份构建。
+
 ## 2026-11-24 P8.10：阅读恢复与披露几何
 
 状态：**Verified passing**（阅读恢复及受影响调用者定向范围）。前一次完整`pnpm test:renderer`为1020项、1019通过、1失败，唯一失败是迟到只读内容恢复后预期280px、实际300.5px。原用例独立复现；实际显示的600×400 Electron窗口也复现同样漂移。诊断确认恢复RAF已经执行，披露已开启、焦点仍在阅读区外，observer已归零；首次滚动位置是280px，随后`::details-content`展开，原生滚动锚定将位置推到300.5px。不能把这次失败归为RAF没有执行或仅隐藏窗口节流。

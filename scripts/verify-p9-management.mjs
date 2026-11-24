@@ -905,6 +905,8 @@ try {
 
   // ---- 闸门 4：后台任务（创建 → 调度器 → 看板 → 立即运行 → 真历史） --------------
   await closeManagement();
+  await navigate(page, `page=research&project=${projectId}&view=runs&assistant=0`);
+  await waitForProjectRoute();
   await page.getByTestId('canvas-task-category-background').click();
   await page.click('[data-testid="mgmt-tasks-create"]');
   await page.waitForSelector('[data-testid="mgmt-task-editor"]', { timeout: 15_000 });
@@ -1037,7 +1039,7 @@ try {
     record('4 任务', `任务状态为 ${String(availability)}：取消后删除需要状态先进入终态`, true, '后端只允许 failed/cancelled/completed 删除', 'info');
   }
 
-  // 带未保存的记忆草稿关抽屉：必须确认，且放弃后草稿不残留（同一组面板在画布视图里也能编辑）
+  // 带未保存的记忆草稿关抽屉：必须确认，且放弃后重新打开不残留草稿。
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');
   await page.click('[data-testid="mgmt-memory-edit"]');
@@ -1091,24 +1093,25 @@ try {
   // ---- 闸门 6：两个入口 + 重启保持 ----------------------------------------------
   await openManagement('memory');
   await closeManagement();
-  // 抽屉里不再有「在画布中打开」按钮（P10 删掉）：画布入口只剩 ⌘K 命令组，
-  // 所以这里走真实用户的第二条路径，而不是一个已经不存在的控件。
+  // 管理按钮和 ⌘K 命令复用同一抽屉，打开管理内容时保留当前画布。
+  const canvasViewBeforeCommand = await page.evaluate(() => new URLSearchParams(location.search).get('view'));
   await page.click('[data-testid="titlebar-search"]');
   await page.waitForSelector('[data-testid="search-palette-input"]', { timeout: 20_000 });
   await page.fill('[data-testid="search-palette-input"]', '记忆');
   await page.waitForSelector('[data-testid="search-item-mgmt:memory"]', { timeout: 20_000 });
   await page.click('[data-testid="search-item-mgmt:memory"]');
-  await page.waitForSelector('[data-testid="management-view"]', { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="management-panel-panel"]', { timeout: 20_000 });
+  const canvasViewAfterCommand = await page.evaluate(() => new URLSearchParams(location.search).get('view'));
   assertCheck(
     '6 两入口',
-    '⌘K 的管理入口渲染同一组面板（记忆 tab）',
-    (await page.locator('[data-testid="mgmt-view-panel-memory"]').count()) === 1 &&
-      (await page.locator('[data-testid="mgmt-panel-memory"]').count()) === 0,
-    await text('mgmt-view-summary')
+    '⌘K 的管理入口复用同一记忆抽屉并保留当前画布',
+    (await page.locator('[data-testid="mgmt-panel-memory"]').count()) === 1 &&
+      canvasViewAfterCommand === canvasViewBeforeCommand,
+    `canvas=${canvasViewBeforeCommand} → ${canvasViewAfterCommand}`
   );
-  await page.click('[data-testid="mgmt-view-tab-skills"]');
-  await page.waitForSelector('[data-testid="mgmt-view-panel-skills"]', { timeout: 20_000 });
-  assertCheck('6 两入口', '画布视图里能切到技能并看到同一个技能', (await page.locator(`[data-testid="mgmt-skill-${skillId}"]`).count()) === 1);
+  await openTab('skills');
+  assertCheck('6 两入口', '命令打开的抽屉能切到技能并看到同一个技能', (await page.locator(`[data-testid="mgmt-skill-${skillId}"]`).count()) === 1);
+  await closeManagement();
 
   await page.click('[data-testid="titlebar-search"]');
   await page.waitForSelector('[data-testid="search-palette-input"]', { timeout: 20_000 });

@@ -27,13 +27,18 @@
  *   resolveSurface: (value: string | null | undefined) => { kind: string, surface?: { id: string, label: string, canvas: string }, parked?: { label: string, capability: string } },
  *   canvasViewIds: readonly string[]
  * }} surfaces
+ * @param {readonly string[]} canonicalViewIds The shell's declared URL destinations;
+ * business surface classification does not include every shell view.
  */
-export function createViewGuard(surfaces) {
+export function createViewGuard(surfaces, canonicalViewIds) {
+  const canonicalViews = new Set(canonicalViewIds);
+  const knownViews = [...new Set([...canonicalViewIds, ...surfaces.canvasViewIds])];
   /**
-   * @param {string} value 形如 `latex`
+   * @param {string} value 形如 `writing`
    * @returns {string} 同一个值，已验证有画布落点
    */
   return function assertKnownView(value) {
+    if (canonicalViews.has(value)) return value;
     const resolution = surfaces.resolveSurface(value);
     if (resolution.kind === 'surface') {
       if (resolution.surface.canvas === 'none') {
@@ -48,6 +53,6 @@ export function createViewGuard(surfaces) {
         `gate_view_parked:${value}: 「${resolution.parked.label}」保留了契约（${resolution.parked.capability}）但没有界面（ADR 0024）`
       );
     }
-    throw new Error(`gate_view_unknown:${value}: 已登记的面是 ${surfaces.canvasViewIds.join(', ')}`);
+    throw new Error(`gate_view_unknown:${value}: 已登记的面是 ${knownViews.join(', ')}`);
   };
 }

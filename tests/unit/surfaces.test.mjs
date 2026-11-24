@@ -6,10 +6,11 @@ import assert from 'node:assert/strict';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const surfaces = await importTypeScriptModule('src/shared/surfaces.ts');
+const routes = await importTypeScriptModule('src/renderer/app/routes.ts');
 const gate = await importTypeScriptModule('scripts/lib/gate-surfaces.mjs');
 
-/** The guard the gate scripts share; the table is passed in rather than imported (see its header). */
-const assertKnownView = gate.createViewGuard(surfaces);
+/** Business classification and the shell's URL destinations are distinct contracts. */
+const assertKnownView = gate.createViewGuard(surfaces, routes.APP_VIEWS);
 
 /**
  * The surface table is the one home for "what exists and where it lands" (candidate 1).
@@ -226,6 +227,16 @@ test('every ?view= in a gate script resolves to a real canvas view', () => {
   }
   assert.ok(checked >= 20, `expected to sweep the gate scripts, checked only ${checked}`);
   assert.deepEqual(failures, [], `gate scripts navigate to surfaces that do not exist:\n${failures.join('\n')}`);
+});
+
+test('the gate guard accepts the actual run canvas without inventing a business surface', () => {
+  const route = routes.parseAppRoute(new URLSearchParams('page=research&project=gate-project&view=runs'));
+  assert.equal(route.view, 'runs');
+  assert.equal(surfaces.resolveSurface('runs').kind, 'unknown');
+  assert.equal(assertKnownView(route.view), 'runs');
+  const withoutRunCanvas = gate.createViewGuard(surfaces, routes.APP_VIEWS.filter(view => view !== 'runs'));
+  assert.throws(() => withoutRunCanvas('runs'), /gate_view_unknown/u);
+  assert.throws(() => assertKnownView('runns'), /gate_view_unknown/u);
 });
 
 test('the gate guard refuses parked and unknown views rather than normalising them', () => {
