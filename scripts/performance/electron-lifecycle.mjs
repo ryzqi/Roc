@@ -20,8 +20,7 @@ export async function withBenchmarkTimeout(phase, operation, timeoutMs) {
   } finally {clearTimeout(timer);}
 }
 
-async function killOwnedProcess(app) {
-  const child = app.process();
+async function killOwnedProcess(child) {
   if (hasExited(child)) return;
   // Never enumerate global Electron processes or kill a process group. This
   // ChildProcess is the exact process returned by our own Playwright launch.
@@ -32,15 +31,15 @@ async function killOwnedProcess(app) {
 
 export async function closeBenchmarkElectron(app, timeoutMs = electronLifecycleTimeouts.closeMs) {
   if (!closingApplications.has(app)) closingApplications.set(app, (async () => {
+    const child = app.process();
     try {
       await withBenchmarkTimeout('close', async () => {
         await app.close();
-        const child = app.process();
         if (!hasExited(child)) await once(child, 'exit');
       }, timeoutMs);
     }
     catch (error) {
-      try {await killOwnedProcess(app);}
+      try {await killOwnedProcess(child);}
       catch (cleanupError) {error.cleanupError = String(cleanupError);}
       throw error;
     }

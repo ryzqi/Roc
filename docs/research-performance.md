@@ -17,6 +17,7 @@
 | macOS UI 启动与历史加载 | `node scripts/performance/bench-macos-app.mjs <新报告.json> --samples 5 --idle-minutes 0` | 0/1,000/10,000 条合成用户消息，各启动 5 次；1440×900 实际 CSS 视口；主壳、首次绘制、助手输入与历史就绪，进程内存、CDP JS heap/DOM |
 | macOS 可见 / 隐藏长期空闲 | `ROC_PERF_IDLE_VISIBILITY=both node scripts/performance/bench-macos-app.mjs <新报告.json> --samples 5 --idle-minutes 30` | 先可见 30 分钟，再原生关闭隐藏 30 分钟；各采样 0/5/30 分钟，记录真实窗口状态、Renderer 转发状态、heap/DOM、进程内存与主进程 CPU |
 | UI 大规模交互 | `node scripts/performance/bench-ui-workloads.mjs <新报告.json> --samples 5` | 已构建普通 production 应用独立运行 5 轮，每轮覆盖 7 场景；真实应用与 IPC：100 项目搜索；100/2,000/10,000 文献逐页加载后滚动；20 次画布切换；500/5,000 历史消息上接收本地 SSE 500/5,000 个流式增量 |
+| UX 动作窗口 | `node scripts/performance/bench-ui-motion.mjs <新报告.json> --samples 5` | 普通 production 构建的抽屉、菜单、分栏拖动、项目重排和流式完成；RAF、输入反馈代理、主线程 trace、布局存储写入分别记录，协议见 [UX 采样](ux-motion/benchmark-protocol.md) |
 | 持续 30 分钟流式 | `ROC_PERF_UI_WORKLOADS=1 ROC_PERF_STREAM_MINUTES=30 node scripts/performance/bench-macos-app.mjs <新报告.json> --samples 5 --idle-minutes 0` | 完成上述交互后，在 5,000 条种子历史所在会话持续接收真实本地 SSE；0/5/15/30 分钟各采样 3 秒，检查增量持续推进、Composer 草稿、窗口化消息、heap/DOM 与长任务 |
 | PDF 连续翻页 | `ROC_PERF_PDF_PAGE_TURNS=200 node scripts/performance/bench-pdf-reader.mjs <新报告.json> --samples 5` | 固定 400 页真实 PDF，连续点击下一页 200 次；每次验证目标页、新 canvas 分配和栅格完成，随后沿用原有后台解析 / IPC 竞争测试 |
 | 长流与可见 / 隐藏空闲各五轮 | `node scripts/performance/bench-repeated-workloads.mjs <新报告.json> --workload endurance --samples 5` | 严格串行重复整个底层脚本；每轮可见空闲 30 分钟、隐藏空闲 30 分钟、持续流式 30 分钟，各命名检查点取得 5 个独立进程样本 |

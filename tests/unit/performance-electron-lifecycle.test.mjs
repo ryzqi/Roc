@@ -59,6 +59,23 @@ test('a stuck close kills only its own process, preserves failure, and never rep
   } finally {await dispose(child); await dispose(unrelated);}
 });
 
+test('normal close waits for the captured process after Playwright releases its dispatcher', async () => {
+  const child = await childProcess();
+  let closed = false;
+  const app = {
+    process: () => {
+      assert.equal(closed, false, 'Playwright process() is unavailable after close()');
+      return child;
+    },
+    close: async () => {closed = true; child.kill('SIGTERM');}
+  };
+  try {
+    await closeBenchmarkElectron(app);
+    assert.equal(child.signalCode, 'SIGTERM');
+    await closeBenchmarkElectron(app);
+  } finally {await dispose(child);}
+});
+
 test('a rejected close also terminates the owned process without replacing the original error', async () => {
   const child = await childProcess(), failure = new Error('native_modal');
   try {
