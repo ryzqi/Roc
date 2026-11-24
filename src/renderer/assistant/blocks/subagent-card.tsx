@@ -5,6 +5,7 @@ import { ActivityBlockShell, type ActivityTone } from './activity-shell';
 import { useActivityBlockState } from './use-activity-block-state';
 import { ReasoningBlock } from './reasoning-block';
 import { ToolCallBlock } from './tool-call-block';
+import {NestedDisclosureProvider} from './disclosure-state';
 
 /**
  * Subagent card (T4.4), ported from `chat/subagent/SubagentActivityCard.tsx`.
@@ -75,7 +76,7 @@ function renderSubagentBlock(block: ChatTranscriptSubagentBlock, isStreaming: bo
     );
   }
   if (block.kind === 'reasoning') {
-    return <ReasoningBlock key={block.id} content={block.content} isStreaming={block.isStreaming} />;
+    return <ReasoningBlock key={block.id} id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
   return <ToolCallBlock key={block.id} block={block} />;
 }
@@ -91,6 +92,7 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
   const hasBody = block.error !== null || block.summary !== null || block.blocks.length > 0 || block.children.length > 0;
   const { open, setOpen } = useActivityBlockState({
     defaultOpen: false,
+    disclosureKey: block.id,
     revealOn: block.status === 'failed',
     forceOpenWhileStreaming: true,
     isStreaming,
@@ -112,7 +114,8 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
         expandable={hasBody}
       >
         {hasBody ? (
-          <div className="border-t-[0.5px] border-line-soft px-2 py-1.5" data-testid="assistant-subagent-body">
+          <NestedDisclosureProvider id={block.id}>
+            <div className="border-t-[0.5px] border-line-soft px-2 py-1.5" data-testid="assistant-subagent-body">
             {metaChips.length === 0 ? null : (
               <div className="mb-1.5 flex flex-wrap gap-1" aria-label="子代理元信息">
                 {metaChips.map((chip) => (
@@ -139,7 +142,8 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
                 <SubagentActivityCard block={child} depth={depth + 1} />
               </div>
             ))}
-          </div>
+            </div>
+          </NestedDisclosureProvider>
         ) : null}
       </ActivityBlockShell>
     </div>

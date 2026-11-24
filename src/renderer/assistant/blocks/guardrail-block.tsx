@@ -20,7 +20,7 @@ const StreamingMarkdownView = retryableLazy(async () => ({
 type GuardrailBlockModel = Extract<ChatTranscriptActivityBlock, { kind: 'guardrail' }>;
 
 export function GuardrailBlock({ block }: { block: GuardrailBlockModel }): React.JSX.Element {
-  const { open, setOpen } = useActivityBlockState({ defaultOpen: false });
+  const { open, setOpen } = useActivityBlockState({ defaultOpen: false, disclosureKey: block.id });
   const meta =
     block.toolName === null
       ? block.tier === null

@@ -104,6 +104,8 @@ Contract 2 要求来源/chunk 与实际上下文 embedding 输入哈希、向量
 
 消息列表使用 Virtuoso 的 `followOutput="auto"`，由虚拟器按原底部状态及正在进行的滚动决定跟随；`atBottomStateChange` 仅控制“滚动到最新”按钮。不能将高度测量期间短暂的非底部状态反向设为 `followOutput=false`，否则保留窗口裁剪与长回复高度变化会关闭内部补偿。用户主动上滚阅读时保持位置，不以每个增量的强制 `scrollTo` 修补视口。
 
+活动块的披露状态随当前消息窗口保留，不随虚拟行卸载丢失；消息或块被裁剪时释放，thread、窗口 epoch 或会话作用域更换时重置。保留值只包含展开选择、失败边沿、流式状态与完成收起的绝对截止时间，不复制正文。离屏期间完成的思考或子代理在原截止时间后返回即收起；同 ID 离屏重试后再次失败会重新披露，同一次失败的补充回执仍尊重手动收起。成功工具组与真实块使用独立键域，子代理内部的块按完整父路径隔离。原生 summary 提供键盘激活，受控点击同步保存选择，避免延后的 toggle 通知在快速滚出前丢失；实际系统读屏仍需独立验收。
+
 回归入口为 `node --test tests/unit/renderer-transcript-cache.test.mjs tests/unit/persisted-thread-history.test.mjs` 和 `node --test tests/renderer/lifecycles.test.mjs`。覆盖异步交接、5,000 条持久增量追平及 400 事件窗口裁剪、取消/失败部分回复、空新终态、历史扩展活动、同 thread 作用域切换、主动上滚和分页锚点；测试通过不替代持续流式正式测量。
 
 ## 画布宿主保留预算

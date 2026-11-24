@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
 import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './lib/gate-harness.mjs';
+import {withBenchmarkTimeout} from './performance/electron-lifecycle.mjs';
 
 /**
  * P4 验收闸门的自动化实测（真应用 / 真 IPC / 真 DeepAgent run / 真工具执行）。
@@ -224,7 +225,7 @@ async function waitForTranscript(page, needle, timeoutMs = 30_000) {
     }
     await page.waitForTimeout(120);
   }
-  return last;
+  throw new Error(`Transcript text not observed within ${timeoutMs}ms: ${needle}; tail=${last.slice(-800)}`);
 }
 
 /** Expands an activity block that the auto-collapse has already closed. */
@@ -470,7 +471,7 @@ try {
   // ---- 闸门 1：真发一轮 run（文本流式 + 推理 + 工具调用） -----------------------
   await sendPrompt(page, p4Prompt('验收闸门 1：列一下工作目录。 ROC-P4-MODE:tool'));
   await waitForStatus(page, 'running', 30_000);
-  const reasoningStreaming = await waitForTranscript(page, 'P4-推理片段', 60_000);
+  const reasoningStreaming = await waitForTranscript(page, '先列出工作目录', 60_000);
   assertCheck(
     '1 真跑一轮',
     '推理增量进入转录（无阻断的推理文本）',
@@ -655,7 +656,21 @@ try {
     const scroller = document.querySelector('[data-testid="assistant-transcript"]');
     return scroller !== null && scroller.scrollTop >= 160 &&
       scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 8;
-  }, undefined, {timeout: 20_000});
+  }, undefined, {timeout: 20_000}).catch(async error => {
+    const state = await withBenchmarkTimeout('p4-scroll-diagnostics', () => page.evaluate(() => {
+      const node = document.querySelector('[data-testid="assistant-transcript"]');
+      const rows = [...document.querySelectorAll('[data-testid="assistant-message-user"], [data-testid="assistant-message-assistant"]')];
+      return {status: document.querySelector('[data-testid="assistant-run-status"]')?.getAttribute('data-status'),
+        jumpToLatest: document.querySelector('[data-testid="assistant-scroll-bottom"]') !== null,
+        scroller: node === null ? null : {top: node.scrollTop, height: node.scrollHeight, client: node.clientHeight,
+          gap: node.scrollHeight - node.clientHeight - node.scrollTop, messageCount: node.dataset.messageCount,
+          firstItemIndex: node.dataset.firstItemIndex, prependRevision: node.dataset.prependRevision},
+        rows: rows.map(row => ({type: row.getAttribute('data-testid'), height: row.getBoundingClientRect().height,
+          top: row.getBoundingClientRect().top, text: row.textContent?.slice(-300)}))};
+    }), 5_000).catch(diagnosticsError => ({diagnosticsError: String(diagnosticsError)}));
+    writeFileSync(join(artifactDir, '04-stream-follow-failure.json'), JSON.stringify(state, null, 2));
+    throw new Error(`Live transcript initial follow: ${JSON.stringify(state)}`, {cause: error});
+  });
   const liveScroller = page.getByTestId('assistant-transcript');
   const scrollBottom = page.getByTestId('assistant-scroll-bottom');
   await liveScroller.hover({position: {x: 24, y: 100}});

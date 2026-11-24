@@ -1,5 +1,21 @@
 # UI 重构验证记录
 
+## 2026-11-24 P7.7：提问恢复与活动披露收尾
+
+状态：**Verified passing**（本部分）。提问卡移除后，虚拟列表重挂历史工具时丢失手动展开态，连续高度收缩中断下一轮慢流跟随。披露现随当前消息窗口保留，消息/块裁剪或thread/epoch变更时释放；保留值仅含状态和截止时间，不复制正文。裸推理、子代理离屏完成后按原截止时间收起；同ID离屏重试的新失败重新披露，同一次失败更新尊重手动收起。流式完成不重新分组，工具组与真实块有独立键域，嵌套块按完整父路径隔离。
+
+真实回归又复现快速滚出前原生toggle尚未通知，导致手动选择未被保留；summary点击现同步更新受控披露，保留原生Enter/Space激活，空内容披露有禁用语义。此前P4等待超时返回最后文本的夹具也改为显式失败，失败几何诊断限制5秒，不在常驻路径逐帧采样。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test --test-concurrency=1 tests/renderer/lifecycles.test.mjs tests/renderer/assistant-activity-layout.test.mjs tests/renderer/assistant-panel-guards.test.mjs` **127/127**，包含14项新增真实Virtuoso卸载/重挂回归。补充Space展开/收起后快速滚出：`node --test --test-concurrency=1 --test-name-pattern='virtual completed|completed tool history|streaming, errors|finishing a streamed|live tool failure|live Hook|compact header' tests/renderer/lifecycles.test.mjs tests/renderer/assistant-activity-layout.test.mjs` **7/7**；浅深320/400px裁切为零。`pnpm build`和`git diff --check`通过。
+
+`ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/p77-smoke pnpm smoke:electron` 核心 **23/23**、助手 **64/64**，提问恢复后的慢流初始跟随、主动上滚保持位置、回到最新、取消、切项目、崩溃检查点续跑和工具不重复均通过，无Renderer错误。516条累计消息只持有116条窗口消息、挂载20行。完整布局、打包和正式五轮性能另记；该本地受控provider结果不代表外部模型或真人任务通过。合同见[性能测量](research-performance.md)。
+
+## 2026-11-24 P8：完整集成中的滚动失败
+
+状态：**Changed, unverified**（最终集成范围）。工作目录 `/Users/Apple_501/Desktop/Roc/Roc`；`ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-final-smoke4-20261124 pnpm smoke:electron` 核心 **23/23**，深度助手完成35个断言后，在提问恢复后的慢流首次底部跟随检查超时，不能记为完整smoke通过。失败时没有Renderer异常；后续定向跟踪确认问题卡移除后的连续高度收缩使视口离底。当前补回归和修复，最终复验另记。
+
+原 `waitForTranscript` 超时会返回最后文本；部分调用未断言返回内容。因此此前仅凭等待返回推断“已出现G4S-0005”无效，后续必须使未匹配文本显式失败。本次失败现场用于定位，临时轨迹及截图在正式验证结果落档后清理。
+
 ## 2026-11-24 P7.5：测量进程超时与失败保留
 
 状态：**Verified passing**（工具回归范围）。启动至界面就绪限制30秒，正常关闭限制15秒；发生原生模态卡住时仅终止本轮持有的进程并等待退出，再清理隔离资料根。长流/空闲测量窗口不受这些时限影响。诊断读取和取消订阅也有界，失败JSON/Markdown保留阶段、已有样本和清理异常，避免挂住或误写成功。

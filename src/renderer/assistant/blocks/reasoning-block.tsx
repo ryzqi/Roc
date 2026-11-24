@@ -15,13 +15,15 @@ import { useActivityBlockState } from './use-activity-block-state';
  * a fast-changing stream re-parse on every token for no visual gain.
  */
 export type ReasoningBlockProps = {
+  id?: string;
   content: string;
   isStreaming: boolean;
 };
 
-export function ReasoningBlock({ content, isStreaming }: ReasoningBlockProps): React.JSX.Element {
+export function ReasoningBlock({ id, content, isStreaming }: ReasoningBlockProps): React.JSX.Element {
   const { open, setOpen } = useActivityBlockState({
     defaultOpen: isStreaming,
+    disclosureKey: id,
     forceOpenWhileStreaming: true,
     isStreaming,
     autoCloseDelayMs: 1000

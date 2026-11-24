@@ -8,6 +8,7 @@ import type { ChatResumeDecision } from '../../shared/types';
 import { popoverTransition, popoverVariants } from '../shared/motion';
 import type { ChatTranscriptMessage } from './transcript';
 import { ChatMessageRow } from './blocks/message-row';
+import {MessageDisclosureProvider, retainDisclosureState, type MessageDisclosure} from './blocks/disclosure-state';
 
 /**
  * Transcript panel (T4.3), ported from `chat/chat-transcript-panel.tsx`.
@@ -100,6 +101,11 @@ export function ChatTranscriptPanel({
   });
   const previousThreadIdRef = useRef<string | null>(threadId);
   const previousEpochRef = useRef(windowEpoch);
+  const disclosure = useRef({threadId, windowEpoch, messages: new Map<string, MessageDisclosure>()});
+  if (disclosure.current.threadId !== threadId || disclosure.current.windowEpoch !== windowEpoch) {
+    disclosure.current = {threadId, windowEpoch, messages: new Map()};
+  }
+  retainDisclosureState(disclosure.current.messages, messages);
   const initialWindowRef = useRef<TranscriptVirtuosoWindow>(
     buildTranscriptVirtuosoWindow({ firstItemIndex: virtualIndex, messageCount: messages.length })
   );
@@ -179,8 +185,10 @@ export function ChatTranscriptPanel({
         followOutput="auto"
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (
-          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext}
-            onApprovalDecision={onApprovalDecision} approvalPending={approvalPending} activeApprovalIds={activeApprovalIds} />
+          <MessageDisclosureProvider state={disclosure.current.messages.get(message.key)!}>
+            <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext}
+              onApprovalDecision={onApprovalDecision} approvalPending={approvalPending} activeApprovalIds={activeApprovalIds} />
+          </MessageDisclosureProvider>
         )}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {

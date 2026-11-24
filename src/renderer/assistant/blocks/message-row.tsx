@@ -302,7 +302,7 @@ function ChatActivityBlockView({ block }: {
   block: ChatTranscriptActivityBlock;
 }): React.JSX.Element {
   if (block.kind === 'reasoning') {
-    return <ReasoningBlock content={block.content} isStreaming={block.isStreaming} />;
+    return <ReasoningBlock id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
   if (block.kind === 'tool_call') {
     return <ToolCallBlock block={block} />;

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ListChecks } from 'lucide-react';
 import { reviewLinksPayload } from '../../../shared/schemas/research-review-links';
 import type { ChatTranscriptActivityBlock } from '../transcript';
 import { ActivityBlockShell } from './activity-shell';
+import {useMessageDisclosure} from './disclosure-state';
+import {useActivityBlockState} from './use-activity-block-state';
 
 type ActivityItem = { id: string; blocks: ChatTranscriptActivityBlock[] };
 
@@ -12,9 +14,9 @@ function groupCompletedTools(blocks: ChatTranscriptActivityBlock[]): ActivityIte
   let completed: ChatTranscriptActivityBlock[] = [];
   const flush = (): void => {
     if (completed.length >= 3) {
-      items.push({ id: `completed:${completed[0]!.id}`, blocks: completed });
+      items.push({ id: JSON.stringify(['completed-tools', completed[0]!.id]), blocks: completed });
     } else {
-      items.push(...completed.map(block => ({ id: block.id, blocks: [block] })));
+      items.push(...completed.map(block => ({ id: JSON.stringify(['block', block.id]), blocks: [block] })));
     }
     completed = [];
   };
@@ -24,7 +26,7 @@ function groupCompletedTools(blocks: ChatTranscriptActivityBlock[]): ActivityIte
       completed.push(block);
     } else {
       flush();
-      items.push({ id: block.id, blocks: [block] });
+      items.push({ id: JSON.stringify(['block', block.id]), blocks: [block] });
     }
   }
   flush();
@@ -38,14 +40,18 @@ export function TranscriptActivityList({blocks, streaming, renderBlock}: {
 }): React.JSX.Element {
   // Keep the structure a reader has already seen. Grouping after streaming ends
   // would unmount focused disclosures and discard their expanded payloads.
-  const [hasStreamed, setHasStreamed] = useState(streaming);
+  const disclosure = useMessageDisclosure();
+  const [hasStreamed, setHasStreamed] = useState(streaming || Boolean(disclosure?.hasStreamed));
   useEffect(() => {
-    if (streaming) setHasStreamed(true);
-  }, [streaming]);
+    if (streaming) {
+      if (disclosure !== null) disclosure.hasStreamed = true;
+      setHasStreamed(true);
+    }
+  }, [streaming, disclosure]);
   const individual = streaming || hasStreamed;
-  const items = useMemo(() => individual ? blocks.map(block => ({id: block.id, blocks: [block]}))
+  const items = useMemo(() => individual ? blocks.map(block => ({id: JSON.stringify(['block', block.id]), blocks: [block]}))
     : groupCompletedTools(blocks), [blocks, individual]);
-  return <>{items.map(item => item.blocks.length === 1 ? renderBlock(item.blocks[0]!) :
+  return <>{items.map(item => item.blocks.length === 1 ? <Fragment key={item.id}>{renderBlock(item.blocks[0]!)}</Fragment> :
     <CompletedToolGroup key={item.id} blocks={item.blocks} renderBlock={renderBlock} />)}</>;
 }
 
@@ -53,7 +59,9 @@ function CompletedToolGroup({blocks, renderBlock}: {
   blocks: ChatTranscriptActivityBlock[];
   renderBlock: (block: ChatTranscriptActivityBlock) => ReactNode;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
+  const {open, setOpen} = useActivityBlockState({
+    defaultOpen: false, disclosureKey: blocks[0]!.id, disclosureKind: 'completed-tools'
+  });
   return <ActivityBlockShell testId="assistant-completed-tools" icon={ListChecks}
     title="工具执行记录" meta={`${blocks.length} 项已完成`} visualDensity="quiet"
     open={open} onToggle={setOpen}>

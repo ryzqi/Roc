@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import { _electron } from '@playwright/test';
+import { _electron, expect } from '@playwright/test';
 
 // Actual React hooks in an isolated Electron renderer; only the typed preload seam is replaced.
 let dir, app, page;
@@ -1655,6 +1655,298 @@ test(`transcript follows the next run while a completed long answer transfers th
   await atBottom();
 });
 }
+
+test('transcript follows output after a question card removal remounts an expanded historical tool', async () => {
+  await page.evaluate(() => {
+    const base = {source: 'persisted', reasoning: null, blocks: [], interrupts: [], isStreaming: false};
+    window.questionHistory = [
+      {...base, key: 'tool-prompt', role: 'user', content: '验收闸门 1：列一下工作目录。 ROC-P4-MODE:tool ROC-P4-RUN:r1'},
+      {...base, key: 'tool-answer', role: 'assistant', content: '工具已返回，先记录看到的内容。\n结论完成。P4-TOOL-DONE',
+        blocks: [{id: 'history-tool', kind: 'tool_call', name: 'ls', status: 'end', input: {path: '/workspace'},
+          output: Array.from({length: 30}, (_, index) => '/workspace/file-' + index).join('\n'), error: null}]},
+      {...base, key: 'approve-prompt', role: 'user', content: '验收闸门 2：删除一个文件。 ROC-P4-MODE:approval ROC-P4-DELETE:/workspace/p4-approval-ok.txt ROC-P4-RUN:r2'},
+      {...base, key: 'approve-answer', role: 'assistant', content: '审批流程已结束。P4-APPROVAL-DONE'},
+      {...base, key: 'reject-prompt', role: 'user', content: '验收闸门 2：删除另一个文件。 ROC-P4-MODE:approval ROC-P4-DELETE:/workspace/p4-approval-reject.txt ROC-P4-RUN:r3'},
+      {...base, key: 'reject-answer', role: 'assistant', content: '审批流程已结束。P4-APPROVAL-DONE'},
+      {...base, key: 'question-prompt', role: 'user', content: '验收闸门 3：先问一个问题。 ROC-P4-MODE:question ROC-P4-RUN:r4'}
+    ];
+    window.questionMessage = {...base, key: 'question-live', source: 'live', role: 'assistant', content: '',
+      blocks: [{id: 'ask-tool', kind: 'tool_call', name: 'ask_user', input: {question: '这次运行要按哪个口径继续？'},
+        output: null, error: null, status: 'end'}],
+      interrupts: [{kind: 'question', interruptId: 'ask-interrupt', question: '这次运行要按哪个口径继续？',
+        context: 'P4 提问中断的验收运行。', suggestedResponses: ['按最小范围继续', '先补数据再继续']}]};
+    window.renderQuestionTranscript = messages => {
+      mountTranscript({threadId: 'question-resume', messages,
+        prependRevision: 0, trimRevision: 0, windowEpoch: 0, tailTrimmed: false, hasMoreBefore: false, loadingOlder: false,
+        loadOlder: async () => {}, onJumpToLatest: async () => {}, onOpenArtifact: () => {}, onReadGateContext: async () => null});
+      Object.assign(document.getElementById('transcript-fixture').style, {width: '344px', height: '545px'});
+    };
+    renderQuestionTranscript(questionHistory.slice(0, 2));
+  });
+  await page.getByTestId('assistant-activity-tool-summary').click();
+  await page.waitForTimeout(200);
+  // Opening a tall historical payload intentionally changes the reading position.
+  // The real P4 flow explicitly returns to latest before the question is resumed.
+  await page.getByTestId('assistant-scroll-bottom').click();
+  await page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  });
+  await page.evaluate(() => renderQuestionTranscript([...questionHistory, questionMessage]));
+  const atBottom = () => page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node?.scrollTop > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  }, null, {timeout: 2_000}).catch(async error => {
+    throw new Error(`Question resume position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+  });
+  await atBottom();
+  await page.evaluate(() => {
+    questionMessage = {...questionMessage, interrupts: [], isStreaming: true};
+    renderQuestionTranscript([...questionHistory, questionMessage]);
+  });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => {
+    questionMessage = {...questionMessage, content: '收到回答：按最小范围继续\nP4-QUESTION-ANSWER:按最小范围继续', isStreaming: false};
+    renderQuestionTranscript([...questionHistory, questionMessage]);
+  });
+  await atBottom();
+  await page.evaluate(() => {
+    renderQuestionTranscript([...questionHistory, questionMessage,
+      {...questionHistory[0], key: 'question-reply', content: '按最小范围继续'},
+      {...questionHistory[0], key: 'next-prompt', content: '验收闸门 4：慢流。 ROC-P4-MODE:slow ROC-P4-SLOW:400x100 ROC-P4-SLOW-TAG:G4S'},
+      {...questionMessage, key: 'next-live', blocks: [], content: 'G4S-0001 ', isStreaming: true}]);
+  });
+  await atBottom();
+  await page.waitForFunction(() => document.querySelector('[title="ls"]') === null);
+  await page.getByTestId('assistant-transcript').evaluate(node => {node.scrollTop = 0;});
+  await page.waitForFunction(() => document.querySelector('[title="ls"]') !== null);
+  assert.equal(await page.locator('[title="ls"]').evaluate(node => node.closest('details').open), true,
+    'a historical tool must retain its expanded payload after virtual unmount/remount');
+});
+
+const disclosureMessage = (blocks, isStreaming = false, reasoning = null) => ({
+  key: 'disclosure-message', source: 'persisted', role: 'assistant', content: '保留活动回执',
+  reasoning, blocks, interrupts: [], isStreaming
+});
+const disclosureTool = (id, status = 'end') => ({
+  id, kind: 'tool_call', name: id, status, input: {path: '/workspace'},
+  output: status === 'end' ? '已读取文件' : null, error: status === 'error' ? '读取失败' : null
+});
+const disclosureSubagent = (id, status, blocks = []) => ({
+  id, kind: 'subagent',
+  identity: {subagentId: id, parentSubagentId: null, name: id, depth: 1, path: [id], execution: 'sync', taskInput: null},
+  status, summary: '子代理回执', error: status === 'failed' ? '子代理失败' : null, blocks, children: []
+});
+
+async function mountDisclosureTranscript(message) {
+  await page.evaluate(message => {
+    clearHook();
+    window.disclosureProps = {
+      threadId: 'disclosure-retention', messages: [message, ...Array.from({length: 80}, (_, index) => ({
+        key: `disclosure-history-${index}`, source: 'persisted', role: 'user', content: `历史记录 ${index}`,
+        reasoning: null, blocks: [], interrupts: [], isStreaming: false
+      }))],
+      prependRevision: 0, trimRevision: 0, windowEpoch: 0, tailTrimmed: false,
+      hasMoreBefore: false, loadingOlder: false, loadOlder: async () => {}, onJumpToLatest: async () => {},
+      onOpenArtifact: () => {}, onReadGateContext: async () => null
+    };
+    window.renderDisclosureTranscript = changes => {
+      disclosureProps = {...disclosureProps, ...changes};
+      mountTranscript(disclosureProps);
+    };
+    renderDisclosureTranscript({});
+  }, message);
+  await page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node.querySelector('[data-testid="virtuoso-item-list"]').checkVisibility({visibilityProperty: true}) &&
+      node.scrollTop > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  }).catch(async error => {
+    throw new Error(`Disclosure initial position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+  });
+  await returnToDisclosure();
+}
+
+async function updateDisclosureMessage(message) {
+  await page.evaluate(message => renderDisclosureTranscript({messages: [message, ...disclosureProps.messages.slice(1)]}), message);
+}
+
+async function unmountDisclosure() {
+  await page.getByTestId('assistant-transcript').evaluate(node => {node.scrollTop = node.scrollHeight;});
+  await expect(page.getByTestId('assistant-message-assistant')).toHaveCount(0);
+}
+
+async function returnToDisclosure() {
+  await page.waitForFunction(() => document.querySelector('[data-testid="virtuoso-item-list"]')
+    ?.checkVisibility({visibilityProperty: true}));
+  // A re-windowed transcript owns two initial end-alignment frames.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.getByTestId('assistant-transcript').evaluate(node => {node.scrollTop = 0;});
+  await page.getByTestId('assistant-message-assistant').waitFor({state: 'visible'}).catch(async error => {
+    throw new Error(`Disclosure return position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+  });
+}
+
+for (const kind of ['reasoning', 'bare-reasoning', 'subagent']) {
+  const streamedMessage = streaming => kind === 'subagent'
+    ? disclosureMessage([disclosureSubagent('streamed-agent', streaming ? 'running' : 'completed')], streaming)
+    : kind === 'bare-reasoning' ? disclosureMessage([], streaming, '核对证据\n\n继续读取来源')
+    : disclosureMessage([{id: 'streamed-reasoning', kind: 'reasoning', content: '核对证据\n\n继续读取来源', isStreaming: streaming}], streaming);
+  const receiptId = `assistant-activity-${kind === 'subagent' ? 'subagent' : 'reasoning'}`;
+
+  test(`virtual ${kind} completes while unmounted and returns already collapsed`, async () => {
+    await mountDisclosureTranscript(streamedMessage(true));
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+    await unmountDisclosure();
+    await updateDisclosureMessage(streamedMessage(false));
+    await page.waitForTimeout(1100);
+    await returnToDisclosure();
+    assert.equal(await page.getByTestId(receiptId).evaluate(node => node.open), false,
+      'an expired completion must not briefly reveal its body on remount');
+  });
+
+  test(`virtual ${kind} retains its collapse deadline and later manual expansion`, async () => {
+    await mountDisclosureTranscript(streamedMessage(true));
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+    await updateDisclosureMessage(streamedMessage(false));
+    await unmountDisclosure();
+    await page.waitForTimeout(1100);
+    await returnToDisclosure();
+    await expect(page.getByTestId(receiptId)).not.toHaveAttribute('open');
+    await page.getByTestId(`${receiptId}-summary`).click();
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+    await unmountDisclosure();
+    await page.waitForTimeout(1100);
+    await returnToDisclosure();
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+  });
+}
+
+for (const kind of ['tool', 'hook', 'subagent']) {
+  const retryMessage = failed => disclosureMessage([kind === 'tool' ? disclosureTool('retry-tool', failed ? 'error' : 'progress') :
+    kind === 'subagent' ? disclosureSubagent('retry-agent', failed ? 'failed' : 'running') :
+    {id: 'retry-hook', kind: 'hook_call', event: 'PreToolUse', handlerId: 'policy', status: failed ? 'blocked' : 'running',
+      durationMs: null, message: failed ? '目标不在授权范围' : null, additionalContext: null,
+      requestContinue: null, commandDisplay: 'check workspace'}]);
+  const receiptId = `assistant-activity-${kind}`;
+  test(`virtual ${kind} reveals a new retry failure but retains disclosure of the same failure`, async () => {
+    await mountDisclosureTranscript(retryMessage(true));
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+    await page.getByTestId(`${receiptId}-summary`).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId(receiptId)).not.toHaveAttribute('open');
+    await unmountDisclosure();
+    await updateDisclosureMessage(retryMessage(false));
+    await updateDisclosureMessage(retryMessage(true));
+    await returnToDisclosure();
+    await expect(page.getByTestId(receiptId)).toHaveAttribute('open', '');
+    await page.getByTestId(`${receiptId}-summary`).click();
+    await expect(page.getByTestId(receiptId)).not.toHaveAttribute('open');
+    await unmountDisclosure();
+    await updateDisclosureMessage({...retryMessage(true), content: '同一次失败的补充回执'});
+    await returnToDisclosure();
+    await expect(page.getByTestId(receiptId)).not.toHaveAttribute('open');
+  });
+}
+
+test('virtual reasoning preserves a manual reopen that cancels its pending completion collapse', async () => {
+  const reasoning = streaming => disclosureMessage([
+    {id: 'manual-reasoning', kind: 'reasoning', content: '核对证据', isStreaming: streaming}
+  ], streaming);
+  await mountDisclosureTranscript(reasoning(true));
+  const receipt = page.getByTestId('assistant-activity-reasoning');
+  await expect(receipt).toHaveAttribute('open', '');
+  await updateDisclosureMessage(reasoning(false));
+  await page.getByTestId('assistant-activity-reasoning-summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(receipt).not.toHaveAttribute('open');
+  await page.keyboard.press('Enter');
+  await expect(receipt).toHaveAttribute('open', '');
+  await unmountDisclosure();
+  await page.waitForTimeout(1100);
+  await returnToDisclosure();
+  await expect(receipt).toHaveAttribute('open', '');
+});
+
+test('virtual streamed tools retain individual rows and expanded payloads after completion', async () => {
+  const blocks = ['first', 'second', 'third'].map(id => disclosureTool(id));
+  await mountDisclosureTranscript(disclosureMessage(blocks, true));
+  await page.getByTestId('assistant-activity-tool-summary').first().click();
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+  await unmountDisclosure();
+  await updateDisclosureMessage(disclosureMessage(blocks));
+  await returnToDisclosure();
+  await expect(page.getByTestId('assistant-completed-tools')).toHaveCount(0);
+  await expect(page.getByTestId('assistant-activity-tool')).toHaveCount(3);
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+});
+
+test('virtual completed tool groups and similarly named blocks retain independent disclosures', async () => {
+  await mountDisclosureTranscript(disclosureMessage([
+    ...['first', 'second', 'third'].map(id => disclosureTool(id)), disclosureTool('completed:first', 'progress')
+  ]));
+  const groupSummary = page.getByTestId('assistant-completed-tools-summary');
+  await groupSummary.focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('assistant-activity-tool')).toHaveCount(4);
+  await page.getByTestId('assistant-activity-tool-summary').first().click();
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+  await groupSummary.focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('assistant-completed-tools')).not.toHaveAttribute('open');
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('assistant-completed-tools')).toHaveAttribute('open', '');
+  await unmountDisclosure();
+  await returnToDisclosure();
+  await expect(page.getByTestId('assistant-completed-tools')).toHaveAttribute('open', '');
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+  await expect(page.getByTestId('assistant-activity-tool').last()).not.toHaveAttribute('open');
+});
+
+test('virtual nested tools with the same ID retain independent parent paths', async () => {
+  const blocks = ['parent-a', 'parent-b'].map(id => disclosureSubagent(id, 'completed', [disclosureTool('shared-tool')]));
+  await mountDisclosureTranscript(disclosureMessage(blocks));
+  const parents = page.getByTestId('assistant-activity-subagent');
+  for (const parent of await parents.all()) await parent.locator(':scope > summary').click();
+  await page.getByTestId('assistant-activity-tool-summary').first().click();
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+  await unmountDisclosure();
+  await returnToDisclosure();
+  await expect(parents).toHaveCount(2);
+  await expect(page.getByTestId('assistant-activity-tool').first()).toHaveAttribute('open', '');
+  await expect(page.getByTestId('assistant-activity-tool').last()).not.toHaveAttribute('open');
+});
+
+test('virtual disclosure resets after block eviction, message eviction, epoch and thread changes', async () => {
+  const message = disclosureMessage([disclosureTool('evicted-tool')]);
+  await mountDisclosureTranscript(message);
+  const receipt = page.getByTestId('assistant-activity-tool');
+  const openAndUnmount = async () => {
+    await page.getByTestId('assistant-activity-tool-summary').click();
+    await expect(receipt).toHaveAttribute('open', '');
+    await unmountDisclosure();
+  };
+  await openAndUnmount();
+  await updateDisclosureMessage(disclosureMessage([]));
+  await updateDisclosureMessage(message);
+  await returnToDisclosure();
+  await expect(receipt).not.toHaveAttribute('open');
+  await openAndUnmount();
+  await page.evaluate(() => {
+    window.evictedMessage = disclosureProps.messages[0];
+    renderDisclosureTranscript({messages: disclosureProps.messages.slice(1), trimRevision: 1});
+    renderDisclosureTranscript({messages: [evictedMessage, ...disclosureProps.messages], prependRevision: 1});
+  });
+  await returnToDisclosure();
+  await expect(receipt).not.toHaveAttribute('open');
+  await openAndUnmount();
+  await page.evaluate(() => renderDisclosureTranscript({windowEpoch: 1}));
+  await returnToDisclosure();
+  await expect(receipt).not.toHaveAttribute('open');
+  await openAndUnmount();
+  await page.evaluate(() => renderDisclosureTranscript({threadId: 'disclosure-next-thread'}));
+  await returnToDisclosure();
+  await expect(receipt).not.toHaveAttribute('open');
+});
 
 test('transcript preserves an intentional scroll away from the bottom when new output arrives', async () => {
   await page.evaluate(() => {
