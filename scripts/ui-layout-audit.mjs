@@ -30,6 +30,7 @@ const smokeTarget = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET
 const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
 
 let app;
+let viewportCdp;
 let smokeProvider;
 const audits = [];
 const geometryProblems = [];
@@ -229,6 +230,17 @@ try {
     }
   });
   const page = await app.firstWindow();
+  viewportCdp = await page.context().newCDPSession(page);
+  const emulateViewport = async ({width, height}) => {
+    // Own every metrics override in this session so native zoom can clear it.
+    // Match Playwright's desktop viewport defaults without its separate session.
+    await viewportCdp.send('Emulation.setDeviceMetricsOverride', {
+      width, height, screenWidth: width, screenHeight: height,
+      deviceScaleFactor: 1, mobile: false,
+      screenOrientation: {angle: 0, type: 'landscapePrimary'},
+      dontSetVisibleSize: false
+    });
+  };
   const browserWindow = await app.browserWindow(page);
   nativeMinimum = await browserWindow.evaluate(window => window.getMinimumSize());
   // Preserve the product minimum. Emulate renderer viewports below it so native
@@ -308,7 +320,7 @@ try {
       const [minWidth, minHeight] = window.getMinimumSize();
       window.setBounds({ ...window.getBounds(), width: Math.max(size.width, minWidth), height: Math.max(size.height, minHeight) });
     }, viewport);
-    await page.setViewportSize({width: viewport.width, height: viewport.height});
+    await emulateViewport(viewport);
     // Exercise the real correction handler: it must preserve native constraints
     // without changing the renderer viewport used for responsive layout checks.
     await app.evaluate(({screen}) => screen.emit('display-metrics-changed', screen.getPrimaryDisplay(), ['workArea']));
@@ -355,6 +367,7 @@ try {
 
     await navigate(page, `${projectQuery}&view=writing`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
+    await page.getByTestId('latex-source-editor').locator('.cm-content').waitFor({state: 'visible'});
     await capture(page, `canvas-${viewport.id}`);
 
     await page.getByTestId('activity-nav-runs').click();
@@ -585,7 +598,7 @@ try {
   // Verify final positions under the ordinary system motion preference as well.
   await page.emulateMedia({reducedMotion: 'no-preference'});
   await browserWindow.evaluate(window => window.setBounds({...window.getBounds(), width: 1440, height: 900}));
-  await page.setViewportSize({width: 1440, height: 900});
+  await emulateViewport({width: 1440, height: 900});
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
   await navigate(page, `${projectQuery}&view=writing&assistant=1`);
   await page.getByTestId('assistant-panel').waitFor();
@@ -605,10 +618,9 @@ try {
   await page.emulateMedia({reducedMotion: 'reduce'});
   }
   // Measure actual webContents zoom separately from the CSS viewport matrix.
-  // Clear Playwright's emulation first; otherwise this would only resize a mock viewport.
-  const zoomCdp = await page.context().newCDPSession(page);
+  // Clear metrics through the same session that applied the CSS viewport matrix.
   try {
-    await zoomCdp.send('Emulation.clearDeviceMetricsOverride');
+    await viewportCdp.send('Emulation.clearDeviceMetricsOverride');
     await browserWindow.evaluate(window => window.setContentSize(1440, 900));
     const applyNativeZoom = async factor => {
       const size = await browserWindow.evaluate((window, zoom) => {
@@ -625,6 +637,7 @@ try {
         nativeZoomFactor = factor;
         await navigate(page, `${projectQuery}&view=writing&assistant=0`);
         await page.getByTestId('canvas').waitFor();
+        await page.getByTestId('latex-source-editor').locator('.cm-content').waitFor({state: 'visible'});
         await applyNativeZoom(factor);
         await capture(page, `native-zoom-${factor}-canvas`, browserWindow);
         await navigate(page, `page=settings&project=${project.id}&view=writing&assistant=0`);
@@ -642,7 +655,6 @@ try {
   } finally {
     await browserWindow.evaluate(window => window.webContents.setZoomFactor(1));
     nativeZoomFactor = null;
-    await zoomCdp.detach();
   }
   assert.deepEqual(geometryProblems, [], 'viewport, minimum type and targets, and shadow clearance');
 } catch (error) {
@@ -658,6 +670,7 @@ try {
     narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
     audits, viewports: VIEWPORTS, nativeZoomFactors: [1.25, 2, 4]});
   try {
+    await viewportCdp?.detach().catch(error => console.error('[layout:teardown]', error.message));
     if (app !== undefined) {
       if (failure !== null) {
         await app.evaluate(({BrowserWindow}) => {

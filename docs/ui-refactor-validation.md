@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.2：完整布局矩阵与原生缩放
+
+状态：**Verified passing**（布局范围）。同一CDP会话负责设置和清除CSS视口模拟，原生缩放前从该会话解除模拟；画布截图等待真实CodeMirror正文可见，退出时释放会话，避免将模拟尺寸误记为原生缩放。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/layout pnpm audit:layout` **783个状态通过、2097个控件/焦点检查、cut=0**。原生最小窗口保持1184×640；浅深主题下画布与设置的125%/200%/400%缩放共 **12/12** 状态通过，实际CSS视口分别为1152×720、720×450、360×225。已查看浅色宽画布和深色400%设置截图，正文与输入焦点完整。
+
+`node --check scripts/ui-layout-audit.mjs`、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design`和`git diff --check`通过；eager为517717 bytes / 11 files，278个组件通过已实现设计规则。截图与原始布局报告仅作本轮现场复核，正式结果落档后清理。此结果不替代系统IME、VoiceOver、实际滚轮或外部服务任务验收。
+
 ## 2026-11-24 P7.7：提问恢复与活动披露收尾
 
 状态：**Verified passing**（本部分）。提问卡移除后，虚拟列表重挂历史工具时丢失手动展开态，连续高度收缩中断下一轮慢流跟随。披露现随当前消息窗口保留，消息/块裁剪或thread/epoch变更时释放；保留值仅含状态和截止时间，不复制正文。裸推理、子代理离屏完成后按原截止时间收起；同ID离屏重试的新失败重新披露，同一次失败更新尊重手动收起。流式完成不重新分组，工具组与真实块有独立键域，嵌套块按完整父路径隔离。
