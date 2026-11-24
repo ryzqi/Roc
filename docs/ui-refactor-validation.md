@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.8：文献分页滚动夹具
+
+状态：**Verified passing**（分页回归范围）。`pnpm test:renderer`完成1017项，1016通过、1失败；唯一失败在选中首条并直接调用DOM `scrollTo()`后，首条仍挂载，尚未进入下一页加载。单项原夹具循环第4轮复现；有界位置诊断第1轮复现10000px→0px，容器始终连接、选择始终为首条，scrollHeight从17227px变为16897px，clientHeight为538px。直接DOM滚动没有用户输入接管事件，未结束的选择定位在行高刷新后重试。
+
+分页测试的滚动步骤现通过Playwright `mouse.wheel()`发出真实wheel，让已有用户接管路径处理定位；首条卸载、真实总数、单次请求、原地重试、追加视口、跨页选择、437条去重和DOM有界断言均保留。诊断监听与日志已移除。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test --test-name-pattern='manual pages keep' tests/renderer/literature-pagination.test.mjs`严格串行连续20轮 **20/20**；`node --test --test-concurrency=1 tests/renderer/literature-pagination.test.mjs tests/renderer/literature-list-layout.test.mjs` **12/12**；`node --check tests/renderer/literature-pagination.test.mjs`与`git diff --check`通过。测试资料根自动清理，失败诊断和循环日志在结果落档后清理。完整Renderer复验、功能smoke及打包另记；性能采样按用户要求跳过。
+
 ## 2026-11-24 P7.5：按要求跳过性能采样
 
 用户明确要求“跳过性能测试”。剩余生产长流预检、普通启动、UI大规模交互、PDF连续翻页、长期空闲/流式及独立React Profiler正式采样均取消；本轮尚未启动这些运行，也没有生成新的正式性能报告。既有P0原始报告保留，先前定向回归和预检仅支持各自已经记录的范围，不据此声明当前性能预算通过。

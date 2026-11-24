@@ -68,7 +68,8 @@ test('manual pages keep the total honest, retry in place and retain selection wi
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
   assert.equal(await page.evaluate(() => window.calls.length), 1);
   await page.getByTestId('literature-row-project-a-0').click();
-  await page.locator('.library-virtual-list').evaluate(element => element.scrollTo({top: 10000}));
+  await page.locator('.library-virtual-list').hover();
+  await page.mouse.wheel(0, 10000);
   await expect(page.getByTestId('literature-row-project-a-0')).toHaveCount(0);
   const scrollBefore = await page.locator('.library-virtual-list').evaluate(element => element.scrollTop);
   await page.evaluate(() => {window.hold = true;});
