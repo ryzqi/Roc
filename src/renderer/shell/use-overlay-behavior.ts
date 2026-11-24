@@ -32,22 +32,10 @@ export { overlayStackDepth, topOverlayId } from './overlay-stack';
  *
  * ## Focus *return* is deliberately not here
  *
- * All three rules above are keyed on `open`, because they must take effect the
- * instant the overlay starts closing. Focus return must **not** be: it has to
- * happen when the panel actually leaves the DOM.
- *
- * This used to be one effect and one lifetime — `ModalShell` rendered `null` when
- * closed, so `open: false` *was* the unmount. Adding the exit animation separated
- * the two, and the split has a visible failure: this effect's cleanup fired at
- * `open: false`, then ~180ms later the panel unmounted and a *nested* overlay's
- * cleanup (a stacked confirm panel, whose opener is a button inside the panel being
- * removed) put focus back on an element that was about to disappear. Focus then
- * fell to `<body>` — caught by `verify:p8-settings`, 关闭后焦点回到设置齿轮 got
- * `null`.
- *
- * So focus return lives in `OverlayFocusRestore`, which is mounted *inside* the
- * animated subtree. Its lifetime is the panel's lifetime, and nested overlays
- * therefore resolve in the same order they did before the animation existed.
+ * Stack and keyboard ownership follow logical `open`. Focus return lives in
+ * `OverlayFocusRestore`: live presence returns focus when interaction ends,
+ * while real unmount still handles a parent removing an open overlay. A
+ * finished return attempt is remembered so visual removal cannot steal focus.
  */
 
 export type OverlayBehaviorOptions = {
@@ -159,45 +147,57 @@ export function useOverlayBehavior({
 }
 
 /**
- * Returns focus to whatever opened the overlay, when the overlay is really gone.
- *
- * Rendered by `ModalShell` *inside* the animated subtree on purpose: the effect's
- * cleanup is the unmount, which is the only moment that is both (a) after the panel
- * has left the DOM and (b) in the same commit as every nested overlay's removal. See
- * this module's header for the focus-loss bug that separating focus return from
- * unmount caused.
+ * Captures one opener per interactive lifetime, including StrictMode replay.
+ * Presence ends interaction before visual exit; real unmount is the fallback
+ * when the parent removes a still-open overlay.
  *
  * `returnFocusSelector` exists because the opener is not always what the user last
  * focused: the settings centre also opens from the native `⌘,` menu accelerator, where
  * `document.activeElement` is the body and focus would land nowhere. When the selector
  * matches nothing the captured opener wins.
  */
-export function OverlayFocusRestore({ returnFocusSelector, restoreWhen, panelRef }: {
+export function OverlayFocusRestore({ returnFocusSelector, restoreWhen, panelRef, present = true }: {
   returnFocusSelector?: string | undefined;
   restoreWhen?: () => boolean;
   panelRef?: RefObject<HTMLElement | null>;
+  present?: boolean;
 }): null {
   const openerRef = useRef<HTMLElement | null | undefined>(undefined);
+  const wasPresentRef = useRef(false);
+  const restoreAttemptedRef = useRef(false);
   const restoreWhenRef = useRef(restoreWhen);
   restoreWhenRef.current = restoreWhen;
 
   useEffect(() => {
     // Runs before `useOverlayBehavior`'s effect (child effects fire first), so the
     // opener is still the focused element when it is captured.
-    if (openerRef.current === undefined) {
+    if (present && !wasPresentRef.current) {
       openerRef.current =
         returnFocusSelector === undefined
           ? captureDialogOpener()
           : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
+      restoreAttemptedRef.current = false;
     }
+    wasPresentRef.current = present;
     // StrictMode replays effects and detaches refs while keeping the panel DOM.
     const panel = panelRef?.current;
+    const restore = (): void => {
+      if (openerRef.current === undefined || restoreAttemptedRef.current || !(restoreWhenRef.current?.() ?? true)) return;
+      restoreAttemptedRef.current = true;
+      restoreDialogFocus(openerRef.current);
+    };
+    if (!present) {
+      restore();
+      // A nested opener can be inside a closing parent. Never retry that old
+      // return after the parent has reopened and acquired a new focus target.
+      restoreAttemptedRef.current = true;
+    }
 
     return () => {
       if (panel?.isConnected) return;
-      if (restoreWhenRef.current?.() ?? true) restoreDialogFocus(openerRef.current ?? null);
+      restore();
     };
-  }, [returnFocusSelector, panelRef]);
+  }, [returnFocusSelector, panelRef, present]);
 
   return null;
 }

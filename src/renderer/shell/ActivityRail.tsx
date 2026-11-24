@@ -1,4 +1,5 @@
 import { FileText, Moon, RotateCcw, Settings, Sun, SunMoon } from 'lucide-react';
+import { m } from 'motion/react';
 import { THEME_LABELS } from '../app/hooks/useThemeSync';
 import type { AppViewId } from '../app/routes';
 import type { ThemeOverride } from '../app/ui-state';
@@ -17,7 +18,7 @@ export function ActivityRail({ view, onNavigate, themeOverride, onCycleTheme, on
   const themeLabel = THEME_LABELS[themeOverride];
   const ThemeIcon = themeIcons[themeOverride];
   return (
-    <aside aria-label="活动栏" data-testid="activity-rail"
+    <m.aside layoutScroll aria-label="活动栏" data-testid="activity-rail"
       className="flex w-[52px] shrink-0 flex-col justify-between gap-2 border-e-[0.5px] border-line-default bg-surface-rail p-2">
       {view === null ? null : <AppNavigation view={view} onNavigate={onNavigate} />}
       <div className="mt-auto grid gap-1">
@@ -35,6 +36,6 @@ export function ActivityRail({ view, onNavigate, themeOverride, onCycleTheme, on
           <Settings size={16} aria-hidden="true" />
         </button>
       </div>
-    </aside>
+    </m.aside>
   );
 }

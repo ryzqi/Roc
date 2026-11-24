@@ -20,6 +20,7 @@ before(async () => {
         import React, {useState} from 'react';
         import {createRoot} from 'react-dom/client';
         import {flushSync} from 'react-dom';
+        import {LazyMotion, MotionConfig, domMax} from 'motion/react';
         import {ViewContent} from './src/renderer/app/ViewContent';
         import {LazyBoundary, retryableLazy} from './src/renderer/shell/LazyBoundary';
         import {ChatMessageRow} from './src/renderer/assistant/blocks/message-row';
@@ -69,7 +70,9 @@ before(async () => {
           return <main style={{height:480}}><ViewContent view={view} projectId="fixture"/></main>;
         }
         window.mountFixture = initial => {
-          flushSync(() => root.render(<Harness key={++session} initial={initial}/>));
+          flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domMax} strict>
+            <Harness key={++session} initial={initial}/>
+          </LazyMotion></MotionConfig>));
         };
         const Fragment = retryableLazy(() => {
           window.fragmentCalls++;
@@ -185,9 +188,12 @@ test('readonly canvas is released only after a cold destination successfully res
   await fresh();
   await page.evaluate(() => window.mountFixture('overview'));
   await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  const overviewBounds = await page.getByTestId('fixture-overview').boundingBox();
   await page.evaluate(() => {window.modes.writing = 'defer'; window.selectView('writing');});
   await page.waitForFunction(() => typeof window.finishView.writing === 'function');
+  await expect(page.getByTestId('view-loading')).toHaveText('正在加载论文写作…');
   await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  assert.deepEqual(await page.getByTestId('fixture-overview').boundingBox(), overviewBounds, 'loading keeps the current canvas geometry');
   assert.deepEqual(await page.evaluate(() => window.cleanupCalls), []);
   await page.evaluate(() => window.finishView.writing(false));
   await expect(page.getByTestId('view-load-error')).toContainText('Synthetic delayed failure');
@@ -201,6 +207,36 @@ test('readonly canvas is released only after a cold destination successfully res
   await expect(page.getByTestId('fixture-overview')).toBeVisible();
   assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'overview').length), 1);
   assert.equal(await page.evaluate(() => window.mountCalls.filter(view => view === 'overview').length), 2);
+  assert.deepEqual(pageErrors, []);
+});
+
+test('rapid warm handoffs preserve editor identity, selection and scroll with one active host', async () => {
+  await fresh();
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+  await page.evaluate(() => window.mountFixture('writing'));
+  await page.getByLabel('Draft for writing').fill('Retained writing selection');
+  await page.getByLabel('Draft for writing').evaluate(input => input.setSelectionRange(3, 11));
+  await page.locator('[data-shown-view="writing"]').evaluate(host => {
+    host.querySelector('section').style.minHeight = '900px';
+    host.scrollTop = 130;
+  });
+  await page.evaluate(() => window.selectView('library'));
+  await expect(page.getByTestId('fixture-library')).toBeVisible();
+  await page.evaluate(() => window.selectView('writing'));
+  await expect(page.locator('[data-shown-view="writing"]')).toBeVisible();
+  for (let index = 0; index < 3; index++) {
+    await page.evaluate(() => window.selectView('library'));
+    await page.waitForFunction(() => document.querySelector('[data-shown-view="library"]') !== null, undefined, {polling: 'raf'});
+    await page.evaluate(() => window.selectView('writing'));
+    await page.waitForFunction(() => document.querySelector('[data-shown-view="writing"]') !== null, undefined, {polling: 'raf'});
+  }
+  await expect(page.locator('[data-shown-view]')).toHaveCount(1);
+  await expect(page.getByTestId('canvas-content-handoff')).toHaveCount(1);
+  await expect(page.getByLabel('Draft for writing')).toHaveValue('Retained writing selection');
+  assert.equal(await page.locator('[data-shown-view="writing"]').evaluate(host => host.scrollTop), 130);
+  assert.deepEqual(await page.getByLabel('Draft for writing').evaluate(input => [input.selectionStart, input.selectionEnd]), [3, 11]);
+  assert.deepEqual(await page.evaluate(() => ({mounts: window.mountCalls, cleanups: window.cleanupCalls})), {mounts: ['writing', 'library'], cleanups: []});
+  await page.emulateMedia({reducedMotion: 'reduce'});
   assert.deepEqual(pageErrors, []);
 });
 

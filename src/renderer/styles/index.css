@@ -259,6 +259,54 @@
 }
 
 @layer utilities {
+  /* The browser retains only the closing pixels; logical state isolates input. */
+  .workspace-pane {
+    display: flex;
+  }
+
+  .workspace-pane[data-open='false'],
+  .workspace-scrim[data-open='false'] {
+    display: none;
+  }
+
+  .workspace-pane[data-side='start'] { --workspace-pane-offset: -100%; }
+  .workspace-pane[data-side='end'] { --workspace-pane-offset: 100%; }
+  .workspace-pane:dir(rtl)[data-side='start'] { --workspace-pane-offset: 100%; }
+  .workspace-pane:dir(rtl)[data-side='end'] { --workspace-pane-offset: -100%; }
+
+  .workspace-pane[data-floating='true'] {
+    opacity: 0;
+    transform: translateX(var(--workspace-pane-offset));
+    transition-property: opacity, transform, display;
+    transition-duration: var(--duration-overlay);
+    transition-timing-function: var(--ease-soft);
+    transition-behavior: allow-discrete;
+  }
+
+  .workspace-pane[data-floating='true'][data-open='true'] {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .workspace-scrim {
+    opacity: 0;
+    transition-property: opacity, display;
+    transition-duration: var(--duration-overlay);
+    transition-timing-function: var(--ease-soft);
+    transition-behavior: allow-discrete;
+  }
+
+  .workspace-scrim[data-open='true'] { opacity: 1; }
+  .workspace-scrim[data-open='false'] { pointer-events: none; }
+
+  @starting-style {
+    .workspace-pane[data-floating='true'][data-open='true'] {
+      opacity: 0;
+      transform: translateX(var(--workspace-pane-offset));
+    }
+    .workspace-scrim[data-open='true'] { opacity: 0; }
+  }
+
   /* Choose the scale without changing the caller's transition properties or curve. */
   .ui-motion-micro {
     transition-duration: var(--duration-micro);
@@ -447,8 +495,8 @@
  *     which a `height: 0 -> auto` transition on a wrapper could not do without
  *     unmounting.
  *
- * This app's Electron is Chromium 152, so both are available (verified via
- * `process.versions.chrome`, not assumed). The failure mode if that ever stops
+ * Electron's bundled Chromium supports both; the production motion report
+ * records `process.versions.chrome`. The failure mode if that ever stops
  * being true is an instant open with no travel — the block still works.
  *
  * The reduced-motion kill-switch is the global rule in the base layer above,

@@ -29,15 +29,17 @@ function WorkspacePane({ open, floating, inactive = false, side, title, testId, 
     overlayId: id, layer: 'ambient', inertBackground: false, preserveFocus: ownHeader
   });
   return <aside ref={ref} data-testid={open ? `${testId}-${floating ? 'drawer' : 'column'}` : undefined} aria-label={title}
-    role={floating ? 'dialog' : undefined} hidden={!open} inert={!open || inactive}
-    className={`${open ? 'flex' : 'hidden'} min-h-0 min-w-0 shrink-0 flex-col ${floating ? 'absolute inset-y-0 bg-surface-overlay' : 'bg-surface-rail'}`}
+    role={floating ? 'dialog' : undefined} aria-hidden={!open || inactive || undefined} inert={!open || inactive}
+    data-workspace-pane={testId} data-open={open} data-floating={floating} data-side={side}
+    className={`workspace-pane min-h-0 min-w-0 shrink-0 flex-col ${floating ? 'absolute inset-y-0 bg-surface-overlay' : 'bg-surface-rail'}`}
     style={floating ? {
       width, maxWidth: `calc(100% - ${ACTIVITY_RAIL_WIDTH + 32}px)`, zIndex: OVERLAY_Z_INDEX.ambient + 1,
       ...(side === 'start' ? { insetInlineStart: ACTIVITY_RAIL_WIDTH } : { insetInlineEnd: 0 })
     } : { width }}>
-    {open && floating ? <>
-      <OverlayFocusRestore returnFocusSelector={trigger === undefined ? undefined : `[data-testid="${trigger}"]`}
-        restoreWhen={() => !ownHeader || !openRef.current || !ref.current?.isConnected} />
+    <OverlayFocusRestore present={open && floating} panelRef={ref}
+      returnFocusSelector={trigger === undefined ? undefined : `[data-testid="${trigger}"]`}
+      restoreWhen={() => !ownHeader || !openRef.current || !ref.current?.isConnected} />
+    {floating ? <>
       {ownHeader ? null : <header className="flex h-10 shrink-0 items-center justify-between border-b-[0.5px] border-line px-3">
         <span className="font-medium">{title}</span>
         <button type="button" aria-label={`关闭${title}`} title={`关闭${title} (Esc)`} data-testid={`${testId}-drawer-close`}
@@ -74,7 +76,7 @@ export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activ
   const rightOverlay = assistantFloating && rightVisible;
   const closeRight = inspectorOpen ? () => onCloseInspector?.() : onCloseAssistant;
   const closeDrawer = (): void => layout.setDrawerOpen(false);
-  return <div className="relative flex min-h-0 min-w-0 flex-1" data-testid="workspace-layout"
+  return <div className="relative flex min-h-0 min-w-0 flex-1 overflow-clip" data-testid="workspace-layout"
     data-layout-mode={layout.mode} data-layout-preset={layout.preset}
     style={{ '--drawer-w': `${layout.drawerWidth}px`, '--assistant-w': `${layout.assistantWidth}px` } as CSSProperties}>
     {activityRail}
@@ -84,14 +86,14 @@ export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activ
     </WorkspacePane>
     {!drawerFloating && layout.drawerOpen ? <ResizableDivider ariaLabel="调整左栏宽度" value={layout.drawerWidth}
       min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} onResize={layout.resizeDrawer} onReset={layout.resetDrawer}
-      testId="divider-sidebar" /> : null}
+      onDragChange={layout.setResizing} testId="divider-sidebar" /> : null}
     <main id="roc-main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col" data-testid="canvas-column"
       inert={drawerOverlay || rightOverlay}>
       {canvas}
     </main>
     {!assistantFloating && rightVisible && !drawerOverlay ? <ResizableDivider ariaLabel={inspectorOpen ? '调整检视区宽度' : '调整助手宽度'} value={layout.assistantWidth}
       min={ASSISTANT_WIDTH.min} max={layout.assistantMaxWidth} onResize={layout.resizeAssistant} onReset={layout.resetAssistant}
-      growToward="start" testId={inspectorOpen ? 'divider-inspector' : 'divider-assistant'} /> : null}
+      onDragChange={layout.setResizing} growToward="start" testId={inspectorOpen ? 'divider-inspector' : 'divider-assistant'} /> : null}
     <WorkspacePane open={assistantVisible} floating={assistantFloating} inactive={drawerOverlay} side="end" title="研究助手"
       testId="assistant" trigger="titlebar-toggle-assistant" width="var(--assistant-w)" onClose={onCloseAssistant}>
       {assistant}
@@ -100,7 +102,9 @@ export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activ
       testId="inspector" width="var(--assistant-w)" onClose={closeRight} ownHeader>
       {inspector}
     </WorkspacePane>
-    {drawerOverlay || rightOverlay ? <div aria-hidden="true" className="absolute inset-y-0 end-0 bg-[var(--overlay-scrim)]"
-      style={{ insetInlineStart: ACTIVITY_RAIL_WIDTH, zIndex: OVERLAY_Z_INDEX.ambient }} onClick={drawerOverlay ? closeDrawer : closeRight} /> : null}
+    <div aria-hidden="true" inert={!drawerOverlay && !rightOverlay} data-open={drawerOverlay || rightOverlay}
+      className="workspace-scrim absolute inset-y-0 end-0 bg-[var(--overlay-scrim)]"
+      style={{ insetInlineStart: ACTIVITY_RAIL_WIDTH, zIndex: OVERLAY_Z_INDEX.ambient }}
+      onClick={() => { if (drawerOverlay) closeDrawer(); else if (rightOverlay) closeRight(); }} />
   </div>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './project-workspace.css';
 import { LayoutGrid, List, Loader2, Plus, Search } from 'lucide-react';
 import type { ResearchProject } from '../../shared/types';
@@ -14,6 +14,7 @@ import { ProjectFormDialog, type ProjectFormValues } from './ProjectFormDialog';
 import { isProjectArchived, visibleProjects, type ProjectStatusFilter } from './project-store';
 import { useProjects } from './use-projects';
 import type { RocClient } from '../shared/roc-client';
+import { motionTransitions } from '../shared/motion';
 
 /**
  * Project portal (P2/T2.2–T2.6).
@@ -50,6 +51,33 @@ const STATUS_FILTERS: Array<{ id: ProjectStatusFilter; label: string }> = [
   { id: 'all', label: '全部' }
 ];
 
+type ProjectRowRect = { element: HTMLDivElement; rect: DOMRect };
+type PinSnapshot = {
+  projects: readonly ResearchProject[];
+  query: string;
+  filter: ProjectStatusFilter;
+  view: ProjectView;
+  width: number;
+  ids: readonly string[];
+  rows: Map<string, ProjectRowRect>;
+};
+
+function visibleRowRects(list: HTMLDivElement, scrollArea: HTMLDivElement): Map<string, ProjectRowRect> {
+  const viewport = scrollArea.getBoundingClientRect();
+  const top = Math.max(0, viewport.top);
+  const bottom = Math.min(window.innerHeight, viewport.bottom);
+  const left = Math.max(0, viewport.left);
+  const right = Math.min(window.innerWidth, viewport.right);
+  const rows = new Map<string, ProjectRowRect>();
+  for (const element of list.querySelectorAll<HTMLDivElement>(':scope > [data-project-id]')) {
+    const rect = element.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0 && rect.bottom > top && rect.top < bottom && rect.right > left && rect.left < right) {
+      rows.set(element.dataset.projectId!, { element, rect });
+    }
+  }
+  return rows;
+}
+
 export function ProjectPortalView({
   client,
   createFormRequested,
@@ -65,10 +93,33 @@ export function ProjectPortalView({
   const [editing, setEditing] = useState<ResearchProject | null>(null);
   const [archiving, setArchiving] = useState<ResearchProject | null>(null);
   const [deleting, setDeleting] = useState<ResearchProject | null>(null);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const focusedIndex = useRef(0);
   const [visibleLimit, setVisibleLimit] = useState(40);
   const listRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<string | null>(null);
+  const pinSnapshot = useRef<PinSnapshot | null>(null);
+  const pinAnimations = useRef<Animation[]>([]);
+  const pinFocus = useRef<HTMLElement | null>(null);
+  const cancelPinMotion = useCallback((): void => {
+    pinSnapshot.current = null;
+    pinFocus.current = null;
+    for (const animation of pinAnimations.current) animation.cancel();
+    pinAnimations.current = [];
+  }, []);
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onPreferenceChange = (): void => { if (preference.matches) cancelPinMotion(); };
+    preference.addEventListener('change', onPreferenceChange);
+    window.addEventListener('resize', cancelPinMotion);
+    return () => {
+      preference.removeEventListener('change', onPreferenceChange);
+      window.removeEventListener('resize', cancelPinMotion);
+      cancelPinMotion();
+    };
+  }, [cancelPinMotion]);
 
   // Adopt later requests (a second ⌘N after the user closed the form).
   if (createFormRequested && !createOpen) {
@@ -90,18 +141,65 @@ export function ProjectPortalView({
    *
    * The visible set can shrink underneath the cursor (archiving or deleting under
    * 进行中, or a refresh after an edit). Without this clamp no card would match the
-   * stored index, so every project row would be `tabIndex={-1}` and the primary
-   * "open project" action would become unreachable by keyboard.
+   * focused ID. Preserve that project through reordering, then use the nearest
+   * index if it disappears so the primary action remains keyboard reachable.
    */
-  const safeFocusedIndex = shown.length === 0 ? 0 : Math.min(focusedIndex, shown.length - 1);
+  const identityIndex = shown.findIndex(project => project.id === focusedId);
+  const safeFocusedIndex = identityIndex >= 0 ? identityIndex : shown.length === 0 ? 0 : Math.min(focusedIndex.current, shown.length - 1);
+  focusedIndex.current = safeFocusedIndex;
   const rendered = shown.slice(0, Math.max(visibleLimit, safeFocusedIndex + 1));
   useEffect(() => {
     if (pendingFocus.current === null) return;
-    const target = listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${pendingFocus.current}"] [data-project-body]`);
+    const target = listRef.current?.querySelector<HTMLButtonElement>(`[data-project-id="${CSS.escape(pendingFocus.current)}"] [data-project-body]`);
     if (target === null || target === undefined) return;
     pendingFocus.current = null;
     target.focus();
-  }, [visibleLimit, safeFocusedIndex]);
+  }, [visibleLimit, safeFocusedIndex, shown]);
+
+  const resetListFocus = (): void => {
+    focusedIndex.current = 0;
+    setFocusedId(null);
+    setVisibleLimit(40);
+  };
+
+  const togglePin = (id: string): void => {
+    const list = listRef.current;
+    const scrollArea = scrollRef.current;
+    const active = document.activeElement;
+    // Capture visual positions before cancelling an unfinished reorder, so reversal is continuous.
+    const snapshot = all.length <= 20 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches && list !== null && scrollArea !== null
+      ? { projects: all, query, filter, view: projectView, width: list.clientWidth,
+        ids: rendered.map(project => project.id), rows: visibleRowRects(list, scrollArea) }
+      : null;
+    cancelPinMotion();
+    pinSnapshot.current = snapshot;
+    pinFocus.current = active instanceof HTMLElement && list?.contains(active) ? active : null;
+    projects.togglePin(id);
+  };
+
+  useLayoutEffect(() => {
+    const snapshot = pinSnapshot.current;
+    const focus = pinFocus.current;
+    cancelPinMotion();
+    if (focus?.isConnected && document.activeElement === document.body) focus.focus({ preventScroll: true });
+    const list = listRef.current;
+    const scrollArea = scrollRef.current;
+    if (snapshot === null || list === null || scrollArea === null || snapshot.projects !== all
+      || snapshot.query !== query || snapshot.filter !== filter || snapshot.view !== projectView || snapshot.width !== list.clientWidth) return;
+    const ids = new Set(rendered.map(project => project.id));
+    if (ids.size !== snapshot.ids.length || snapshot.ids.some(id => !ids.has(id))) return;
+    for (const [id, { element, rect }] of visibleRowRects(list, scrollArea)) {
+      const before = snapshot.rows.get(id);
+      if (before === undefined) continue;
+      const x = before.rect.left - rect.left;
+      const y = before.rect.top - rect.top;
+      if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) continue;
+      pinAnimations.current.push(element.animate([{ translate: `${x}px ${y}px` }, { translate: '0px 0px' }], {
+        duration: motionTransitions['list-small'].duration * 1000,
+        easing: `cubic-bezier(${motionTransitions['list-small'].ease.join(', ')})`
+      }));
+    }
+  }, [all, shown, query, filter, projectView, visibleLimit, cancelPinMotion]);
 
   const closeCreate = (): void => {
     setCreateOpen(false);
@@ -129,9 +227,11 @@ export function ProjectPortalView({
     event.preventDefault();
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? shown.length - 1 :
       Math.min(Math.max(safeFocusedIndex + delta, 0), shown.length - 1);
+    const nextProject = shown[next];
+    if (nextProject === undefined) return;
     if (next >= rendered.length) setVisibleLimit(Math.min(shown.length, Math.max(next + 1, visibleLimit + 40)));
-    pendingFocus.current = next;
-    setFocusedIndex(next);
+    pendingFocus.current = nextProject.id;
+    setFocusedId(nextProject.id);
     const nextButton = listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${next}"] [data-project-body]`);
     if (nextButton !== null && nextButton !== undefined) {
       pendingFocus.current = null;
@@ -181,7 +281,7 @@ export function ProjectPortalView({
   };
 
   return (
-    <div className="project-portal h-full" data-testid="portal">
+    <div className="project-portal h-full" data-testid="portal" onScrollCapture={cancelPinMotion}>
       <div className="project-portal-header" data-testid="portal-header">
         <div className="project-portal-heading">
           <PageHeader title="研究项目" action={<button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
@@ -195,9 +295,9 @@ export function ProjectPortalView({
                 <input
                   value={query}
                   onChange={(event) => {
+                    cancelPinMotion();
                     setQuery(event.target.value);
-                    setFocusedIndex(0);
-                    setVisibleLimit(40);
+                    resetListFocus();
                   }}
                   placeholder="搜索项目"
                   aria-label="搜索项目"
@@ -208,9 +308,9 @@ export function ProjectPortalView({
                   <button
                     type="button"
                     onClick={() => {
+                      cancelPinMotion();
                       setQuery('');
-                      setFocusedIndex(0);
-                      setVisibleLimit(40);
+                      resetListFocus();
                     }}
                     className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
                   >
@@ -227,9 +327,9 @@ export function ProjectPortalView({
                       type="button"
                       aria-pressed={selected}
                       onClick={() => {
+                        cancelPinMotion();
                         setFilter(entry.id);
-                        setFocusedIndex(0);
-                        setVisibleLimit(40);
+                        resetListFocus();
                       }}
                       data-testid={`portal-filter-${entry.id}`}
                       className={
@@ -246,7 +346,7 @@ export function ProjectPortalView({
               <div role="group" aria-label="项目显示方式" className="flex items-center gap-0.5">
                 {([['cards', '卡片视图', LayoutGrid], ['list', '紧凑列表', List]] as const).map(([id, label, Icon]) => (
                   <button key={id} type="button" aria-label={label} title={label} aria-pressed={projectView === id}
-                    data-testid={`portal-view-${id}`} onClick={() => { setProjectView(id); writeProjectView(id); }}
+                    data-testid={`portal-view-${id}`} onClick={() => { cancelPinMotion(); setProjectView(id); writeProjectView(id); }}
                     className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
                     <Icon size={14} aria-hidden="true" />
                   </button>
@@ -256,7 +356,7 @@ export function ProjectPortalView({
           ) : null}
         </div>
       </div>
-      <div className="project-portal-scroll ui-scroll-region" data-testid="portal-content">
+      <div ref={scrollRef} className="project-portal-scroll ui-scroll-region" data-testid="portal-content">
         <div className="project-portal-content">
           {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
             <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
@@ -311,10 +411,10 @@ export function ProjectPortalView({
               action={{
                 label: query.trim().length > 0 ? '清空搜索' : '查看全部',
                 onClick: () => {
+                  cancelPinMotion();
                   setQuery('');
                   setFilter('all');
-                  setFocusedIndex(0);
-                  setVisibleLimit(40);
+                  resetListFocus();
                 }
               }}
               testId="portal-no-match"
@@ -329,9 +429,10 @@ export function ProjectPortalView({
               data-testid="portal-grid"
               data-project-view={projectView}
               className={projectView === 'cards' ? 'project-grid' : 'project-list'}
+              style={all.length <= 20 ? { overflowAnchor: 'none' } : undefined}
             >
               {rendered.map((project, index) => (
-                <div role="listitem" key={project.id} data-project-index={index}>
+                <div role="listitem" key={project.id} data-project-index={index} data-project-id={project.id}>
                   <ProjectRow
                     project={project}
                     variant={projectView}
@@ -340,9 +441,9 @@ export function ProjectPortalView({
                     focused={index === safeFocusedIndex}
                     showStatus
                     actionsDisabled={busy}
-                    onFocus={() => setFocusedIndex(index)}
+                    onFocus={() => setFocusedId(project.id)}
                     onOpen={() => onOpenProject(project.id)}
-                    onTogglePin={() => projects.togglePin(project.id)}
+                    onTogglePin={() => togglePin(project.id)}
                     onEdit={() => {
                       projects.update.reset();
                       setEditing(project);
@@ -361,8 +462,11 @@ export function ProjectPortalView({
             </div>
             {rendered.length >= shown.length ? null : <button type="button" className="self-start rounded-control px-3 py-2 text-muted hover:bg-[var(--overlay-hover)]"
               data-testid="portal-load-more" onClick={() => {
-                pendingFocus.current = rendered.length;
-                setFocusedIndex(rendered.length);
+                cancelPinMotion();
+                const next = shown[rendered.length];
+                if (next === undefined) return;
+                pendingFocus.current = next.id;
+                setFocusedId(next.id);
                 setVisibleLimit(current => current + 40);
               }}>显示更多项目（剩余 {shown.length - rendered.length} 个）</button>}
             </>

@@ -19,7 +19,8 @@
 P2 的 `motionTransitions` 提供上述七个事件入口，原有面板导出引用同一对象；遮罩保持原有独立预设。
 CSS 的 micro/fast/base/overlay 与 Motion 秒值由合同检查对应，原有 fast/base/slow 数值保留，
 slow 明确指向兼容刻度。普通 utility 使用 `ui-motion-*`，属性仍由调用者明确指定。
-选中指标在 P3 接入，不能将预设存在视为导航已经采用。
+P3 的活动栏和画布子导航共用 `SelectionIndicator`，每个实例以 `useId` 隔离
+layout identity；只测量指示条，活动栏提供实际滚动容器的 `layoutScroll`。
 
 共享 [ActionStatus / TransientStatus](../../src/renderer/shared/action-status.tsx)只接收展示状态。
 `ActionStatus` 的 pending/success 默认使用 `status`，error 使用常驻 `alert`；若外层已拥有
@@ -29,11 +30,36 @@ live region，传 `announce={false}`，避免重复播报。`TransientStatus` �
 
 ## 中断
 
-第二次操作直接更新最新目标，不等待动画完成，不排队。关闭立即隔离退出内容的指针、键盘和可访问树；返回焦点不等待淡出。重新打开撤销旧退出，旧完成回调不得关闭新对象。
+第二次操作直接更新最新目标，不等待动画完成，不排队。WorkspacePane、共享 ModalShell
+和原生标题栏菜单关闭立即隔离退出内容的指针、键盘和可访问树；返回焦点不等待淡出。
+重新打开撤销旧退出，旧完成回调不得关闭新对象。设置的独立 Radix pilot 保留
+FocusScope 到退出结束的既有合同，避免改变 Radix 的隐藏、滚动锁和嵌套焦点生命周期；
+它的关闭守卫与快速重开仍由原逻辑控制，是本阶段的明确例外。
 
 原生 CSS transitions 优先用于受控显示、选中和 anchored popover；需要保留卸载视觉时才引入 presence。已有 `AnimatePresence` 必须让退出子树读取实时 presence，不能依靠卸载前捕获的 `open=true`。View Transition 只作用于附件等局部稳定身份，检查支持与拒绝并在反向、换对象或卸载时跳过旧 transition。
 
-`ModalShell` 的焦点恢复保留首次打开者（包含无打开者的情况），以实际 panel DOM 是否脱离文档判断卸载。React StrictMode 的 effect 重放和 ref detach 不代表弹层已移除；不能在模拟清理时把焦点还给背景。父级直接卸载仍沿用真实恢复，嵌套弹层顺序保持原合同。
+`ModalShell` 的焦点恢复保留首次打开者（包含无打开者的情况），以实际 panel DOM 是否脱离文档判断卸载。React StrictMode 的 effect 重放和 ref detach 不代表弹层已移除；不能在模拟清理时把焦点还给背景。结束交互只尝试一次恢复，即使旧打开者处于父层的 inert 树内，也不在视觉卸载时重试，防止父层重开后抢焦点。父级直接卸载仍 present 的弹层保留真实恢复。
+
+## P3 壳体与内容接线
+
+WorkspacePane 的资源和 DOM 保持挂载，`data-open` 表示逻辑状态，`inert/aria-hidden`
+立即隔离关闭或被另一栏覆盖的内容。CSS 的 display 离散过渡保留退出像素，
+opacity/transform 负责边缘移动；scrim 同步过渡，关闭时不接收指针。
+断点先改变布局属性；不对宽度加 tween，不以计时器维护第二套 present 状态。
+标题栏菜单保留原生 popover、Escape 和焦点回位，`beforetoggle` 同步隔离退出树；
+几何样式不依赖 `:popover-open`，display/overlay 离散过渡维持同一退场位置。
+
+分隔条在 RAF 中只更新视觉偏好，释放时合并最终帧并写一次；Escape、pointercancel、
+丢失 capture 或断点卸载回滚尺寸且不写中间值。项目/布局键变化后旧回调不写新作用域。
+拖动期间的收起或重置单独更新已存基线，取消尺寸不会重新展开用户已收起的左栏。
+现有 UI 偏好格式和键保持不变。
+
+画布仍在目标模块 ready 后切换；加载目标提示不占正文高度，交接只淡出一个轻量遮层。
+草稿宿主、选区、阅读位置和 ViewActivity 身份保持原逻辑。设置现有 keyed panel
+只做短 opacity 进入，不保留退出表单。项目置顶只有完整集合 ≤20、显示 ID 集合稳定、
+两端都在可见区时做局部 translate；大集合即使筛为少量结果也立即更新。
+再次置顶先读当前视觉位置再取消旧动画；搜索、筛选、布局、滚动、窗口尺寸、
+减少动态效果和卸载立即取消。项目焦点按 ID 保留，包含置顶按钮和原生披露入口。
 
 ## 减少动态效果
 

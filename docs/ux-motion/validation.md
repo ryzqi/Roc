@@ -29,7 +29,7 @@ CSS 宽布局 1440×900、抽屉 720×450。Electron 显示元数据约 120Hz。
 
 | 场景 | 五轮 RAF P95 最大（ms） | 五轮反馈 P95 最大（ms） | 拖动区间写入 |
 | --- | ---: | ---: | ---: |
-| 项目小列表置顶/取消 | 9.4 | 6.3 | 0 |
+| 100 项集合筛至约 11 项置顶/取消 | 9.4 | 6.3 | 0 |
 | 项目菜单反向 | 9.3 | 8.5 | 0 |
 | 左抽屉反向 | 9.3 | 8.4 | 0 |
 | 助手鼠标反向 | 9.3 | 8.3 | 0 |
@@ -110,3 +110,57 @@ ErrorBar、DelayedFallback、设置保存栏三个入口接入，保留原恢复
 24 张任务截图与画廊临时构建核验后清理，正式夹具和必要回归保留。P2 不重复五轮
 性能采样或全业务回归；P3 的反向面板、P4/P5 调用点和 P6 汇总门禁继续执行。
 AST 只覆盖静态 class 表达式及本文件初值，不将 CSS/动态运行路径或物理读屏声称为已验收。
+
+## P3：壳体反向、一次持久化与轻量导航
+
+状态：**Verified passing（定向自动化与当前机器生产采样范围）**，2026-11-25。
+所有命令在仓库根 `/Users/Apple_501/Desktop/Roc/Roc` 执行。
+
+浮动左右栏和遮罩用 CSS 离散显示过渡保留退出视觉，关闭立即隔离交互，重开保持节点与草稿；
+workspace 边界裁切避免进入位移临时扩大页面横向滚动范围。共享模态框读取实时 presence，
+逻辑关闭立即还焦点，管理抽屉与放弃确认同时退出后重开不会被旧恢复抢焦点。
+原生 popover 同步 beforetoggle 交互状态，设置 Radix FocusScope 保留原退出生命周期。
+
+分栏每帧只更新视觉，释放一次持久化；Escape、pointercancel、换项目和分隔条卸载
+回滚尺寸且不写中间值。拖动时收起左栏单独保存折叠基线，取消尺寸不会重新展开。
+导航共用实例隔离指示条，画布冷加载保留旧宿主和目标提示，ready 后只淡出轻量遮层。
+设置分区淡入新表单。项目置顶仅完整集合 ≤20、显示 ID 不变且前后位置可见时局部过渡，
+大集合直接更新，快速反向、滚动和减少动态效果取消旧动画，焦点按项目 ID 保留。
+
+| 检查命令 | 结果 |
+| --- | --- |
+| `pnpm build`、`pnpm check:renderer-chunks` | 最终普通生产构建/typecheck 通过；eager JS 529804 bytes / 31 files，单入口预算通过 |
+| `node --test --test-concurrency=1 tests/renderer/workspace-frame.test.mjs tests/renderer/canvas-view-loading.test.mjs tests/renderer/project-session-layout.test.mjs` | 画布 11/11、项目 10/10；初次 workspace 的两个失败已修正并由下行最终构建验证 |
+| `ROC_UI_AUDIT_DIR=/tmp/roc-ux-p3-workspace-20261125 node --test tests/renderer/workspace-frame.test.mjs` | 6/6；深浅、宽窄/断点、零横向溢出/裁切、draft 保活、0/1 写入、取消/收起/换项目、退出中反向及 reduced motion |
+| `node --test --test-concurrency=1 tests/renderer/workspace-frame.test.mjs tests/renderer/artifact-dock.test.mjs` | 工件 5/5；workspace 初次最后一项的夹具时序失败由上一行修正后验证 |
+| `node --test --test-name-pattern='^resize \|^Escape closes the model\|^remote model dialog\|^modal ' tests/renderer/desktop-interactions.test.mjs` | 8/8；原生编辑/披露、模态退出隔离、50ms 重开后焦点不被旧退出抢走 |
+| `node --test --test-concurrency=1 --test-name-pattern='^management \|^activity \|^selection \|^settings restores \|^short shared confirmation\|^settings dialog layers focus\|^nested settings Escape\|^reset confirmation\|^discard requires confirmation' tests/renderer/shell-management-guards.test.mjs tests/renderer/radix-settings-dialog.test.mjs` | 7/7；设置快速双分区、单表单、guard、共享确认/嵌套焦点，活动与任务入口 |
+| `node --test --test-name-pattern='^reopening management\|^actual shell assistant\|^actual shell management' tests/renderer/shell-management-guards.test.mjs` | 3/3；真实管理抽屉/确认同时退出、50ms 父层重开、旧确认卸载后保留新编辑器焦点 |
+| `pnpm audit:motion`、`node scripts/ui-audit/index-interactions.mjs --write`、`--check` | 404 源文件；0 motion violations / 0 input failures；2152 模板/路由、35 合同，静态快照一致 |
+| `node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p3.json --samples 5` | 8 场景 ×5 轮全部完成；0 blocked / 0 missing feedback；每轮流式一次真实请求 |
+| `git diff --check` | 通过 |
+
+初次新增 workspace 用例在断点的 resize effect 安装前操作抽屉，并依赖上一用例草稿，
+已改为自包含且等待实际 drawer 模式与焦点。重开首焦点沿用原 close button 合同，
+没有改弱隔离或草稿断言。深浅 1440/1184 截图读回后，4 张任务截图与临时构建日志清理。
+
+[正式 P3 对照](after-p3.json)使用 P0 同一普通构建模式、M1 Pro/32GiB、AC/低功耗关闭，
+记录实际 Electron 45.3.4 / Chromium 156.0.8078.100。全部动作窗口 ≥50ms 主线程任务
+与 RAF >50ms 间隔均为 0，流式终态来自 `run_completed`，挂载行数有界。
+
+| 场景 | P0 → P3 五轮 RAF P95 最大（ms） | P3 反馈 P95 最大（ms） | P3 拖动内 / 总写入 |
+| --- | ---: | ---: | ---: |
+| 大项目集合过滤后置顶/取消 | 9.4 → 9.6 | 7.8 | 0 / 0 |
+| 项目菜单反向 | 9.3 → 10.0 | 15.9 | 0 / 0 |
+| 左抽屉反向 | 9.3 → 10.1 | 8.9 | 0 / 0 |
+| 助手鼠标反向 | 9.3 → 10.1 | 8.5 | 0 / 0 |
+| 助手键盘反向 | 9.3 → 10.1 | 7.6 | 0 / 0 |
+| 分栏拖拽 | 9.3 → 9.4 | 9.3 | 0 / 1 |
+| 分栏 Escape | 9.3 → 10.0 | 10.0 | 0 / 0 |
+| 500 历史 / 500 流式完成 | 9.4 → 10.0 | 5.8 | 0 / 0 |
+
+RAF P95 最大增加 0.8ms，菜单反馈代理从 8.5ms 增至 15.9ms；没有隐藏该变化，
+当前仍在 20ms RAF / 100ms 反馈起始预算内。P3 消除了每帧同步偏好写入，
+不由此声称物理 120Hz 达标或全量“无性能回退”。小集合动画由 Renderer 回归单独验证，
+生产 `project-reorder` 仍是 100 项完整集合的过滤场景。5000 历史、长时资源、
+物理触控板/IME/VoiceOver、另一台 Mac 和真人八旅程继续在后续阶段或实机范围验收。

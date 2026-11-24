@@ -9,7 +9,7 @@ export type ResizableDividerProps = {
   max: number;
   onResize: (width: number) => void;
   onReset?: () => void;
-  onDragChange?: (dragging: boolean) => void;
+  onDragChange?: (dragging: boolean, cancelled?: boolean) => void;
   atLimit?: 'min' | 'max' | null;
   testId?: string;
   growToward?: 'start' | 'end';
@@ -33,12 +33,13 @@ export function ResizableDivider({
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = value;
+    const sessionCallbacks = callbacks.current;
     let pendingWidth = startWidth;
     let frame: number | null = null;
     target.focus();
     target.setPointerCapture(pointerId);
     setDragging(true);
-    callbacks.current.onDragChange?.(true);
+    sessionCallbacks.onDragChange?.(true);
 
     const cleanup = (): void => {
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -50,13 +51,13 @@ export function ResizableDivider({
       target.removeEventListener('lostpointercapture', onCancel);
       cleanupRef.current = null;
       if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
-      callbacks.current.onDragChange?.(false);
     };
     const finish = (cancelled: boolean): void => {
       const pending = frame !== null;
       cleanup();
-      if (cancelled) callbacks.current.onResize(startWidth);
-      else if (pending) callbacks.current.onResize(pendingWidth);
+      if (cancelled) sessionCallbacks.onResize(startWidth);
+      else if (pending) sessionCallbacks.onResize(pendingWidth);
+      sessionCallbacks.onDragChange?.(false, cancelled);
       setDragging(false);
     };
     const onMove = (moveEvent: PointerEvent): void => {
@@ -65,7 +66,7 @@ export function ResizableDivider({
       if (frame === null) {
         frame = window.requestAnimationFrame(() => {
           frame = null;
-          callbacks.current.onResize(pendingWidth);
+          sessionCallbacks.onResize(pendingWidth);
         });
       }
     };
@@ -81,7 +82,7 @@ export function ResizableDivider({
       keyEvent.stopPropagation();
       finish(true);
     };
-    cleanupRef.current = cleanup;
+    cleanupRef.current = () => finish(true);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);

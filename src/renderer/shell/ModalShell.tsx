@@ -1,6 +1,6 @@
-import { useCallback, useId, useRef, type RefObject } from 'react';
+import { useCallback, useId, useRef, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, useIsPresent } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { X } from 'lucide-react';
 import {
@@ -66,8 +66,8 @@ export type ModalShellProps = {
    * Defaults to the element that opened the overlay. The settings centre passes its gear
    * button because ⌘, arrives from the native menu, where the opener is the document body
    * and focus would otherwise be lost on close. Handled by `OverlayFocusRestore`, which
-   * lives inside the animated subtree so focus returns when the panel is actually gone —
-   * see that module's header.
+   * reads live presence inside the animated subtree and returns focus when interaction
+   * ends. The remaining exit pixels cannot receive input.
    */
   returnFocusSelector?: string;
   /** Return false to keep the overlay open (e.g. unsaved draft confirmation). */
@@ -100,6 +100,31 @@ export type ModalShellProps = {
    */
   layer?: OverlayLayer;
 };
+
+function OverlayPresence({ kind, layer, testId, panelRef, returnFocusSelector, children }: {
+  kind: OverlayKind;
+  layer: OverlayLayer;
+  testId: string | undefined;
+  panelRef: RefObject<HTMLDivElement | null>;
+  returnFocusSelector: string | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  // This component is retained by AnimatePresence and receives its live state.
+  const present = useIsPresent();
+  return <motion.div
+    style={{ zIndex: OVERLAY_Z_INDEX[layer], pointerEvents: present ? undefined : 'none' }}
+    className={kind === 'drawer' ? 'fixed inset-0 flex' : 'ui-modal-layout fixed inset-0'}
+    data-testid={testId ?? 'overlay'}
+    data-overlay-kind={kind}
+    data-overlay-layer={layer}
+    data-present={present}
+    inert={!present}
+    aria-hidden={!present || undefined}
+  >
+    <OverlayFocusRestore present={present} returnFocusSelector={returnFocusSelector} panelRef={panelRef} />
+    {children}
+  </motion.div>;
+}
 
 export function ModalShell({
   open,
@@ -204,20 +229,8 @@ export function ModalShell({
     // the panel unambiguously; it carries no animation of its own.
     <AnimatePresence>
       {open ? (
-        <motion.div
-          // The z-index comes from the shared layering table, never from a literal: two
-          // overlays both written as `z-50` are ordered by DOM order, which is how the
-          // narrow-window sidebar drawer ended up painted on top of the settings panel.
-          style={{ zIndex: OVERLAY_Z_INDEX[layer] }}
-          className={kind === 'drawer' ? 'fixed inset-0 flex' : 'ui-modal-layout fixed inset-0'}
-          data-testid={testId ?? 'overlay'}
-          data-overlay-kind={kind}
-          data-overlay-layer={layer}
-        >
-          {/* Mounted with the panel, not with `ModalShell`: its unmount is the panel's
-              removal, which is when focus may safely go back to the opener. */}
-          <OverlayFocusRestore returnFocusSelector={returnFocusSelector} panelRef={panelRef} />
-
+        <OverlayPresence kind={kind} layer={layer} testId={testId}
+          panelRef={panelRef} returnFocusSelector={returnFocusSelector}>
           {/* The scrim is a child covering the container, so the click must be
               handled *here*: on the container, `event.target` would always be the
               scrim and the guard would never pass. */}
@@ -256,7 +269,7 @@ export function ModalShell({
           >
             {content}
           </motion.div>
-        </motion.div>
+        </OverlayPresence>
       ) : null}
     </AnimatePresence>,
     document.body

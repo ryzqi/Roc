@@ -598,6 +598,13 @@ test('settings search retains native editing keys and section navigation stays o
   await page.getByTestId('settings-section-models').focus();
   await page.keyboard.press('ArrowDown');
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-default-model');
+  await page.getByTestId('settings-section-models').click();
+  await page.getByTestId('settings-section-default-model').click();
+  await page.getByTestId('settings-section-models').click();
+  await expect(page.getByTestId('settings-section-models')).toBeFocused();
+  await expect(page.getByTestId('settings-panel')).toHaveCount(1);
+  await expect(page.getByTestId('settings-panel')).toHaveAttribute('id', 'settings-panel-models');
+  await expect(page.getByTestId('settings-panel').locator('input, select, button').first()).toBeEnabled();
   await search.fill('没有该设置');
   await page.getByTestId('settings-search-empty').waitFor();
   await page.setViewportSize({width: 640, height: 850});

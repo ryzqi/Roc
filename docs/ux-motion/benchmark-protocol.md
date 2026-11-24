@@ -15,7 +15,7 @@
 
 | 场景 | 动作与观察 | 功能约束 |
 | --- | --- | --- |
-| `project-reorder` | 100 项夹具过滤至约 11 项，列表置顶/取消五次 | 小列表、稳定对象；记录实际 mounted 行数 |
+| `project-reorder` | 100 项夹具过滤至约 11 项，列表置顶/取消五次 | 大集合筛选场景；P3 直接更新，记录实际 mounted 行数。≤20 完整集合的动画另用 Renderer 回归验证 |
 | `project-menu` | 项目菜单打开/关闭五次，60ms 间隔 | 第二次操作约在 120–200ms 过渡的 30–50% 位置 |
 | `sidebar-reverse` | 窄 CSS 窗左抽屉打开/关闭五次 | 触发器可达，退出后不保留交互；观测第一处可见样式变化 |
 | `assistant-reverse` | 窄 CSS 窗助手打开/关闭五次 | 同一身份反向操作；不得把进入完成当下一次点击前提 |
@@ -24,7 +24,9 @@
 | `divider-escape` | 相同的 20 点轨迹，方向随起点校准，Escape 后释放 | `aria-valuenow` 精确回到起点；不把已到边界的无变化输入当缺反馈 |
 | `stream-completion` | 已有 500/5000 条历史，真实 Enter 提交，500 个本地 SSE chunk 后完成 | 终态必须来自 `run_completed`；一轮一个请求；DOM 消息行数 <100 |
 
-这些断言确认采样路径有效；P0 的存储次数、帧耗时和长任务是观测值。项目菜单、侧栏、助手开关及准备阶段的关闭操作共用 `clickPointer`：先在 CSS 坐标核验按钮中心，再聚焦真实 BrowserWindow，用 `getContentBounds().width / CSS viewport.width` 得到 `effectiveScale`，将 CSS 中心乘该比例并取整，通过 Electron `webContents.sendInputEvent` 发送 `mouseMove`、左键 `mouseDown` / `mouseUp`（`clickCount=1`）。每次读取 `webContents.getZoomFactor()` 仅作为 `reportedZoom` 记录。
+这些断言确认采样路径有效；P0 的存储次数、帧耗时和长任务是观测值。P3 起补录
+主进程 `process.versions`，运行中的 Chromium 版本以该字段为准；不改变帧/输入仪器。
+项目菜单、侧栏、助手开关及准备阶段的关闭操作共用 `clickPointer`：先在 CSS 坐标核验按钮中心，再聚焦真实 BrowserWindow，用 `getContentBounds().width / CSS viewport.width` 得到 `effectiveScale`，将 CSS 中心乘该比例并取整，通过 Electron `webContents.sendInputEvent` 发送 `mouseMove`、左键 `mouseDown` / `mouseUp`（`clickCount=1`）。每次读取 `webContents.getZoomFactor()` 仅作为 `reportedZoom` 记录。
 
 菜单/抽屉场景保留每次 CSS 命中几何、`reportedZoom`、`effectiveScale`、`nativeContentSize` 和原生整数坐标，以及 probe 捕获的可信 `pointerdown` 目标与 CSS 坐标；要求次数、目标一致，坐标偏差≤1 CSS px，以容纳取整误差。助手按钮中心不可达时保留命中几何，将鼠标场景记为 `blocked`，整个系列不提供部分成绩，继续独立键盘和其他场景。`divider-drag` / `divider-escape` 在 zoom=1 下沿用 Playwright `page.mouse` 拖拽；项目列表与流式准备仍用原有 Playwright 操作。禁止强制点击。
 

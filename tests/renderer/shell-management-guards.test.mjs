@@ -19,6 +19,7 @@ before(async () => {
       import {flushSync} from 'react-dom';
       import {LazyMotion, domMax, MotionConfig} from 'motion/react';
       import {AppShell} from './src/renderer/app/AppShell';
+      import {AppNavigation} from './src/renderer/shell/AppNavigation';
       import {BEFORE_NAVIGATE} from './src/renderer/app/navigation-guard';
       import {BEFORE_ARTIFACT_CHANGE} from './src/renderer/artifacts/artifact-interactions';
       import {clearUiState, readOnboardingDismissed} from './src/renderer/app/ui-state';
@@ -86,11 +87,17 @@ before(async () => {
       window.setVeto = (kind, enabled) => window[enabled ? 'addEventListener' : 'removeEventListener'](
         kind === 'navigation' ? BEFORE_NAVIGATE : BEFORE_ARTIFACT_CHANGE, veto);
       window.unmount = () => flushSync(() => root.render(null));
+      window.mountNavigationPair = () => flushSync(() => root.render(
+        <MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict>
+          <AppNavigation view="overview" onNavigate={()=>{}}/>
+          <AppNavigation view="library" onNavigate={()=>{}}/>
+        </LazyMotion></MotionConfig>
+      ));
       window.mount = (view = 'library') => {
         unmount(); setVeto('navigation', false); setVeto('artifact', false);
-        window.gitCalls=[];window.boundPath='/workspace';
+        window.gitCalls=[];window.boundPath='/workspace';window.managementDraftStores=null;
         history.replaceState(null, '', '?project=project-a&view=' + view + '&assistant=1');
-        flushSync(() => root.render(<MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict>
+        flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domMax} strict>
           <AppShell client={client}/>
         </LazyMotion></MotionConfig>));
       };
@@ -125,7 +132,11 @@ before(async () => {
           '/project/ProjectPortalView.tsx': `import React from 'react';
             export function ProjectPortalView() {return <section>科研项目</section>;}`,
           '/management/management-stores-provider.tsx': `export const ManagementStoresProvider = ({children}) => children;
-            export const useManagementStores = () => null;`,
+            export const useManagementStores = selector => window.managementDraftStores === null
+              ? null : selector(window.managementDraftStores);`,
+          '/management/sections/MemorySection.tsx': `import React from 'react';
+            export const MemorySection = ({store}) => <textarea aria-label="管理记忆草稿"
+              onChange={event=>{store.dirtyCount=event.currentTarget.value===''?0:1;}}/>;`,
           '/app/ViewContent.tsx': `import React from 'react';
             import {useWorkspaceScope} from './workspace-scope';
             import {useManagement} from '../management/management-scope';
@@ -181,6 +192,7 @@ before(async () => {
   `);
   app = await _electron.launch({executablePath: electronPath, args: [join(directory, 'main.cjs')]});
   page = await app.firstWindow();
+  await page.emulateMedia({reducedMotion: 'reduce'});
   page.setDefaultTimeout(4000);
   page.on('pageerror', error => errors.push(error.message));
   await page.getByTestId('roc-app').waitFor();
@@ -384,6 +396,64 @@ test('actual shell management exits keep the task canvas until all guards releas
   await expect(page.getByTestId('canvas-runs')).toHaveCount(1);
 });
 
+test('reopening management during nested discard exit keeps focus in the new editor', async () => {
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+  try {
+    await page.evaluate(() => {
+      mount();
+      window.managementDraftStores = {
+        summaries: {memory: '记忆草稿', skills: '', mcp: '', tasks: ''},
+        memory: {
+          dirtyCount: 0, isBusy: () => false,
+          discardAll: () => {window.managementDraftStores.memory.dirtyCount = 0;}
+        },
+        mcp: {dirty: false, isBusy: () => false, cancelEdit: () => {}},
+        tasks: {dirty: false, isBusy: () => false, cancelEdit: () => {}}
+      };
+    });
+    await page.getByTestId('titlebar-management').click();
+    const editor = page.getByRole('textbox', {name: '管理记忆草稿', exact: true});
+    await editor.fill('尚未保存的管理草稿');
+    await page.getByTestId('management-panel-close').click();
+    const confirmation = page.getByTestId('mgmt-discard');
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', {name: '放弃修改', exact: true}).focus();
+    const handoff = await page.evaluate(async () => {
+      const drawer = document.querySelector('[data-testid="management-panel"]');
+      const oldDiscard = document.querySelector('[data-testid="mgmt-discard"]');
+      oldDiscard.querySelector('[data-testid="mgmt-discard-confirm"]').click();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const closed = [drawer, oldDiscard].map(element => ({
+        connected: element.isConnected, present: element.dataset.present,
+        inert: element.inert, hidden: element.getAttribute('aria-hidden')
+      }));
+      document.querySelector('[data-testid="titlebar-management"]').click();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const nextEditor = drawer.querySelector('textarea');
+      nextEditor.focus({preventScroll: true});
+      return {
+        closed, drawerPresent: drawer.dataset.present, drawerInert: drawer.inert,
+        discardStillExiting: oldDiscard.isConnected && oldDiscard.dataset.present === 'false',
+        editorFocused: document.activeElement === nextEditor
+      };
+    });
+    assert.deepEqual(handoff.closed, [
+      {connected: true, present: 'false', inert: true, hidden: 'true'},
+      {connected: true, present: 'false', inert: true, hidden: 'true'}
+    ]);
+    assert.equal(handoff.drawerPresent, 'true');
+    assert.equal(handoff.drawerInert, false);
+    assert.equal(handoff.discardStillExiting, true);
+    assert.equal(handoff.editorFocused, true);
+    await page.waitForTimeout(240);
+    await expect(confirmation).toHaveCount(0);
+    await expect(editor).toBeFocused();
+  } finally {
+    await page.evaluate(() => mount());
+    await page.emulateMedia({reducedMotion: 'reduce'});
+  }
+});
+
 test('actual shell artifact handoff waits for its inspector guard and returns to the selected task', async () => {
   await openTask();
   await page.evaluate(() => {
@@ -443,6 +513,14 @@ test('activity and workspace task entries open the same project task canvas', as
   await expect(page.getByTestId('canvas-task-center')).toBeVisible();
   await expect(page.getByTestId('management-panel')).toHaveCount(0);
   await expect(page.getByTestId('shell-canvas-content')).toHaveText('runs');
+  await page.evaluate(() => mountNavigationPair());
+  const indicators = page.getByTestId('activity-nav-selection');
+  await expect(indicators).toHaveCount(2);
+  assert.notEqual(await indicators.nth(0).getAttribute('data-selection-id'), await indicators.nth(1).getAttribute('data-selection-id'));
+  for (const navigation of await page.getByRole('navigation', {name: '项目导航'}).all()) {
+    await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(navigation.getByTestId('activity-nav-selection')).toHaveAttribute('aria-hidden', 'true');
+  }
 });
 
 test('first steps can be skipped, persist only dismissal and reopen after navigation accepts',async()=>{

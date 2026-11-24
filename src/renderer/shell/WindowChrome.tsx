@@ -31,6 +31,12 @@ const presets = [
   { id: 'review', label: '运行布局', icon: Columns2 }
 ] as const;
 
+function updatePopoverInteraction(event: React.ToggleEvent<HTMLDivElement>): void {
+  const open = event.newState === 'open';
+  event.currentTarget.inert = !open;
+  event.currentTarget.setAttribute('aria-hidden', String(!open));
+}
+
 export function WindowChrome({
   projectName, projectId, projects, onOpenProject, onBackToPortal, onOpenSearch, sidebarCollapsed, onToggleSidebar,
   assistantOpen, onToggleAssistant, assistantRunning, onOpenGit, onOpenManagement, branchLabel = null, gitChangeCount = null, layoutPreset, onChangePreset
@@ -67,6 +73,7 @@ export function WindowChrome({
             <ChevronDown size={12} aria-hidden="true" className="shrink-0" />
           </button>
           <div popover="auto" ref={projectMenu} id={menuId} className="no-drag titlebar-project-menu" role="group" aria-label="研究项目"
+            onBeforeToggle={updatePopoverInteraction}
             onToggle={event => {
               if ((event.nativeEvent as ToggleEvent).newState === 'closed') setProjectQuery('');
               else projectSearch.current?.focus();
@@ -131,7 +138,7 @@ export function WindowChrome({
             <ChevronDown size={12} aria-hidden="true" />
           </button>
           <div popover="auto" ref={layoutMenu} id={layoutMenuId} role="group" aria-label="工作布局"
-            className="no-drag titlebar-layout-menu">
+            className="no-drag titlebar-layout-menu" onBeforeToggle={updatePopoverInteraction}>
             {presets.map(({ id, label, icon: Icon }, index) => (
               <button key={id} type="button" onClick={() => {
                 layoutMenu.current?.hidePopover();

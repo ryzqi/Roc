@@ -14,10 +14,18 @@ before(async()=>{
   await buildViteRenderer({directory,style:'html,body,#root{height:100%;margin:0}',script:`
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
+    import {flushSync} from 'react-dom';
     import {WorkspaceLayout} from './src/renderer/app/WorkspaceLayout';
     import {useLayoutPersistence} from './src/renderer/app/useLayoutPersistence';
-    import {clearUiState} from './src/renderer/app/ui-state';
+    import {clearUiState,readWorkspaceLayout} from './src/renderer/app/ui-state';
     clearUiState();
+    const setItem=Storage.prototype.setItem;
+    window.layoutWrites=[];
+    Storage.prototype.setItem=function(key,value){
+      if(key==='roc.ui.workspace.layouts')window.layoutWrites.push(value);
+      return setItem.call(this,key,value);
+    };
+    window.readLayout=readWorkspaceLayout;
     function Harness(){
       const [assistant,setAssistant]=useState(false);
       const [project,setProject]=useState('project-a');
@@ -26,6 +34,8 @@ before(async()=>{
       window.setWorkspace=({project,preset})=>{setProject(project);setPreset(preset);};
       window.resetLayout=layout.reset;
       window.resizeContext=layout.resizeDrawer;
+      window.setAssistant=open=>flushSync(()=>setAssistant(open));
+      window.setContext=open=>flushSync(()=>layout.setDrawerOpen(open));
       return <div className="flex h-full flex-col">
         <header><button data-testid="titlebar-toggle-sidebar" onClick={layout.toggleDrawer}>上下文</button>
           <button data-testid="titlebar-toggle-assistant" onClick={()=>{layout.setDrawerOpen(!layout.drawerFloating);setAssistant(value=>!value);}}>助手</button></header>
@@ -133,4 +143,124 @@ test('manual widths and context visibility remain isolated by project and mode',
   await expect(page.getByTestId('canvas-draft')).toHaveValue('修改后正文');
   await page.getByTestId('titlebar-toggle-assistant').click();
   await expect(page.getByTestId('assistant-draft')).toHaveValue('修改后问题');
+});
+
+test('drag persists only the released width and rolls back cancellation, scope change and divider unmount',async()=>{
+  await page.setViewportSize({width:1440,height:900});
+  await page.evaluate(()=>{
+    window.setWorkspace({project:'drag-project-a',preset:'research'});
+    window.setAssistant(false);
+  });
+  const divider=page.getByTestId('divider-sidebar');
+  await expect(divider).toHaveAttribute('aria-valuenow','232');
+  const drag=async delta=>{
+    const bounds=await divider.boundingBox();
+    await page.evaluate(()=>window.layoutWrites.length=0);
+    await page.mouse.move(bounds.x+4,bounds.y+100);await page.mouse.down();
+    await page.mouse.move(bounds.x+4+delta,bounds.y+100,{steps:5});
+    await expect(divider).toHaveAttribute('data-dragging','true');
+  };
+  await drag(40);
+  await expect(divider).toHaveAttribute('aria-valuenow','272');
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),0);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),1);
+  assert.equal(await page.evaluate(()=>window.readLayout('drag-project-a','research').sidebarWidth),272);
+  for(const cancellation of ['Escape','pointercancel']){
+    await drag(40);
+    await expect(divider).toHaveAttribute('aria-valuenow','312');
+    if(cancellation==='Escape')await page.keyboard.press('Escape');
+    else await page.evaluate(()=>window.dispatchEvent(new PointerEvent('pointercancel',{pointerId:1})));
+    await page.mouse.up();
+    await expect(divider).toHaveAttribute('aria-valuenow','272');
+    assert.equal(await page.evaluate(()=>window.layoutWrites.length),0);
+  }
+  await divider.focus();await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),1);
+  assert.equal(await page.evaluate(()=>window.readLayout('drag-project-a','research').sidebarWidth),280);
+  await drag(40);
+  await page.evaluate(()=>window.setWorkspace({project:'drag-project-b',preset:'research'}));
+  await expect(divider).toHaveAttribute('aria-valuenow','232');
+  await page.mouse.up();
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),0);
+  assert.equal(await page.evaluate(()=>window.readLayout('drag-project-a','research').sidebarWidth),280);
+  assert.equal(await page.evaluate(()=>window.readLayout('drag-project-b','research').sidebarWidth),232);
+  await page.evaluate(()=>window.setWorkspace({project:'drag-project-a',preset:'research'}));
+  await expect(divider).toHaveAttribute('aria-valuenow','280');
+  await drag(30);
+  await page.setViewportSize({width:1099,height:900});
+  await expect(divider).toHaveCount(0);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),0);
+  await page.setViewportSize({width:1440,height:900});
+  await expect(divider).toHaveAttribute('aria-valuenow','280');
+  await drag(30);
+  await page.evaluate(()=>window.setContext(false));
+  await expect(divider).toHaveCount(0);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(()=>window.layoutWrites.length),1);
+  assert.deepEqual(await page.evaluate(()=>window.readLayout('drag-project-a','research')),
+    {sidebarWidth:280,assistantWidth:344,collapsed:true});
+  await page.getByTestId('titlebar-toggle-sidebar').click();
+  await expect(divider).toHaveAttribute('aria-valuenow','280');
+});
+
+test('floating panes reverse during exit, isolate input immediately and retain drafts across modes and reduced motion',async()=>{
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.setViewportSize({width:1440,height:900});
+  await page.evaluate(()=>{
+    window.setWorkspace({project:'reverse-project',preset:'research'});
+    window.setAssistant(true);window.setContext(true);
+  });
+  await expect(page.getByTestId('assistant-column')).toBeVisible();
+  await page.getByTestId('canvas-draft').fill('修改后正文');
+  await page.getByTestId('assistant-draft').fill('修改后问题');
+  await page.setViewportSize({width:720,height:450});
+  await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode','drawers');
+  await page.evaluate(()=>{window.setAssistant(false);window.setContext(true);});
+  const pane=page.locator('[data-workspace-pane="sidebar"]');
+  await expect(pane).toHaveAttribute('data-open','true');
+  await expect(page.getByTestId('sidebar-drawer-close')).toBeFocused();
+  await page.getByTestId('context-action').focus();
+  const closing=await pane.evaluate(async element=>{
+    window.retainedPane=element;
+    window.setContext(false);
+    await new Promise(requestAnimationFrame);
+    const animation=element.getAnimations().find(value=>value.transitionProperty==='transform');
+    return {inert:element.inert,hidden:element.getAttribute('aria-hidden'),
+      display:getComputedStyle(element).display,animating:animation?.playState==='running'};
+  });
+  assert.deepEqual(closing,{inert:true,hidden:'true',display:'flex',animating:true});
+  await expect(page.getByTestId('titlebar-toggle-sidebar')).toBeFocused();
+  const scrim=page.locator('.workspace-scrim');
+  assert.equal(await scrim.evaluate(element=>element.inert),true);
+  assert.equal(await scrim.evaluate(element=>getComputedStyle(element).pointerEvents),'none');
+  await pane.evaluate(async element=>{
+    const animation=element.getAnimations().find(value=>value.transitionProperty==='transform');
+    while(animation?.playState==='running' && Number(animation.currentTime)<60)await new Promise(requestAnimationFrame);
+    window.setContext(true);
+  });
+  await expect(pane).toHaveAttribute('data-open','true');
+  assert.equal(await pane.evaluate(element=>element===window.retainedPane && !element.inert),true);
+  await expect(page.getByTestId('sidebar-drawer-close')).toBeFocused();
+  await expect(pane).toHaveCSS('transform','matrix(1, 0, 0, 1, 0, 0)');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('titlebar-toggle-sidebar')).toBeFocused();
+  await page.evaluate(()=>window.setAssistant(true));
+  await expect(page.getByTestId('assistant-draft')).toHaveValue('修改后问题');
+  await page.getByTestId('assistant-draft').focus();
+  await page.setViewportSize({width:1440,height:900});
+  await expect(page.getByTestId('canvas-draft')).toHaveValue('修改后正文');
+  await expect(page.getByTestId('assistant-draft')).toHaveValue('修改后问题');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.setViewportSize({width:720,height:450});
+  await expect(page.getByTestId('assistant-drawer')).toBeVisible();
+  await page.getByTestId('assistant-draft').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-workspace-pane="assistant"]')).toHaveCSS('display','none');
+  await page.getByTestId('titlebar-toggle-assistant').click();
+  await expect(page.getByTestId('assistant-drawer')).toHaveCSS('transform','matrix(1, 0, 0, 1, 0, 0)');
+  await expect(page.getByTestId('assistant-draft')).toHaveValue('修改后问题');
+  await page.keyboard.press('Escape');
+  await page.emulateMedia({reducedMotion:'no-preference'});
 });

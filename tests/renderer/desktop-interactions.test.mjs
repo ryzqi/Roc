@@ -75,6 +75,7 @@ before(async () => {
       window.setSkills = setSkills;
       window.setDivider = setDivider;
       window.setSettingsOpen = setSettingsOpen;
+      window.setFocusDialogOpen = open => flushSync(() => setFocusDialogOpen(open));
       window.focusDialogInitialElement = focusDialogInitialElement;
       window.setSearchOpen = setSearchOpen;
       window.setSearchQuery = setQuery;
@@ -118,8 +119,8 @@ before(async () => {
           <div style={{height: 160}} />
           <button data-testid="open-focus-dialog" onClick={() => setFocusDialogOpen(true)}>打开高级编辑</button>
         </div>
-        <ModalShell open={focusDialogOpen} onClose={() => setFocusDialogOpen(false)} title="高级编辑" testId="focus-dialog">
-          <button data-testid="focus-first">编辑内容</button>
+        <ModalShell open={focusDialogOpen} onClose={() => {window.focusCloseCalls++; setFocusDialogOpen(false);}} title="高级编辑" testId="focus-dialog">
+          <button data-testid="focus-first" onClick={() => window.focusActionCalls++}>编辑内容</button>
           <details>
             <summary data-testid="focus-summary">高级选项</summary>
             <button>折叠内容</button>
@@ -160,11 +161,12 @@ before(async () => {
           input: window.toolInput, output: null, error: null}} />
       </main>));
     };
-    window.mount = () => {
+    window.mount = (reducedMotion = 'always') => {
       window.sent = []; window.resizeCalls = 0; window.dragging = false; window.remoteFetches = 0;
       window.searchOpened = []; window.projectSubmissions = []; window.projectCancels = 0; window.deferWorkspacePick = false;
       window.deferSend = false; window.sendFailure = null; window.modelSelectCalls = [];
-      flushSync(() => root.render(<MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict><Harness /></LazyMotion></MotionConfig>));
+      window.focusCloseCalls = 0; window.focusActionCalls = 0;
+      flushSync(() => root.render(<MotionConfig reducedMotion={reducedMotion}><LazyMotion features={domMax} strict><Harness /></LazyMotion></MotionConfig>));
     };
     window.mount();
   `});
@@ -756,6 +758,37 @@ test('modal closing preserves the opener list scroll position', async () => {
   await expect(opener).toBeFocused();
   assert.equal(await page.getByTestId('opener-scroll').evaluate(element => element.scrollTop), 0,
     'returning focus does not scroll the underlying list');
+});
+
+test('modal exit isolates its retained subtree and reopening cancels late focus restoration', async () => {
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+  await page.evaluate(() => window.mount('never'));
+  const opener = page.getByTestId('open-focus-dialog');
+  const overlay = page.getByTestId('focus-dialog');
+  await opener.click();
+  await page.getByTestId('focus-first').focus();
+  const closing = await overlay.evaluate(async element => {
+    window.retainedOverlay = element;
+    window.setFocusDialogOpen(false);
+    await new Promise(requestAnimationFrame);
+    return {present: element.dataset.present, inert: element.inert, hidden: element.getAttribute('aria-hidden'),
+      pointerEvents: getComputedStyle(element).pointerEvents, connected: element.isConnected};
+  });
+  assert.deepEqual(closing, {present: 'false', inert: true, hidden: 'true', pointerEvents: 'none', connected: true});
+  await expect(opener).toBeFocused();
+  await page.waitForTimeout(50);
+  await opener.click();
+  await expect(overlay).toHaveAttribute('data-present', 'true');
+  assert.equal(await overlay.evaluate(element => element === window.retainedOverlay && !element.inert), true);
+  await page.getByTestId('focus-first').focus();
+  await page.waitForTimeout(210);
+  await expect(page.getByTestId('focus-first')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(opener).toBeFocused();
+  await overlay.waitFor({state: 'detached'});
+  assert.equal(await page.evaluate(() => window.focusCloseCalls), 1);
+  assert.equal(await page.evaluate(() => window.focusActionCalls), 0);
+  await page.evaluate(() => window.mount());
 });
 
 test('search clear button keeps native Enter behavior without opening a result', async () => {

@@ -1,5 +1,7 @@
+import { useId } from 'react';
 import { BookOpen, FileText, House, ListChecks } from 'lucide-react';
 import type { AppViewId } from '../app/routes';
+import { SelectionIndicator } from '../shared/SelectionIndicator';
 import './chrome.css';
 
 export const workspaceModes = [
@@ -15,6 +17,7 @@ export function AppNavigation({ view, onNavigate }: {
   view: AppViewId;
   onNavigate: (view: WorkspaceMode) => void;
 }): React.JSX.Element {
+  const selectionId = useId();
   return (
     <nav aria-label="项目导航" className="grid gap-1">
       {workspaceModes.map(({ id, label, icon: Icon }, index) => (
@@ -22,6 +25,8 @@ export function AppNavigation({ view, onNavigate }: {
           aria-current={view === id ? 'page' : undefined} aria-label={label}
           aria-keyshortcuts={`Meta+Alt+${index + 1}`} title={`${label}（⌘⌥${index + 1}）`}
           data-testid={`activity-nav-${id}`} onClick={() => onNavigate(id)}>
+          {view === id ? <SelectionIndicator layoutId={`${selectionId}-activity`} testId="activity-nav-selection"
+            className="activity-selection" /> : null}
           <Icon size={18} aria-hidden="true" />
         </button>
       ))}

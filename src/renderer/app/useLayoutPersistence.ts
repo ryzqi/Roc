@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LayoutPreset } from './routes';
 import {
   ASSISTANT_WIDTH, SIDEBAR_WIDTH, defaultWorkspaceLayout, readWorkspaceLayout, writeWorkspaceLayout,
@@ -31,6 +31,7 @@ export function useLayoutPersistence(preset: LayoutPreset, projectId: string | n
   toggleDrawer: () => void;
   resizeDrawer: (width: number) => void;
   resizeAssistant: (width: number) => void;
+  setResizing: (resizing: boolean, cancelled?: boolean) => void;
   resetDrawer: () => void;
   resetAssistant: () => void;
   applyPreset: (preset: LayoutPreset) => void;
@@ -41,14 +42,48 @@ export function useLayoutPersistence(preset: LayoutPreset, projectId: string | n
   const [saved, setSaved] = useState(() => ({key, value: readWorkspaceLayout(projectId, preset)}));
   const current = saved.key === key ? saved.value : readWorkspaceLayout(projectId, preset);
   if (saved.key !== key) setSaved({key, value: current});
+  const latest = useRef({key, value: current});
+  latest.current = {key, value: current};
+  const resizeSession = useRef<{key: string; baseline: WorkspaceLayoutPreference} | null>(null);
+  if (resizeSession.current?.key !== key) resizeSession.current = null;
   const [floating, setFloating] = useState({key, open: false});
   const mode = layoutModeForWidth(windowWidth);
   const drawerWidth = current.sidebarWidth;
   const drawerOpen = mode !== 'drawers' ? !current.collapsed : floating.key === key && floating.open;
   const update = (patch: Partial<WorkspaceLayoutPreference>): void => {
-    const value = {...current, ...patch};
+    // A divider can finish while its original project/preset is being removed.
+    if (latest.current.key !== key) return;
+    const value = {...latest.current.value, ...patch};
+    latest.current = {key, value};
     setSaved({key, value});
-    writeWorkspaceLayout(projectId, preset, value);
+    const session = resizeSession.current;
+    if (session === null) writeWorkspaceLayout(projectId, preset, value);
+    else if (patch.collapsed !== undefined) {
+      // A visibility/reset action survives cancellation of the pointer resize.
+      session.baseline = {...session.baseline, ...patch};
+      writeWorkspaceLayout(projectId, preset, session.baseline);
+    }
+  };
+  const setResizing = (resizing: boolean, cancelled = false): void => {
+    if (latest.current.key !== key) return;
+    if (resizing) {
+      resizeSession.current = {key, baseline: latest.current.value};
+      return;
+    }
+    const session = resizeSession.current;
+    resizeSession.current = null;
+    if (session === null) return;
+    if (cancelled) {
+      latest.current = {key, value: session.baseline};
+      setSaved(latest.current);
+      return;
+    }
+    const value = latest.current.value;
+    if (value.sidebarWidth !== session.baseline.sidebarWidth ||
+      value.assistantWidth !== session.baseline.assistantWidth ||
+      value.collapsed !== session.baseline.collapsed) {
+      writeWorkspaceLayout(projectId, preset, value);
+    }
   };
   const visibleDrawerWidth = Math.min(drawerWidth, Math.max(SIDEBAR_WIDTH.min, windowWidth - ACTIVITY_RAIL_WIDTH - CANVAS_MIN_WIDTH));
   const drawerInline = mode !== 'drawers' && drawerOpen;
@@ -88,7 +123,7 @@ export function useLayoutPersistence(preset: LayoutPreset, projectId: string | n
       const next = clamp(width, ASSISTANT_WIDTH.min, assistantMaxWidth);
       update({assistantWidth: next});
     },
-    resetDrawer, resetAssistant, applyPreset,
+    setResizing, resetDrawer, resetAssistant, applyPreset,
     reset: () => {
       update(defaultWorkspaceLayout(preset));
       setFloating({key, open: false});

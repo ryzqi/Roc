@@ -33,13 +33,12 @@
   }
 }
 
-.activity-destination[aria-current='page']::before {
+.activity-selection {
   position: absolute;
   inset-block: 8px;
   inset-inline-start: -8px;
   inline-size: 2px;
   background: var(--accent);
-  content: '';
 }
 
 /* Native zoom can leave less height than the navigation and bottom actions.
@@ -52,8 +51,8 @@
 
 [data-testid='activity-rail'] > * { flex-shrink: 0; }
 
-.titlebar-project-menu:popover-open,
-.titlebar-layout-menu:popover-open {
+.titlebar-project-menu,
+.titlebar-layout-menu {
   position: fixed;
   inset: 40px auto auto;
   inset-inline-start: 88px;
@@ -68,12 +67,35 @@
   color: var(--ink-primary);
   background: var(--surface-overlay);
   box-shadow: var(--shadow-popover);
+  opacity: 0;
+  transform: translateY(-3px);
+  transition-property: opacity, transform, display, overlay;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-soft);
+  transition-behavior: allow-discrete;
 }
 
-.titlebar-layout-menu:popover-open {
+.titlebar-layout-menu {
   inset-inline-start: auto;
   inset-inline-end: 80px;
   inline-size: min(224px, calc(100vi - 24px));
+}
+
+.titlebar-project-menu:popover-open,
+.titlebar-layout-menu:popover-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.titlebar-project-menu[inert],
+.titlebar-layout-menu[inert] { pointer-events: none; }
+
+@starting-style {
+  .titlebar-project-menu:popover-open,
+  .titlebar-layout-menu:popover-open {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
 }
 
 /* Zoom can make the renderer narrower than the native window minimum. Keep

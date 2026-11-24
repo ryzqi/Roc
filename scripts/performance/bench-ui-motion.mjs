@@ -343,6 +343,7 @@ try {
     });
     app = launched.app;
     const page = launched.value;
+    report.host.runtimeVersions ??= await app.evaluate(() => ({...process.versions}));
     report.host.display ??= await app.evaluate(({screen}) => screen.getAllDisplays().map(display => ({
       size: display.size, scaleFactor: display.scaleFactor, refreshHz: display.displayFrequency ?? null
     })));

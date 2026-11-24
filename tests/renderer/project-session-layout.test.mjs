@@ -40,18 +40,21 @@ before(async()=>{
       sidebarCollapsed={false} onToggleSidebar={()=>{}} assistantOpen={false} onToggleAssistant={()=>{}}
       assistantRunning={false} onOpenGit={()=>{}} onOpenManagement={()=>{}} layoutPreset="research" onChangePreset={()=>{}}/>;}
     const root=createRoot(document.getElementById('root'));let key=0;
-    window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict><React.Fragment key={++key}>
+    window.pinNow=id=>flushSync(()=>document.querySelector('[data-testid="portal-card-pin-'+id+'"]').click());
+    window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="user"><LazyMotion features={domMax} strict><React.Fragment key={++key}>
       {surface==='chrome'?<Chrome/>:surface==='portal'?<ProjectPortalView client={client} createFormRequested={false} onRequestConsumed={()=>{}} onOpenProject={id=>window.opened.push(id)}/>:surface==='search'?<Search/>:<SessionListView client={client} activeThreadId="one" onSelectThread={id=>window.opened.push(id)} onStartNewThread={()=>window.created++} onThreadDeleted={()=>{}}/>}
     </React.Fragment></LazyMotion></MotionConfig></SWRConfig>));
   `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory,'data'))});app.whenReady().then(()=>new BrowserWindow({show:false,width:1450,height:900}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);
   app=await _electron.launch({executablePath:electronPath,args:[join(directory,'main.cjs')]});
   page=await app.firstWindow();page.setDefaultTimeout(6000);page.on('pageerror',error=>errors.push(error.message));
+  await page.emulateMedia({reducedMotion:'reduce'});
   await page.waitForFunction(()=>typeof window.mount==='function');
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
 
 test('project menu searches one hundred titles, clears empty results and retains native keyboard closing',async()=>{
+  await page.emulateMedia({reducedMotion:'no-preference'});
   await page.evaluate(()=>{
     window.savedProjects=structuredClone(window.projectData);window.savedOpened=window.opened.length;
     const base=window.projectData[0];window.projectData.length=0;
@@ -62,6 +65,18 @@ test('project menu searches one hundred titles, clears empty results and retains
     const trigger=page.getByTestId('titlebar-projects');
     await trigger.focus();await page.keyboard.press('Enter');
     const search=page.getByTestId('titlebar-project-search');
+    await expect(search).toBeFocused();
+    const interruption=await page.evaluate(()=>{
+      const menu=document.querySelector('.titlebar-project-menu');
+      const trigger=document.querySelector('[data-testid="titlebar-projects"]');
+      menu.hidePopover();
+      const closed={open:menu.matches(':popover-open'),inert:menu.inert,hidden:menu.getAttribute('aria-hidden'),focus:document.activeElement===trigger};
+      trigger.click();
+      const reopened={open:menu.matches(':popover-open'),inert:menu.inert,hidden:menu.getAttribute('aria-hidden')};
+      return {closed,reopened};
+    });
+    assert.deepEqual(interruption.closed,{open:false,inert:true,hidden:'true',focus:true});
+    assert.deepEqual(interruption.reopened,{open:true,inert:false,hidden:'false'});
     await expect(search).toBeFocused();
     await expect(page.getByTestId('titlebar-project-menu-0')).toHaveAttribute('aria-current','page');
     await search.fill('不存在');
@@ -89,6 +104,7 @@ test('project menu searches one hundred titles, clears empty results and retains
     await expect(search).toBeHidden();
     await expect(trigger).toBeFocused();
   } finally {
+    await page.emulateMedia({reducedMotion:'reduce'});
     await page.evaluate(()=>{window.projectData.splice(0,window.projectData.length,...window.savedProjects);delete window.savedProjects;mount('portal');});
   }
 });
@@ -131,6 +147,7 @@ test('zero and one project keep creation and keyboard opening available',async()
 });
 
 test('one hundred projects mount progressively while search and keyboard reach every identity',async()=>{
+  await page.emulateMedia({reducedMotion:'no-preference'});
   await page.evaluate(()=>{
     window.savedProjects=structuredClone(window.projectData);
     const base=window.projectData[0];window.projectData.length=0;
@@ -144,6 +161,13 @@ test('one hundred projects mount progressively while search and keyboard reach e
     await page.getByTestId('portal-search').fill('长标题');
     await expect(page.locator('[data-project-body]')).toHaveCount(1);
     await expect(page.getByTestId('portal-card-open-scale-99')).toBeVisible();
+    await page.getByTestId('portal-search').fill('规模项目 9');
+    await expect(page.locator('[data-project-body]')).toHaveCount(10);
+    assert.equal(await page.evaluate(()=>{
+      window.pinNow('scale-98');
+      return [...document.querySelectorAll('[data-project-id]')].flatMap(row=>row.getAnimations()).length;
+    }),0,'the complete collection cap also applies to small search results');
+    await page.evaluate(()=>window.pinNow('scale-98'));
     await page.getByTestId('portal-search').fill('');
     await expect(page.locator('[data-project-body]')).toHaveCount(40);
     await page.getByTestId('portal-load-more').click();
@@ -157,7 +181,71 @@ test('one hundred projects mount progressively while search and keyboard reach e
     await expect(page.getByTestId('portal-card-open-scale-0')).toBeFocused();
     assert.equal(await page.getByTestId('portal').evaluate(element=>element.scrollWidth>element.clientWidth),false);
   } finally {
+    await page.emulateMedia({reducedMotion:'reduce'});
     await page.evaluate(()=>{window.projectData.splice(0,window.projectData.length,...window.savedProjects);delete window.savedProjects;mount('portal');});
+  }
+});
+
+test('small pin reversals retain visual position, project focus, disclosures and scroll',async()=>{
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(()=>{
+    window.savedProjects=structuredClone(window.projectData);
+    const base=window.projectData[0];window.projectData.length=0;
+    for(let index=0;index<6;index++)window.projectData.push({...base,id:'motion-'+index,title:'连续性项目 '+index});
+    document.getElementById('root').style.height='650px';
+    mount('portal');
+  });
+  try {
+    await page.getByTestId('portal-view-list').click();
+    await expect(page.locator('[data-project-body]')).toHaveCount(6);
+    await page.getByTestId('portal-card-actions-motion-1').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('portal-card-open-motion-1')).toHaveAttribute('tabindex','0');
+    await page.getByTestId('portal-content').evaluate(element=>{element.scrollTop=45;});
+    await page.getByTestId('portal-card-pin-motion-1').focus();
+    const continuity=await page.evaluate(()=>{
+      const list=document.querySelector('[data-testid="portal-grid"]');
+      const row=list.querySelector('[data-project-id="motion-1"]');
+      const scroll=document.querySelector('[data-testid="portal-content"]');
+      const initialScroll=scroll.scrollTop;
+      window.pinNow('motion-1');
+      const entering=[...list.children].flatMap(item=>item.getAnimations());
+      for(const animation of entering){animation.pause();animation.currentTime=Number(animation.effect.getTiming().duration)*.3;}
+      const before=row.getBoundingClientRect();
+      window.pinNow('motion-1');
+      const reversing=[...list.children].flatMap(item=>item.getAnimations());
+      for(const animation of reversing){animation.pause();animation.currentTime=0;}
+      const after=row.getBoundingClientRect();
+      window.pinCycleAnimations=[...entering,...reversing];
+      return {entering:entering.length,reversing:reversing.length,x:after.left-before.left,y:after.top-before.top,
+        initialScroll,scroll:scroll.scrollTop,focus:document.activeElement?.getAttribute('data-testid'),
+        disclosed:row.querySelector('details').open};
+    });
+    assert.ok(continuity.entering>0 && continuity.reversing>0,'the visible pin change and its reversal both animate');
+    assert.ok(Math.abs(continuity.x)<1 && Math.abs(continuity.y)<1,JSON.stringify(continuity));
+    assert.equal(continuity.focus,'portal-card-pin-motion-1');
+    assert.equal(continuity.disclosed,true);
+    assert.ok(continuity.initialScroll>0,'the reorder preserves a scrolled viewport');
+    assert.equal(continuity.scroll,continuity.initialScroll);
+    await expect(page.getByTestId('portal-card-open-motion-1')).toHaveAttribute('tabindex','0');
+    await page.getByTestId('portal-search').fill('连续性项目 5');
+    await expect(page.locator('[data-project-body]')).toHaveCount(1);
+    assert.equal(await page.evaluate(()=>window.pinCycleAnimations.every(animation=>animation.playState==='idle')),true);
+    await page.getByTestId('portal-search').fill('');
+    await page.emulateMedia({reducedMotion:'reduce'});
+    assert.equal(await page.evaluate(()=>{
+      window.pinNow('motion-1');
+      return [...document.querySelectorAll('[data-project-id]')].flatMap(row=>row.getAnimations()).length;
+    }),0,'reduced motion keeps the pin result without displacement');
+    await page.evaluate(()=>window.pinNow('motion-1'));
+  } finally {
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(()=>{
+      window.projectData.splice(0,window.projectData.length,...window.savedProjects);
+      delete window.savedProjects;delete window.pinCycleAnimations;
+      document.getElementById('root').style.height='';
+      mount('portal');
+    });
   }
 });
 

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { m } from 'motion/react';
 import type { AppSubview, AppViewId, AppViewTarget } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary } from '../shell/LazyBoundary';
 import { ViewActivity } from '../shared/view-activity';
+import { motionTransitions } from '../shared/motion';
 import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, type ViewProps } from './view-registry';
 import { retainedViewsAfterNavigation, viewHostFor } from './view-retention';
 
@@ -11,6 +13,15 @@ type ViewContentProps = {
   view: AppViewId;
   subview?: AppSubview | null;
   projectId: ViewProps['projectId'];
+};
+
+const viewLabels: Record<AppViewTarget, string> = {
+  overview: '总览',
+  discover: '发现',
+  library: '文献库',
+  knowledge: '知识库',
+  writing: '论文写作',
+  runs: '会话与任务'
 };
 
 /**
@@ -43,10 +54,14 @@ export function ViewContent({ view, subview = null, projectId }: ViewContentProp
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       {loadError === null ? null : <div className="shrink-0 p-2" data-testid="view-load-error">
-        <ErrorBar error={{level: 'page', message: `视图加载失败：${loadError}`, retry: () => retryView(target)}} />
+        <ErrorBar error={{level: 'page', message: `${viewLabels[target]}加载失败：${loadError}`, retry: () => retryView(target)}} />
       </div>}
+      <div className="relative flex min-h-0 w-full flex-1 flex-col">
       {!warming || requestedResident || loadError !== null ? null :
-        <p role="status" className="shrink-0 px-3 py-1.5 text-muted text-[length:var(--font-meta-size)]">正在加载视图…</p>}
+        <p role="status" data-testid="view-loading"
+          className="absolute right-3 top-2 z-10 rounded-control border-[0.5px] border-line-default bg-surface-raised px-2 py-1.5 text-muted text-[length:var(--font-meta-size)]">
+          正在加载{viewLabels[target]}…
+        </p>}
       {retained.map(id => {
         const View = loadView(id);
         const active = viewHostFor(id) === viewHostFor(shownView);
@@ -63,6 +78,10 @@ export function ViewContent({ view, subview = null, projectId }: ViewContentProp
           </div>
         );
       })}
+      <m.div key={shownView} aria-hidden="true" data-testid="canvas-content-handoff"
+        className="pointer-events-none absolute inset-0 bg-surface-base"
+        initial={{ opacity: 0.08 }} animate={{ opacity: 0 }} transition={motionTransitions['content-handoff']} />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { m } from 'motion/react';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
 import { formInputClass } from '../shared/form-ui';
+import { motionTransitions } from '../shared/motion';
 import { EmptyState } from '../shell/EmptyState';
 import { readSettingsSection, writeSettingsSection, type ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -523,9 +525,12 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               </ul>
             ) : null}
 
-            <div
+            <m.div
               key={activeSection}
               ref={panelRef}
+              initial={{ opacity: 0.94 }}
+              animate={{ opacity: 1 }}
+              transition={motionTransitions['content-handoff']}
               role={compactNavigation ? 'region' : 'tabpanel'}
               id={`settings-panel-${activeSection}`}
               aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}
@@ -535,7 +540,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               data-testid="settings-panel"
             >
               <div className="settings-form-content">{renderPanel(activeSection, store, props)}</div>
-            </div>
+            </m.div>
 
             <StickySaveBar dirtyCount={dirtyCount} savedAt={store.savedAt} highImpactCount={impacts.length} busy={busy} saving={store.save.pending} transientDirty={transientDirty}
               onDiscard={() => setDiscardIntent('reset')} onSave={requestSave} />

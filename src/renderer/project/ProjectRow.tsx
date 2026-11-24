@@ -48,13 +48,13 @@ export function ProjectRow({
       data-testid={`portal-card-${project.id}`}
       data-archived={archived}
       data-variant={variant}
+      onFocusCapture={onFocus}
       className={`project-row ${variant === 'cards' ? 'flex h-full min-w-0 flex-col items-stretch gap-1 rounded-card border-[0.5px] border-line bg-surface p-1 transition-colors hover:border-line-strong' : 'flex min-w-0 items-center gap-2 border-b-[0.5px] border-line-soft px-1 py-[var(--control-pad-y)] min-h-[var(--list-row-height)]'} ${archived ? 'opacity-70' : ''}`}
     >
       <button
         type="button"
         data-project-body="true"
         tabIndex={focused ? 0 : -1}
-        onFocus={onFocus}
         onClick={onOpen}
         aria-label={`打开项目 ${project.title}`}
         data-testid={`portal-card-open-${project.id}`}
