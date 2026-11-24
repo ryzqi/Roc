@@ -1,5 +1,21 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.10：阅读恢复与披露几何
+
+状态：**Verified passing**（阅读恢复及受影响调用者定向范围）。前一次完整`pnpm test:renderer`为1020项、1019通过、1失败，唯一失败是迟到只读内容恢复后预期280px、实际300.5px。原用例独立复现；实际显示的600×400 Electron窗口也复现同样漂移。诊断确认恢复RAF已经执行，披露已开启、焦点仍在阅读区外，observer已归零；首次滚动位置是280px，随后`::details-content`展开，原生滚动锚定将位置推到300.5px。不能把这次失败归为RAF没有执行或仅隐藏窗口节流。
+
+`ReadingViewBoundary`恢复已保存的披露时，短暂使用局部`data-reading-restoring`取消该披露的过渡，读取最终几何并立即清除标记，然后恢复祖先滚动位置。新身份恢复也先收拢披露再归零滚动。普通手动披露仍使用既有动效；1500ms释放期限、再次隐藏、身份隔离和用户输入接管保持原契约。
+
+夹具现在使用可见真窗，先等待原生披露展开完成再保存280px，迟到内容到达后确认其闭合几何，并等待恢复后的披露落点再检查精确位置。保留阅读区外焦点、observer清理、二次隐藏、接管取消和新身份断言；新增真实点击折叠/展开及后续180px阅读位置检查。修复前，增强后的同一位置断言失败于300.5px；修复后通过，没有放宽位置误差或超时。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。以下检查通过：
+
+- `node --test --test-concurrency=1 tests/renderer/reading-view-boundary.test.mjs`：严格串行连续五轮，每轮**5/5**，累计**25/25**。
+- `node --test --test-concurrency=1 --test-name-pattern='readonly content|restored disclosures|second hide|reader interaction|new result identity|hidden discovery|hidden notes|wide and narrow light/dark monitor' tests/renderer/reading-view-boundary.test.mjs tests/renderer/discovery-search.test.mjs tests/renderer/reading-note-guards.test.mjs tests/renderer/research-monitors.test.mjs`：**8/8**，包含真实发现、笔记和浅深宽窄监控调用者。
+- `pnpm build`（含typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design`（278个组件）及`git diff --check`通过；eager为517980 bytes / 11 files，应用entry均未超500000 bytes。
+
+诊断夹具不进入正式测试或产物；隔离资料根由测试自动清理。修改后的完整Renderer、最终功能smoke、布局与macOS打包另验，性能按用户要求跳过。
+
 ## 2026-11-24 P8.9：助手提交与布局交接
 
 状态：**Verified passing**（助手提交、转录与完整功能smoke范围）。提问恢复后的下一次提交已被后端接收，400条输出也已生成，但新回复行没有进入可见窗口；点击现有“滚动到最新”后立即可见。当前提交接收与转录插入分属不同提交，消息数从8到10再到11，输入区同时改变转录视口高度。立即对旧窗口执行LAST仍会复现首次慢流超时；开启虚拟器日志会扰动时序，因此该诊断通过不计入修复成绩。

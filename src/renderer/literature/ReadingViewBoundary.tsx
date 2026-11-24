@@ -12,6 +12,16 @@ type Location = {
   details: Map<string, boolean>;
 };
 
+function restoreDisclosure(node: HTMLDetailsElement, open: boolean): void {
+  if (node.open === open) return;
+  node.dataset.readingRestoring = '';
+  node.open = open;
+  // Saved state resumes at its final geometry; an opening transition would
+  // otherwise move the ancestor's scroll anchor after its offset was restored.
+  node.getBoundingClientRect();
+  delete node.dataset.readingRestoring;
+}
+
 /** Retain reading position while a mounted owner releases only its readonly descendants. */
 export class ReadingViewBoundary extends Component<Props> {
   private location: Location | null = null;
@@ -42,11 +52,11 @@ export class ReadingViewBoundary extends Component<Props> {
     if (this.props.selected && this.resetOnResume) {
       this.resetOnResume = false;
       const root = this.props.containerRef.current;
+      for (const node of root?.querySelectorAll<HTMLDetailsElement>('details[data-reading-detail]') ?? []) restoreDisclosure(node, false);
       for (const selector of this.props.scrollSelectors) {
         const node = root?.querySelector<HTMLElement>(selector);
         if (node) {node.scrollTop = 0; node.scrollLeft = 0;}
       }
-      for (const node of root?.querySelectorAll<HTMLDetailsElement>('details[data-reading-detail]') ?? []) node.open = false;
     }
     if (!this.props.selected || previous.selected || this.location === null) return;
     const root = this.props.containerRef.current;
@@ -74,7 +84,7 @@ export class ReadingViewBoundary extends Component<Props> {
       for (const node of root.querySelectorAll<HTMLDetailsElement>('details[data-reading-detail]')) {
         const open = details.get(node.dataset.readingDetail!);
         if (open === undefined) continue;
-        node.open = open; details.delete(node.dataset.readingDetail!);
+        restoreDisclosure(node, open); details.delete(node.dataset.readingDetail!);
       }
       for (const [selector, saved] of pending) {
         const node = root.querySelector<HTMLElement>(selector);

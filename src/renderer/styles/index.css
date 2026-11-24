@@ -445,6 +445,10 @@ details[open]::details-content {
   opacity: 1;
 }
 
+details[data-reading-restoring]::details-content {
+  transition: none;
+}
+
 /*
  * react-diff-view ships light-theme insert/delete greens and reds as variable
  * defaults (`--diff-code-insert-background-color` etc.). Mapping them onto the

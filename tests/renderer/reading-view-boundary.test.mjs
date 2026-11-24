@@ -46,27 +46,51 @@ before(async()=>{
   `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory,'data'))});
-    app.whenReady().then(()=>new BrowserWindow({show:false,width:600,height:400}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);
+    app.whenReady().then(()=>new BrowserWindow({show:true,width:600,height:400}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);
   app=await _electron.launch({executablePath:electronPath,args:[join(directory,'main.cjs')]});
   page=await app.firstWindow();page.setDefaultTimeout(4000);page.on('pageerror',error=>errors.push(error.message));
   await page.getByTestId('heavy-content').waitFor();
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
 async function suspend(){
-  await page.evaluate(()=>{mountReading();document.querySelector('details').open=true;document.querySelector('.reading-scroll').scrollTop=280;updateReading({active:false});});
+  await page.evaluate(()=>{mountReading();document.querySelector('details').open=true;});
+  await settledDisclosure(true);
+  await page.evaluate(()=>{document.querySelector('.reading-scroll').scrollTop=280;updateReading({active:false});});
   await expect(page.getByTestId('heavy-content')).toHaveCount(0);
 }
 const position=()=>page.locator('.reading-scroll').evaluate(node=>node.scrollTop);
+const settledDisclosure=open=>page.waitForFunction(open=>{
+  const node=document.querySelector('details');
+  return node?.open===open&&getComputedStyle(node,'::details-content').opacity===(open?'1':'0');
+},open);
 
 test('late readonly content restores the pre-hide scroll and details without focusing the resumed view',async()=>{
   await suspend();await page.getByTestId('other').focus();
   await page.evaluate(()=>updateReading({active:true,ready:false}));
   assert.ok(await page.evaluate(()=>readingObservers)>0);
-  await page.evaluate(()=>updateReading({ready:true}));
+  await page.evaluate(()=>{
+    updateReading({ready:true});
+    // Commit the arriving disclosure's closed geometry before the observer's
+    // next-frame restore, as a painted readonly result would.
+    document.querySelector('details').getBoundingClientRect();
+  });
+  await settledDisclosure(true);
   await expect.poll(position).toBe(280);
   await expect(page.locator('details')).toHaveAttribute('open','');
   await expect(page.getByTestId('other')).toBeFocused();
   await expect.poll(()=>page.evaluate(()=>readingObservers)).toBe(0);
+});
+test('restored disclosures retain native animated toggles and subsequent reader scrolling',async()=>{
+  await suspend();await page.evaluate(()=>updateReading({active:true,ready:true}));
+  await settledDisclosure(true);await expect.poll(position).toBe(280);
+  const duration=await page.locator('details').evaluate(node=>getComputedStyle(node,'::details-content').transitionDuration);
+  assert.ok(duration.split(',').some(value=>Number.parseFloat(value)>0));
+  await page.evaluate(()=>document.querySelector('.reading-scroll').scrollTop=0);
+  await page.locator('summary').click();await settledDisclosure(false);
+  await page.locator('summary').click();await settledDisclosure(true);
+  await page.evaluate(()=>document.querySelector('.reading-scroll').scrollTop=180);
+  await expect.poll(position).toBe(180);
+  assert.equal(await page.evaluate(()=>readingObservers),0);
 });
 test('a second hide during late restoration preserves the original position and cleans observers on hidden unmount',async()=>{
   await suspend();
