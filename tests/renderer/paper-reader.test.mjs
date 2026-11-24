@@ -407,13 +407,23 @@ test('actual reader requests currentParseId even when repository run order is ne
 test('reader pipeline keyboard actions disclose metadata and real parsing controls without mutations', async () => {
   const f = scene(), before = await f.changes();
   await mount(f); await textEquals('Current first snapshot.');
-  await page.getByTestId('reader-pipeline-toggle').focus(); await page.keyboard.press('Enter');
+  const pipeline = page.getByTestId('reader-pipeline-toggle');
+  await expect(pipeline).toBeVisible();
+  await pipeline.focus(); await expect(pipeline).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('reader-resource-status')).toHaveJSProperty('open', true);
   const metadata = page.getByTestId('reader-tools-disclosure');
-  await page.getByTestId('pipeline-stage-metadata').focus(); await page.keyboard.press('Enter');
+  const metadataStage = page.getByTestId('pipeline-stage-metadata');
+  await expect(metadataStage).toBeVisible();
+  await metadataStage.focus(); await expect(metadataStage).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(metadata).toBeFocused();
   assert.equal(await metadata.evaluate(summary => summary.closest('details').open), true);
   const parse = page.getByTestId('reader-parse-disclosure');
-  await page.getByTestId('pipeline-stage-parse').focus(); await page.keyboard.press('Space');
+  const parseStage = page.getByTestId('pipeline-stage-parse');
+  await expect(parseStage).toBeVisible();
+  await parseStage.focus(); await expect(parseStage).toBeFocused();
+  await page.keyboard.press('Space');
   await expect(parse).toBeFocused();
   assert.equal(await parse.evaluate(summary => summary.closest('details').open), true);
   await expect(page.getByTestId('paper-reader')).toHaveAttribute('data-reading-mode', 'parsed');

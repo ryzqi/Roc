@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.5：阅读阶段的真实键盘焦点
+
+状态：**Verified passing**（阶段键盘回归范围）。原路径连续失败于元数据目标聚焦；在发送Enter前加入即时诊断，确认元数据阶段按钮尚未可见、`focus()`未使它成为活动元素。只增加按钮可见性等待后原路径通过。最终夹具明确等待原生披露打开、各阶段可见并确认真实焦点，再发送Enter/Space；保留目标summary聚焦、details打开、结构化阅读模式和数据库零写入断言。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test --test-name-pattern='reader pipeline keyboard' tests/renderer/paper-reader.test.mjs` 严格串行连续五轮 **5/5**；`node --check tests/renderer/paper-reader.test.mjs`、`git diff --check`通过。没有修改生产焦点策略或加入固定延时。失败原因披露和全量Renderer复验另记。
+
 ## 2026-11-24 P8.4：原生退出夹具契约
 
 状态：**Verified passing**（原生退出回归范围）。全量Renderer为1003/1008，退出测试停在内核关闭前；隔离运行再次失败。生产窗口销毁路径已经通过`kernel.runtime.publishEvent`通知终端所有者结束，旧内核替身缺少此异步契约，导致销毁回调抛错。仅补齐测试替身，并记录实际事件与关闭顺序。
