@@ -1,5 +1,5 @@
 import type {OpenResearchArtifact, ReadResearchGateContext} from '../../artifacts/artifact-interactions';
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import type { ChatPendingInterrupt, ChatResumeDecision } from '../../../shared/types';
 import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../transcript';
@@ -132,6 +132,8 @@ function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, acti
   const isAssistant = message.role === 'assistant';
   const attachments = message.attachments ?? [];
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
+  const renderActivityBlock = useCallback((block: ChatTranscriptActivityBlock) =>
+    <ChatActivityBlockView key={block.id} block={block} active={message.isStreaming} />, [message.isStreaming]);
   const animateEntry = shouldPlayEnter(message.key, message.source);
   const entering = useEnterTransition(message.key, animateEntry);
   const motionClass = `transition-[opacity,transform] ui-motion-base ease-[var(--ease-soft)] motion-reduce:transition-none ${
@@ -298,24 +300,21 @@ function ChatInterruptView(input: {
   );
 }
 
-function ChatActivityBlockView({ block }: {
+function ChatActivityBlockView({ block, active }: {
   block: ChatTranscriptActivityBlock;
+  active: boolean;
 }): React.JSX.Element {
   if (block.kind === 'reasoning') {
     return <ReasoningBlock id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
   if (block.kind === 'tool_call') {
-    return <ToolCallBlock block={block} />;
+    return <ToolCallBlock block={block} active={active} />;
   }
   if (block.kind === 'hook_call') {
-    return <HookCallBlock block={block} />;
+    return <HookCallBlock block={block} active={active} />;
   }
   if (block.kind === 'subagent') {
-    return <SubagentActivityCard block={block} />;
+    return <SubagentActivityCard block={block} active={active} />;
   }
   return <GuardrailBlock block={block} />;
-}
-
-function renderActivityBlock(block: ChatTranscriptActivityBlock): React.JSX.Element {
-  return <ChatActivityBlockView key={block.id} block={block} />;
 }

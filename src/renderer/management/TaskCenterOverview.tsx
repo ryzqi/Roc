@@ -1,5 +1,6 @@
-import {ArrowUpRight, Loader2, RefreshCw} from 'lucide-react';
-import {formSecondaryButtonClass} from '../shared/form-ui';
+import {ArrowUpRight, RefreshCw} from 'lucide-react';
+import {ActionButton} from '../shared/form-ui';
+import {ActionStatus} from '../shared/action-status';
 import {formatBeijingDateTime} from '../shared/format';
 import {TASK_CENTER_GROUPS, TASK_CENTER_SOURCE_LABELS, type TaskCenter, type TaskCenterRow} from './use-task-center';
 
@@ -9,19 +10,26 @@ export function TaskCenterOverview({center, onOpen, disabled = false, testIdPref
   return <section className="task-center" data-testid={`${testIdPrefix}-task-center`} aria-label="任务总览">
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-medium text-ink">任务总览</h3>
-      <button type="button" className={`${formSecondaryButtonClass} inline-flex items-center gap-1`} disabled={center.loading}
+      <ActionButton variant="compact" className="inline-flex items-center gap-1"
+        loading={center.loading} loadingLabel="正在刷新任务…"
         data-testid={`${testIdPrefix}-task-center-refresh`} onClick={center.reload}>
-        {center.loading ? <Loader2 size={13} className="animate-spin" aria-hidden="true"/> : <RefreshCw size={13} aria-hidden="true"/>}刷新
-      </button>
+        <RefreshCw size={13} aria-hidden="true"/>刷新
+      </ActionButton>
     </header>
     <div className="task-center-sources" aria-label="任务来源">
-      {center.sources.map(source => <div key={source.id} className="flex flex-wrap items-center gap-2" data-testid={`${testIdPrefix}-task-source-${source.id}`}>
+      {center.sources.map(source => <div key={source.id} className="flex flex-wrap items-center gap-2"
+        aria-busy={source.status === 'loading'} data-testid={`${testIdPrefix}-task-source-${source.id}`}>
         <span>{source.label}</span>
         {source.status === 'error' ? <>
-          <span role="alert" className="break-words text-[var(--st-bad)]">{source.error}</span>
-          <button type="button" className={formSecondaryButtonClass} onClick={source.reload}>重试</button>
-        </> : source.status === 'idle' ? <span>绑定工作区后显示</span> : source.status === 'loading' && source.loaded === 0 ? <span role="status">读取中…</span> :
-          <span className="tabular-nums">{source.hasMore ? `近期 ${source.loaded} 项` : `${source.loaded} 项`}{source.hasMore && source.total !== null ? ` / 共 ${source.total} 项` : ''}</span>}
+          <ActionStatus state="error" className="text-[var(--st-bad)]">{source.error}</ActionStatus>
+          <ActionButton variant="compact" onClick={source.reload}>重试</ActionButton>
+        </> : source.status === 'idle' ? <span>绑定工作区后显示</span> : <>
+          {source.status === 'loading' ? <ActionStatus state="pending" className="text-subtle">
+            {source.loaded === 0 ? '正在读取…' : '正在更新…'}
+          </ActionStatus> : null}
+          {source.status !== 'loading' || source.loaded > 0 ?
+            <span className="tabular-nums">{source.hasMore ? `近期 ${source.loaded} 项` : `${source.loaded} 项`}{source.hasMore && source.total !== null ? ` / 共 ${source.total} 项` : ''}</span> : null}
+        </>}
       </div>)}
     </div>
     {TASK_CENTER_GROUPS.map(group => {

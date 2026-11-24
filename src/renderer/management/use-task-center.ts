@@ -7,6 +7,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useVisiblePolling} from '../shared/view-activity';
 import {listBackgroundTasks} from '../tasks/task-store';
 import {taskStatusLabels} from '../tasks/task-model';
+import {researchTaskPresentation} from '../research/tasks/task-presentation';
 
 export type TaskCenterGroup = 'current' | 'pending' | 'completed' | 'failed';
 export type TaskCenterSourceId = 'research' | 'background' | 'literature';
@@ -32,14 +33,6 @@ export const TASK_CENTER_GROUPS: ReadonlyArray<{id: TaskCenterGroup; label: stri
 export const TASK_CENTER_SOURCE_LABELS: Record<TaskCenterSourceId, string> = {
   research: '科研任务', background: '后台任务', literature: '文献处理'
 };
-const researchGroups: Record<ResearchTask['status'], TaskCenterGroup> = {
-  active: 'current', paused: 'pending', waiting_approval: 'pending', interrupted: 'pending',
-  completed: 'completed', cancelled: 'completed', failed: 'failed'
-};
-const researchLabels: Record<ResearchTask['status'], string> = {
-  active: '进行中', paused: '已暂停', waiting_approval: '等待审批', interrupted: '运行中断',
-  completed: '已完成', cancelled: '已取消', failed: '失败'
-};
 const backgroundGroups: Record<BackgroundTask['status'], TaskCenterGroup> = {
   draft: 'pending', pending_confirmation: 'pending', running: 'current', paused: 'pending',
   waiting_user: 'pending', waiting_next_turn: 'pending', failed: 'failed',
@@ -61,9 +54,12 @@ const literatureStages: Record<PaperAcquisitionJob['stage'], string> = {
 export function taskCenterRows(research: readonly ResearchTask[], background: readonly BackgroundTask[],
   literature: readonly PaperAcquisitionJob[]): TaskCenterRow[] {
   return [
-    ...research.map(task => ({key: `research:${task.id}`, id: task.id, source: 'research' as const, title: task.goal,
-      status: researchLabels[task.status], group: researchGroups[task.status], updatedAt: task.updatedAt,
-      pendingApproval: task.status === 'waiting_approval', libraryItemId: null})),
+    ...research.map(task => {
+      const presentation = researchTaskPresentation(task);
+      return {key: `research:${task.id}`, id: task.id, source: 'research' as const, title: task.goal,
+        status: presentation.label, group: presentation.group, updatedAt: task.updatedAt,
+        pendingApproval: task.status === 'waiting_approval', libraryItemId: null};
+    }),
     ...background.map(task => ({key: `background:${task.id}`, id: task.id, source: 'background' as const, title: task.goal,
       status: taskStatusLabels[task.status], group: backgroundGroups[task.status], updatedAt: task.updatedAt,
       pendingApproval: task.status === 'pending_confirmation', libraryItemId: null})),

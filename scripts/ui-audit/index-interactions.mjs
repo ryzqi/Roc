@@ -37,7 +37,7 @@ const families = [
   [/\/(?:shell\/|app\/OverlayHost\.tsx$)/, 'S06', 'shared-overlays', 'F14', 'P1', 'P2;P3'],
   [/\/project\/ProjectFormDialog\.tsx$/, 'S07', 'project-form', 'F06', 'P1', 'P1'],
   [/\/project\/(ProjectPortalView|ProjectRow)\.tsx$/, 'S08', 'project-portal', 'F12', 'P1', 'P1;P3'],
-  [/\/project\//, 'S09', 'project-overview', '', 'P1', 'P5'],
+  [/\/project\//, 'S09', 'project-overview', '', 'P1', 'P4;P5'],
   [/\/literature\/(?:ImportDialog|literature-editor-guard)\.tsx$/, 'S10', 'literature-import', 'F07', 'P0', 'P1;P5'],
   [/\/literature\/Zotero/, 'S11', 'zotero', 'F09', 'P1', 'P1;P5'],
   [/\/literature\/(Discovery|AcademicRadar|Radar|ReadingDiscovery|LiteratureCandidate|AcquisitionPreferences|OpenReview|HuggingFace|ResearchResources|Resource)/, 'S12', 'discovery-resources', '', 'P1', 'P5'],

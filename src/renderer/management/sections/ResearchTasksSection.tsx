@@ -4,14 +4,16 @@ import type { ResearchTask, ResearchTaskEvent } from '../../../shared/schemas/re
 import { useAsyncResource } from '../../app/use-async-resource';
 import type {AppViewId} from '../../app/routes';
 import { STAGE_LABELS } from '../../project/project-store';
-import { TaskSummary, TaskUsage, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
+import { TaskSummary, TaskUsage } from '../../research/tasks/TaskSummary';
+import {researchTaskPresentation} from '../../research/tasks/task-presentation';
 import { TaskControls } from '../../research/tasks/TaskControls';
 import {TaskExecutionObservations} from '../../research/tasks/TaskExecutionObservations';
 import {TaskDiagnosticsExportButton} from '../../research/tasks/TaskDiagnosticsExportButton';
 import {TaskFactsPanel} from '../../research/tasks/TaskFactsPanel';
 import {TaskGraph} from '../../research/tasks/TaskGraph';
 import { useTaskDiagnostics } from '../../research/tasks/use-task-diagnostics';
-import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../shared/form-ui';
+import {ActionButton, FormSection, formSelectClass} from '../../shared/form-ui';
+import {ActionStatus} from '../../shared/action-status';
 import { formatBeijingDateTime } from '../../shared/format';
 import type { RocClient } from '../../shared/roc-client';
 import type {OpenResearchArtifact} from '../../artifacts/artifact-interactions';
@@ -111,12 +113,18 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
     resource.reload();
     events.reload();
   };
+  const refreshing = resource.status === 'loading' || events.status === 'loading';
   return (
-    <div className="grid gap-3" data-testid="mgmt-task-detail">
-      <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
-        data-testid="mgmt-task-refresh" onClick={refresh}>刷新任务详情</button>
-      {resource.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{resource.error}</p> :
-        resource.data === null ? <p role="status" className="text-subtle">读取任务详情中…</p> : (
+    <div className="grid gap-3" data-testid="mgmt-task-detail" aria-busy={refreshing}>
+      <ActionButton variant="compact" className="justify-self-start" loading={refreshing} loadingLabel="正在刷新任务详情…"
+        data-testid="mgmt-task-refresh" onClick={refresh}>刷新任务详情</ActionButton>
+      {resource.status === 'loading' ? <ActionStatus state="pending" testId="mgmt-task-feedback" className="text-subtle">
+        {resource.data === null ? '正在读取任务详情…' : '正在刷新任务详情…'}
+      </ActionStatus> : null}
+      {resource.status === 'error' ? <ActionStatus state="error" testId="mgmt-task-feedback" className="text-[var(--st-bad)]">
+        {resource.error}
+      </ActionStatus> : null}
+      {resource.data === null ? null : (
           <>
             <TaskSummary data={resource.data} onOpenArtifact={onOpenArtifact} />
             {resource.data.recoveryIssues.length === 0 ? null : <ul role="status" className="grid gap-1 text-subtle">
@@ -132,7 +140,7 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
             {resource.data.eventDelivery.pending === 0 ? null : <p role="status" className="tabular-nums text-subtle">
               {number.format(resource.data.eventDelivery.pending)} 条事件等待同步，其中 {number.format(resource.data.eventDelivery.failed)} 条投递失败。刷新详情可重试。
             </p>}
-            <TaskControls client={client} data={resource.data} onChanged={refresh} />
+            {resource.status === 'error' ? null : <TaskControls client={client} data={resource.data} onChanged={refresh} />}
           </>
         )}
       <TaskFactsPanel client={client} projectId={projectId} taskId={taskId} />
@@ -149,7 +157,7 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
           </>}
           <TaskDiagnosticsExportButton client={client} projectId={projectId} taskId={taskId} />
       <FormSection title="持久事件" testId="mgmt-task-events">
-        {events.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{events.error}</p> : (
+        {events.status === 'error' ? <ActionStatus state="error" className="text-[var(--st-bad)]">{events.error}</ActionStatus> : (
           <>
             <ol className="grid gap-2">
               {[...previousEvents, ...(events.data?.events ?? [])].map(event => (
@@ -168,17 +176,17 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
               ))}
             </ol>
             {events.data?.gap ? <p role="status" className="text-subtle">部分历史事件缺失，当前记录不完整。</p> : null}
-            {events.status === 'loading' ? <p role="status" className="text-subtle">读取事件中…</p> : null}
+            {events.status === 'loading' ? <ActionStatus state="pending" className="text-subtle">正在读取事件…</ActionStatus> : null}
             {events.data?.hasMore ? (
-              <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
-                data-testid="mgmt-task-events-more" disabled={events.status === 'loading'} onClick={() => {
+              <ActionButton variant="compact" className="justify-self-start" loading={events.status === 'loading'} loadingLabel="正在读取事件…"
+                data-testid="mgmt-task-events-more" onClick={() => {
                   const page = events.data;
                   if (events.status !== 'ready' || page === null || consumedEvents.current === page ||
                     page.nextSequence <= afterSequence) return;
                   consumedEvents.current = page;
                   setPreviousEvents(current => [...current, ...page.events]);
                   setAfterSequence(page.nextSequence);
-                }}>加载更多事件</button>
+                }}>加载更多事件</ActionButton>
             ) : null}
           </>
         )}
@@ -228,22 +236,24 @@ function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask,
     requestManagementEditorChange(() => onSelectTask(next));
   };
   const listState = resource.status === 'error' ? (
-    <div>
-      <p role="alert" className="break-words text-[var(--st-bad)]">{resource.error}</p>
-      <button type="button" className={formSecondaryButtonClass} onClick={reload}>重试任务列表</button>
+    <div className="grid justify-items-start gap-1">
+      <ActionStatus state="error" testId="mgmt-task-list-feedback" className="text-[var(--st-bad)]">{resource.error}</ActionStatus>
+      <ActionButton variant="compact" onClick={reload}>重试任务列表</ActionButton>
     </div>
-  ) : resource.status === 'loading' ? <p role="status" className="text-subtle">读取科研任务中…</p> :
+  ) : resource.status === 'loading' ? <ActionStatus state="pending" testId="mgmt-task-list-feedback" className="text-subtle">
+    {tasks.length === 0 ? '正在读取科研任务…' : '正在更新科研任务列表…'}
+  </ActionStatus> :
     tasks.length === 0 ? <p className="text-subtle">当前项目还没有科研任务。</p> : null;
   const moreTasks = resource.data?.hasMore ? (
-    <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
-      data-testid="mgmt-task-list-more" disabled={resource.status === 'loading'} onClick={() => {
+    <ActionButton variant="compact" className="justify-self-start" loading={resource.status === 'loading'} loadingLabel="正在读取更多任务…"
+      data-testid="mgmt-task-list-more" onClick={() => {
         const page = resource.data;
         if (resource.status !== 'ready' || page === null || consumedTasks.current === page ||
           page.nextTaskId === afterTaskId) return;
         consumedTasks.current = page;
         setPreviousTasks(current => [...current, ...page.tasks]);
         setAfterTaskId(page.nextTaskId);
-      }}>加载更多任务</button>
+      }}>加载更多任务</ActionButton>
   ) : null;
   const detail = selectedTaskId === null ? null :
     <TaskDetail key={`${projectId}:${selectedTaskId}`} client={client} projectId={projectId} taskId={selectedTaskId} onOpenArtifact={onOpenArtifact}/>;
@@ -261,7 +271,7 @@ function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask,
                   disabled={guard.busy()} onClick={() => selectTask(task.id)}>
                   <span className="research-task-goal">{task.goal}</span>
                   <span className="research-task-meta">
-                    <span>{researchTaskStatusLabels[task.status]}</span>
+                    <span>{researchTaskPresentation(task).label}</span>
                     <time dateTime={task.updatedAt}>{formatBeijingDateTime(task.updatedAt)}</time>
                   </span>
                 </button>
@@ -288,7 +298,7 @@ function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask,
           <option value="" disabled>选择科研任务</option>
           {selectedTaskId !== null && !tasks.some(task => task.id === selectedTaskId) ?
             <option value={selectedTaskId}>当前任务 {selectedTaskId}</option> : null}
-          {tasks.map(task => <option key={task.id} value={task.id}>{task.goal} / {researchTaskStatusLabels[task.status]}</option>)}
+          {tasks.map(task => <option key={task.id} value={task.id}>{task.goal} / {researchTaskPresentation(task).label}</option>)}
         </select>
       </label>
       {listState}

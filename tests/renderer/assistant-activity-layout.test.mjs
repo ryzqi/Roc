@@ -24,10 +24,12 @@ before(async () => {
     const scope = {projectId: 'project', open: noop};
     function Harness() {
       const [blocks, setBlocks] = useState([]);
+      const [history, setHistory] = useState([]);
       const [streaming, setStreaming] = useState(false);
       const [instance, setInstance] = useState(0);
       const [draft, setDraft] = useState({text: '', attachments: []});
       window.setActivity = (next, live = false) => flushSync(() => {setBlocks(next); setStreaming(live);});
+      window.setHistory = next => flushSync(() => setHistory(next));
       window.resetActivity = (next, live = false) => flushSync(() => {
         setBlocks(next); setStreaming(live); setInstance(value => value + 1);
       });
@@ -36,9 +38,16 @@ before(async () => {
           runStatus="running" statusLabel="运行中" messageCount={128} timelineOpen={false}
           onToggleTimeline={noop} onNewThread={noop} onResetWidth={noop} />
         <ReviewLinkActionsProvider value={scope}>
-          <ChatMessageRow key={instance} message={{key:'answer', source:'persisted',role:'assistant',content:'',
-            reasoning:null,blocks,interrupts:[],isStreaming:streaming}}
-            onOpenArtifact={noop} onReadGateContext={noop} />
+          {history.length === 0 ? null : <section data-testid="assistant-history-fixture">
+            <ChatMessageRow message={{key:'history',source:'persisted',role:'assistant',content:'',
+              reasoning:null,blocks:history,interrupts:[],isStreaming:false}}
+              onOpenArtifact={noop} onReadGateContext={noop} />
+          </section>}
+          <section data-testid="assistant-current-fixture">
+            <ChatMessageRow key={instance} message={{key:'answer',source:streaming?'live':'persisted',role:'assistant',content:'',
+              reasoning:null,blocks,interrupts:[],isStreaming:streaming}}
+              onOpenArtifact={noop} onReadGateContext={noop} />
+          </section>
         </ReviewLinkActionsProvider>
         <AssistantComposer mode="chat" onModeChange={noop} draft={draft} onDraftChange={setDraft}
           model={{choices:[],currentKey:null,label:'Very long provider and model name for the current project',
@@ -179,6 +188,88 @@ test('live Hook failures and blocks reveal their authoritative reason and remain
     await expect(receipt).not.toHaveAttribute('open');
     await page.evaluate(block => window.setActivity([block]), hook(status));
     await expect(receipt).not.toHaveAttribute('open');
+  }
+});
+
+test('only current messages and running ancestors keep busy feedback, with reduced motion support', async () => {
+  const agent = (id, status, blocks, children = [], parentSubagentId = null) => ({
+    id, kind: 'subagent', identity: {subagentId:id,parentSubagentId,name:id,
+      depth:parentSubagentId === null ? 0 : 1,
+      path:parentSubagentId === null ? [id] : [parentSubagentId,id],execution:'sync',taskInput:null},
+    status, summary:null, error:null, blocks, children
+  });
+  const parent = agent('parent', 'started', [tool('nested', 'progress', null)],
+    [agent('child', 'running', [tool('deep', 'start', null)], [], 'parent')]);
+  const blocks = [tool('starting', 'start', null), tool('working', 'progress'), parent];
+  const current = page.getByTestId('assistant-current-fixture');
+  const history = page.getByTestId('assistant-history-fixture');
+  const icons = '[data-testid^="assistant-activity-"][data-testid$="-icon"]';
+  const animationNames = scope => scope.locator(icons).evaluateAll(elements =>
+    elements.map(element => getComputedStyle(element).animationName));
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  try {
+    await page.evaluate(blocks => {
+      window.setHistory(blocks);
+      window.resetActivity(blocks, true);
+    }, blocks);
+    await expect(current.getByTestId('assistant-activity-tool')).toHaveCount(4);
+    await expect(current.locator('[aria-busy="true"]')).toHaveCount(6);
+    await expect(current.getByRole('status')).toHaveCount(6);
+    assert.deepEqual(await animationNames(current), Array(6).fill('spin'));
+    await expect(current.getByTestId('assistant-activity-subagent').first()).toHaveAttribute('open', '');
+    await expect(current.getByTestId('assistant-activity-subagent').last()).toHaveAttribute('open', '');
+
+    await expect(history.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(history.getByRole('status')).toHaveCount(0);
+    await expect(history.getByTestId('assistant-activity-tool-summary').first()).toContainText('开始');
+    await expect(history.getByTestId('assistant-activity-tool-summary').last()).toContainText('执行中');
+    await expect(history.getByTestId('assistant-activity-subagent')).not.toHaveAttribute('open');
+    await expect(history.getByTestId('assistant-subagent-body')).toHaveCount(0);
+    await history.getByTestId('assistant-activity-subagent-summary').first().click();
+    await history.getByTestId('assistant-activity-subagent-summary').last().click();
+    await expect(history.getByTestId('assistant-activity-tool')).toHaveCount(4);
+    await expect(history.getByTestId('assistant-activity-subagent-summary').last()).toContainText('运行中');
+    await expect(history.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(history.getByRole('status')).toHaveCount(0);
+    assert.deepEqual(await animationNames(history), Array(6).fill('none'));
+
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await expect(current.locator('[aria-busy="true"]')).toHaveCount(6);
+    await expect(current.getByRole('status')).toHaveCount(6);
+    assert.deepEqual(await animationNames(current), Array(6).fill('none'));
+    await page.emulateMedia({reducedMotion:'no-preference'});
+
+    const summary = current.getByTestId('assistant-activity-tool-summary').filter({hasText:'working'});
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await expect(current.getByTestId('assistant-tool-data-输出')).toBeVisible();
+    await current.evaluate(element => {
+      window.busyActivitySummary = document.activeElement;
+      window.busyActivityPayload = element.querySelector('[data-testid="assistant-tool-body"]');
+    });
+    const finished = [blocks[0], {...blocks[1],status:'end'}, {...parent,status:'completed'}];
+    await page.evaluate(blocks => window.setActivity(blocks, true), finished);
+    await expect(summary).toContainText('成功');
+    await expect(current.locator('[aria-busy="true"]')).toHaveCount(1);
+    await expect(current.getByRole('status')).toHaveCount(1);
+    await expect(current.getByTestId('assistant-activity-subagent').first()).not.toHaveAttribute('aria-busy');
+    await expect(current.getByTestId('assistant-activity-subagent').last()).not.toHaveAttribute('aria-busy');
+    await expect(current.getByTestId('assistant-activity-subagent-summary').last()).toContainText('运行中');
+
+    await page.evaluate(blocks => window.setActivity(blocks), finished);
+    await expect(current.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(current.getByRole('status')).toHaveCount(0);
+    assert.deepEqual(await animationNames(current), Array(6).fill('none'));
+    await expect(current.getByTestId('assistant-activity-tool-summary').first()).toContainText('开始');
+    await expect(summary).toBeFocused();
+    await expect(current.getByTestId('assistant-tool-data-输出')).toBeVisible();
+    assert.equal(await current.evaluate(element =>
+      document.activeElement === window.busyActivitySummary &&
+      element.querySelector('[data-testid="assistant-tool-body"]') === window.busyActivityPayload), true,
+    'completion preserves the focused summary and expanded receipt nodes');
+  } finally {
+    await page.evaluate(() => {window.setHistory([]); window.setActivity([]);});
+    await page.emulateMedia({reducedMotion:null});
   }
 });
 

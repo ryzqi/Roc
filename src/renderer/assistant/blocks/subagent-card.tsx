@@ -16,7 +16,7 @@ import {NestedDisclosureProvider} from './disclosure-state';
  * `assistant/subagent-tree.ts` plus this recursion.
  *
  * Kept as-is:
- *   - the streaming behaviour (auto-open while `started`/`running`, auto-close a second
+ *   - the streaming behaviour (auto-open while the message and `started`/`running` agent are active, auto-close a second
  *     after `completed`/`cancelled`, open on `failed`) — the same policy as reasoning;
  *   - the meta chips (`execution`, tool count, child count, reasoning) so a collapsed
  *     card still says what happened inside it;
@@ -78,16 +78,18 @@ function renderSubagentBlock(block: ChatTranscriptSubagentBlock, isStreaming: bo
   if (block.kind === 'reasoning') {
     return <ReasoningBlock key={block.id} id={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
-  return <ToolCallBlock key={block.id} block={block} />;
+  return <ToolCallBlock key={block.id} block={block} active={isStreaming} />;
 }
 
 export type SubagentActivityCardProps = {
   block: SubagentBlockModel;
+  /** Effective activity of the containing message or parent subagent. */
+  active: boolean;
   depth?: number;
 };
 
-export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardProps): React.JSX.Element {
-  const isStreaming = block.status === 'started' || block.status === 'running';
+export function SubagentActivityCard({ block, active, depth = 0 }: SubagentActivityCardProps): React.JSX.Element {
+  const isStreaming = active && (block.status === 'started' || block.status === 'running');
   const metaChips = buildMetaChips(block);
   const hasBody = block.error !== null || block.summary !== null || block.blocks.length > 0 || block.children.length > 0;
   const { open, setOpen } = useActivityBlockState({
@@ -109,6 +111,7 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
         statusLabel={state.label}
         meta={block.identity.execution}
         tone={state.tone}
+        busy={isStreaming}
         open={hasBody && open}
         onToggle={setOpen}
         expandable={hasBody}
@@ -139,7 +142,7 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
             {block.blocks.map((child) => renderSubagentBlock(child, isStreaming))}
             {block.children.map((child) => (
               <div key={child.id} data-testid="assistant-subagent-child">
-                <SubagentActivityCard block={child} depth={depth + 1} />
+                <SubagentActivityCard block={child} active={isStreaming} depth={depth + 1} />
               </div>
             ))}
             </div>

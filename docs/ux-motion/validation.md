@@ -164,3 +164,45 @@ RAF P95 最大增加 0.8ms，菜单反馈代理从 8.5ms 增至 15.9ms；没有�
 不由此声称物理 120Hz 达标或全量“无性能回退”。小集合动画由 Renderer 回归单独验证，
 生产 `project-reorder` 仍是 100 项完整集合的过滤场景。5000 历史、长时资源、
 物理触控板/IME/VoiceOver、另一台 Mac 和真人八旅程继续在后续阶段或实机范围验收。
+
+## P4：当前执行反馈、审批与清理状态
+
+状态：**Verified passing（定向自动化与当前机器生产采样范围）**，2026-11-25。
+
+Composer 发送、回复、纠正和追加共用受控按钮与状态反馈；捕获本次提交意图，
+本地请求及父级 pending 都结束后才清理。停止仍可聚焦，等待真实运行确认。
+工具、Hook 与子 Agent 的 busy 同时依据当前消息和本身/祖先活动；历史或完成后
+停止旋转和 live 播报，原生披露、用户折叠选择与工具身份保持。审批共享
+pending/error 展示，保留决定、版本、hash 和焦点规则，历史说明使用静态 note。
+
+任务使用纯显示投影，不修改持久化状态：`cleanup_pending` 显示“正在取消”并归当前，
+`cleanup_failed` 显示“资源清理未确认”并归失败；确认清理后的取消才归历史。
+助手、任务摘要、总览和任务中心共用该口径；总览不会漏掉已取消但仍等待清理的任务，
+未确认清理时不提供继续。刷新 pending/错误保留可读的既有任务，重试和回执合同不变。
+
+| 检查命令 | 结果 |
+| --- | --- |
+| `pnpm build`、`pnpm check:renderer-chunks` | 普通生产构建/typecheck 通过；eager JS 530710 bytes / 31 files |
+| `ROC_UI_CAPTURE_DIR=/tmp/roc-ux-p4-captures-20261125 node --test --test-concurrency=1 tests/renderer/assistant-activity-layout.test.mjs tests/renderer/assistant-panel-guards.test.mjs tests/renderer/research-tasks.test.mjs tests/renderer/task-center.test.mjs tests/renderer/project-overview.test.mjs` | 初次 57 项中 55 通过；两处 idle ARIA 编码断言修正后由下行验证 |
+| `ROC_UI_CAPTURE_DIR=/tmp/roc-ux-p4-captures-20261125 node --test --test-concurrency=1 --test-name-pattern='^task and event cursor pages\|^source failure keeps' tests/renderer/research-tasks.test.mjs tests/renderer/task-center.test.mjs` | 2/2；pending=true/禁用、持久错误、重试、跨项目旧响应隔离及恢复可用通过 |
+| `ROC_UI_CAPTURE_DIR=/tmp/roc-ux-p4-captures-20261125 node --test --test-name-pattern='^composer \|^IME confirmation \|^running offers \|^running rejects ' tests/renderer/desktop-interactions.test.mjs` | 12/12；即时重复请求、意图切换、拒绝保留草稿、附件读取/换 scope、合成 IME 守卫与运行纠正 |
+| `pnpm audit:motion` | 405 files，0 violations / 0 input failures |
+| `node scripts/ui-audit/index-interactions.mjs --write`、`--check` | 405 源文件、2174 模板/路由、35 合同，当前静态快照一致 |
+| `node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p4-history-5000.json --samples 5 --history-messages 5000 --stream-chunks 500` | 八场景各五轮完成；0 blocked / 0 missing feedback；每轮流式一次真实请求 |
+| `git diff --check` | 通过 |
+
+两处失败要求 idle 按钮显式设置 `aria-busy="false"`，而原共享按钮省略该属性，
+ARIA 默认即为空闲。修正为恢复 enabled 且无 busy=true，保留 pending 和重复派发断言，
+没有修改共享按钮行为。真实助手回归同时通过三类审批 pending/焦点、用户上滚接管、
+运行完成竞态与跨会话草稿/旧响应隔离。深浅任务和窄窗诊断截图读回，裁切为 0；
+19 张任务截图/诊断 JSON 与本次构建、测试及采样日志核验后清理。
+
+[P4 长历史报告](after-p4-history-5000.json)沿用同一普通生产构建、宿主和动作协议，
+历史夹具增至 5000，流式增量仍为 500，不能与 P0 的 500 历史视为同一负载。
+八场景五轮 RAF P95 最大 10.3ms、反馈代理 P95 最大 15.9ms；流式窗口
+RAF P95 最大 10.2ms、P99 最大 16.3ms、反馈代理最大 5.5ms。全部 ≥50ms
+主线程任务与 RAF >50ms 间隔均为 0，终态来自 `run_completed`；流式终点挂载
+消息行每轮 1 行，总 DOM 点采样最多 2303。拖动内 0 写、释放 1 写、Escape 0 写。
+heap/process 指标仅为点采样，不据此声称长期资源稳定或屏显 120Hz 达标。
+P3 已覆盖 500 历史五轮，本阶段不重复相同负载；最终对照、完整 Renderer 和物理
+触控板/IME/VoiceOver、另一台 Mac、真人旅程及外部服务范围在 P6 明确列出。

@@ -23,9 +23,11 @@ const TOOL_STATE: Record<
 
 export type ToolCallBlockProps = {
   block: ToolCallBlockModel;
+  /** The containing message or subagent is still running. */
+  active: boolean;
 };
 
-export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element {
+export function ToolCallBlock({ block, active }: ToolCallBlockProps): React.JSX.Element {
   const hasInput = block.input !== null && block.input !== undefined;
   const hasOutput = block.output !== null && block.output !== undefined;
   const hasError = block.error !== null && block.error !== undefined;
@@ -34,6 +36,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
     defaultOpen: false, disclosureKey: block.id, revealOn: block.status === 'error'
   });
   const state = TOOL_STATE[block.status];
+  const busy = active && (block.status === 'start' || block.status === 'progress');
 
   return <div className="flex min-w-0 flex-col gap-1.5">
     <ActivityBlockShell
@@ -42,6 +45,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
       title={block.name}
       statusLabel={state.label}
       tone={state.tone}
+      busy={busy}
       visualDensity={block.status === 'end' ? 'quiet' : 'standard'}
       open={hasData && open}
       onToggle={setOpen}

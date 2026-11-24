@@ -66,10 +66,13 @@ test('overview opens the authoritative destination without starting or resuming 
     await expect(action).toHaveText(label);
     await action.click();assert.deepEqual(await page.evaluate(()=>window.actions),[{kind:'task',id:'current'}]);
   }
-  for(const state of [{restoreApproval:true},{reason:'research_task_cleanup_failed'}]) {
-    await page.evaluate(state=>window.mount({tasks:[window.task('blocked','paused',state.reason??null)],resumable:true,...state}),state);
+  for(const state of [{restoreApproval:true},{status:'cancelled',reason:'research_task_cleanup_pending',label:'正在取消'},
+    {status:'cancelled',reason:'research_task_cleanup_failed',label:'资源清理未确认'}]) {
+    await page.evaluate(state=>window.mount({tasks:[window.task('blocked',state.status??'paused',state.reason??null)],resumable:true,...state}),state);
     await expect.poll(()=>page.evaluate(()=>window.reads.length)).toBe(1);
     await expect(action).toHaveText('查看任务');
+    if(state.label) await expect(page.getByTestId('overview-current-task')).toContainText(state.label);
+    await action.click();assert.deepEqual(await page.evaluate(()=>window.actions),[{kind:'task',id:'blocked'}]);
   }
   await page.evaluate(()=>window.mount({archived:true}));await expect(action).toBeDisabled();
 });
@@ -85,10 +88,18 @@ test('overview shows real task reasons, artifact kinds and the partial history b
   await expect(page.getByTestId('overview-artifacts')).toContainText('阅读笔记');
   await page.getByTestId('overview-artifacts').getByRole('button',{name:/实验比较图/}).click();
   assert.deepEqual(await page.evaluate(()=>window.actions),[{projectId:'project',artifactId:'figure',expectedVersion:null}]);
-  await page.evaluate(()=>window.mount({tasks:[window.task('cleanup','failed','research_task_cleanup_failed'),window.task('unknown','failed','research_unknown_reason')]}));
-  await expect(page.getByTestId('overview-task-reason-cleanup')).toContainText('资源清理尚未确认');
+  await page.evaluate(()=>window.mount({tasks:[window.task('cleanup','cancelled','research_task_cleanup_failed'),window.task('unknown','failed','research_unknown_reason')]}));
+  await expect(page.getByTestId('overview-current-task')).toContainText('资源清理未确认');
+  await expect(page.getByTestId('overview-task-reason-cleanup')).toContainText('资源清理未确认');
   await expect(page.getByTestId('overview-task-reason-unknown')).toHaveCount(0);
   await expect(page.getByTestId('overview-pending')).not.toContainText('research_unknown_reason');
+  await page.evaluate(()=>window.mount({tasks:[window.task('cleanup','cancelled','research_task_cleanup_failed'),
+    window.task('cancelling','cancelled','research_task_cleanup_pending'),window.task('cancelled','cancelled')]}));
+  await expect(page.getByTestId('overview-current-task')).toContainText('研究任务 cancelling');
+  await expect(page.getByTestId('overview-current-task')).toContainText('正在取消');
+  await expect(page.getByTestId('overview-pending')).toContainText('研究任务 cleanup');
+  await expect(page.getByTestId('overview-pending')).not.toContainText('研究任务 cancelling');
+  await expect(page.getByTestId('overview-pending')).not.toContainText('研究任务 cancelled');
   await page.evaluate(()=>window.mount({hasMore:true,tasks:[window.task('complete','completed')]}));
   await expect(page.getByTestId('overview-tasks-empty')).toHaveText('近期任务中没有进行中的研究');
   await page.evaluate(()=>window.mount({taskError:'任务暂时不可读取'}));

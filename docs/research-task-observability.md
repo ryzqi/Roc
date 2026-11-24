@@ -53,6 +53,13 @@ Pausing remains a single explicit action. Cancelling opens the shared confirmati
 
 `research_task_cleanup_pending` keeps the controls busy while resource cleanup is unconfirmed. Pending and failed cleanup both withhold continuation and approval restoration, including after remounting the controls; cleanup failures remain visible. Once cancellation is confirmed, an existing continuation can still be resumed through the explicit continuation action.
 
+The renderer uses one presentation projection for task details, assistant progress, the project
+overview and both task selectors. Cleanup pending reads “正在取消” and remains in the current-task
+group, even if the underlying status already says cancelled. Cleanup failure reads
+“资源清理未确认” in the failed group. Only confirmed cancellation without a cleanup issue belongs
+to the ended group. Raw task status, failure reason and execution identities remain unchanged;
+display telemetry observes both status and cleanup reason.
+
 The existing task execution tree uses native, initially closed `<details>` for observations. Opening or refreshing reads current persisted telemetry. Calls and replay have independent 50-row pages that replace the displayed page. Loading, failure, missing observations, unknown token usage and replay gaps are visible states. The export action prevents duplicate dispatch while pending and displays the real local receipt; late replies cannot populate another project/task panel.
 
 ## Task facts and context

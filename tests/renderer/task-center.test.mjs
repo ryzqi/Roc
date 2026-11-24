@@ -72,19 +72,50 @@ test('task center groups authoritative sources, scopes background work and expos
     const audit=await page.evaluate('('+clipAudit+')({root:"#root",viewport:true})');
     assert.equal(audit.cut,0,JSON.stringify({theme,width,audit}));
   }
+  await page.evaluate(()=>{
+    const base=window.research[0];
+    window.research.push(
+      {...base,id:'cleanup-pending',goal:'Waiting for cleanup',status:'cancelled',statusReason:'research_task_cleanup_pending'},
+      {...base,id:'cleanup-failed',goal:'Cleanup unconfirmed',status:'cancelled',statusReason:'research_task_cleanup_failed'},
+      {...base,id:'confirmed-cancelled',goal:'Cancellation confirmed',status:'cancelled',statusReason:'research_task_cancelled'}
+    );
+    window.emitResearch({projectId:'a'});
+  });
+  for(const [id,group,label] of [
+    ['cleanup-pending','current','正在取消'],
+    ['cleanup-failed','failed','资源清理未确认'],
+    ['confirmed-cancelled','completed','已取消']
+  ]) {
+    await expect(page.getByTestId('mgmt-task-group-'+group).getByTestId('mgmt-task-open-research:'+id)).toContainText(label);
+  }
+  const completed=page.getByTestId('mgmt-task-group-completed');
+  await expect(completed.getByTestId('mgmt-task-open-research:cleanup-pending')).toHaveCount(0);
+  await expect(completed.getByTestId('mgmt-task-open-research:cleanup-failed')).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(()=>window.center.counts),{current:3,pending:2,completed:2,failed:2});
+  assert.deepEqual(await page.evaluate(()=>window.research.slice(-3).map(task=>task.status)),['cancelled','cancelled','cancelled']);
 });
 
 test('source failure keeps other tasks usable and a project switch rejects late data',async()=>{
   await page.evaluate(()=>{window.failLiterature=true;window.emitLibrary({affectedProjectIds:['a']});});
   await expect(page.getByTestId('mgmt-task-source-literature')).toContainText('Literature source unavailable');
+  await expect(page.getByTestId('mgmt-task-source-literature').getByRole('alert')).toHaveAttribute('data-action-state','error');
   await expect(page.getByTestId('mgmt-task-open-research:running')).toBeEnabled();
   assert.equal(await page.evaluate(()=>window.center.label),'任务未更新');
-  await page.evaluate(()=>{window.deferResearch=true;window.emitResearch({projectId:'a'});});
+  await page.evaluate(()=>{window.deferResearch=true;});
+  const refresh=page.getByTestId('mgmt-task-center-refresh');
+  await refresh.click();
   await page.waitForFunction(()=>typeof window.finishResearch==='function');
+  await expect(refresh).toHaveAttribute('aria-busy','true');
+  await expect(refresh).toBeDisabled();
+  await expect(page.getByTestId('mgmt-task-source-research').getByRole('status')).toHaveText('正在更新…');
+  await expect(page.getByTestId('mgmt-task-open-research:running')).toBeEnabled();
   await page.evaluate(()=>{window.failLiterature=false;window.switchProject('b');});
   await expect(page.getByTestId('mgmt-task-open-research:new-project')).toBeVisible();
   await page.evaluate(()=>window.finishResearch());
   await expect(page.getByTestId('mgmt-task-open-research:obsolete')).toHaveCount(0);
   await expect(page.getByTestId('mgmt-task-open-background:background-failure')).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>window.center.counts)).toEqual({current:1,pending:0,completed:0,failed:0});
+  await expect(refresh).toBeEnabled();
+  await expect(refresh).not.toHaveAttribute('aria-busy','true');
+  await expect(page.getByTestId('mgmt-task-source-research').getByRole('status')).toHaveCount(0);
 });

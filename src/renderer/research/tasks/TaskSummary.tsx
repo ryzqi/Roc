@@ -1,25 +1,13 @@
 import {useEffect, useRef} from 'react';
 import type { ResearchTaskDiagnostics, ResearchTaskExecutionDiagnostics } from '../../../shared/schemas/research-task-diagnostics';
-import type { ResearchTask } from '../../../shared/schemas/research-tasks';
 import type { RunUsageStatus } from '../../../shared/types';
 import {STAGE_LABELS} from '../../project/project-store';
 import {formatBeijingDateTime} from '../../shared/format';
 import {recordUxEvent} from '../../app/ux-metrics';
 import type {OpenResearchArtifact} from '../../artifacts/artifact-interactions';
 import {formSecondaryButtonClass} from '../../shared/form-ui';
-
-export const researchTaskStatusLabels: Record<ResearchTask['status'], string> = {
-  active: '进行中', paused: '已暂停', waiting_approval: '等待审批', interrupted: '运行中断',
-  completed: '已完成', cancelled: '已取消', failed: '失败'
-};
-
-export function researchTaskReasonLabel(reason: string | null): string | null {
-  if (reason === 'research_task_cleanup_failed') return '资源清理尚未确认，请查看任务详情中的停止回执。';
-  if (reason === 'research_provider_reply_loop') return '模型服务检测到循环回复并终止生成。请在模型设置中更换模型后继续当前任务。';
-  if (reason === 'research_stage_inputs_stale') return '阶段输入已变化，请在任务详情核对当前输入和已有成果。';
-  // Unknown machine codes are useful in diagnostics, but are not explanations for users.
-  return reason !== null && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/u.test(reason) ? null : reason;
-}
+import {ActionStatus} from '../../shared/action-status';
+import {researchTaskPresentation, researchTaskReasonLabel} from './task-presentation';
 const number = new Intl.NumberFormat('zh-CN');
 const executionLabels = {chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出', review_search: '综述查询'};
 const executionLabel = (execution: ResearchTaskExecutionDiagnostics): string =>
@@ -53,23 +41,33 @@ export function TaskSummary({ data, onOpenArtifact, surface = 'tasks' }: {
     .sort((left, right) => (right.endedAt ?? '').localeCompare(left.endedAt ?? ''))[0];
   const artifacts = [...new Map(data.executions.flatMap(execution => execution.artifacts.map(artifact =>
     [artifact.id, {...artifact, label: executionLabel(execution)}] as const))).values()];
-  const previous = useRef({id: data.task.id, status: data.task.status});
+  const presentation = researchTaskPresentation(data.task);
+  const cleanupReason = presentation.cleanupReason;
+  const previous = useRef({id: data.task.id, status: data.task.status, cleanupReason});
   useEffect(() => {
-    if (previous.current.id === data.task.id && previous.current.status !== data.task.status) {
+    if (previous.current.id === data.task.id &&
+      (previous.current.status !== data.task.status || previous.current.cleanupReason !== cleanupReason)) {
       recordUxEvent('task_state_changed', surface);
-      if (['failed', 'interrupted'].includes(previous.current.status) && ['active', 'completed'].includes(data.task.status)) {
+      const wasFailed = ['failed', 'interrupted'].includes(previous.current.status) ||
+        previous.current.cleanupReason === 'research_task_cleanup_failed';
+      const recovered = cleanupReason === null && (['active', 'completed'].includes(data.task.status) ||
+        previous.current.cleanupReason === 'research_task_cleanup_failed' && data.task.status === 'cancelled');
+      if (wasFailed && recovered) {
         recordUxEvent('error_recovered', surface);
       }
     }
-    previous.current = {id: data.task.id, status: data.task.status};
-  }, [data.task.id, data.task.status, surface]);
+    previous.current = {id: data.task.id, status: data.task.status, cleanupReason};
+  }, [data.task.id, data.task.status, cleanupReason, surface]);
   return (
     <div className="grid min-w-0 grid-cols-1 gap-1">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="min-w-0 flex-1 break-words font-medium text-ink" style={{textWrap: 'balance'}}>{data.task.goal}</p>
-        <span data-testid="task-status" data-status={data.task.status} className="text-muted">
-          {researchTaskStatusLabels[data.task.status]}
-        </span>
+        <ActionStatus key={`${data.task.id}:${data.task.status}:${cleanupReason ?? ''}`}
+          state={presentation.group === 'current' ? 'pending' : presentation.group === 'completed' ? 'success' :
+            presentation.group === 'failed' ? 'error' : 'idle'}
+          testId="task-status" data-status={data.task.status} className="text-muted">
+          {presentation.label}
+        </ActionStatus>
       </div>
       {current === undefined ? null : <p className="text-muted" data-testid="task-current-stage">当前阶段：{executionLabel(current)}</p>}
       {latest === undefined ? null : <p className="text-subtle" data-testid="task-latest-progress">

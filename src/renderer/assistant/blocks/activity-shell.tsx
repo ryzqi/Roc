@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronDown, type LucideIcon } from 'lucide-react';
+import { ChevronDown, LoaderCircle, type LucideIcon } from 'lucide-react';
 
 /**
  * Shared shell for the collapsed "activity" blocks (T4.4): tool calls, hooks,
@@ -54,6 +54,8 @@ export type ActivityBlockShellProps = {
   /** Secondary text (duration, handler id, tool count…) shown after the title. */
   meta?: string;
   tone?: ActivityTone;
+  /** Current runtime activity; a historical progress tone alone is not busy. */
+  busy?: boolean;
   visualDensity?: 'standard' | 'quiet';
   open: boolean;
   onToggle: (open: boolean) => void;
@@ -69,12 +71,14 @@ export function ActivityBlockShell({
   statusLabel,
   meta,
   tone = 'neutral',
+  busy = false,
   visualDensity = 'standard',
   open,
   onToggle,
   expandable = true,
   children
 }: ActivityBlockShellProps): React.JSX.Element {
+  const StatusIcon = busy ? LoaderCircle : Icon;
   const [hasOpened, setHasOpened] = useState(open);
   useEffect(() => {
     if (open) setHasOpened(true);
@@ -89,6 +93,7 @@ export function ActivityBlockShell({
       }
       data-testid={testId}
       data-tone={tone}
+      aria-busy={busy || undefined}
       open={open}
       onToggle={(event) => onToggle(event.currentTarget.open)}
     >
@@ -106,7 +111,10 @@ export function ActivityBlockShell({
           if (expandable) onToggle(!open);
         }}
       >
-        <Icon size={13} aria-hidden="true" strokeWidth={1.75} className={`shrink-0 ${TONE_ICON[tone]}`} />
+        <span data-testid={`${testId}-icon`}
+          className={busy ? 'inline-flex shrink-0 motion-safe:animate-spin' : 'inline-flex shrink-0'}>
+          <StatusIcon size={13} aria-hidden="true" strokeWidth={1.75} className={TONE_ICON[tone]} />
+        </span>
         <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={title}>
           {title}
         </span>
@@ -114,7 +122,8 @@ export function ActivityBlockShell({
           <span title={meta} className="max-w-[35%] truncate text-subtle tabular-nums text-[length:var(--font-micro-size)]">{meta}</span>
         )}
         {statusLabel === undefined ? null : (
-          <span className={`shrink-0 rounded-chip px-1.5 py-0.5 text-[length:var(--font-micro-size)] ${TONE_PILL[tone]}`}>
+          <span role={busy ? 'status' : undefined}
+            className={`shrink-0 rounded-chip px-1.5 py-0.5 text-[length:var(--font-micro-size)] ${TONE_PILL[tone]}`}>
             {statusLabel}
           </span>
         )}

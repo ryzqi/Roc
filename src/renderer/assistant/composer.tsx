@@ -17,6 +17,8 @@ import {
 import { parseSlashSkillCommand } from './slash-skill-command';
 import { ModelPicker } from './model-picker';
 import type {RunInputKind} from './session-store';
+import { ActionButton } from '../shared/form-ui';
+import { ActionStatus } from '../shared/action-status';
 
 /**
  * Composer (T4.5). Written fresh for the new shell (D3: the input area is redone, only the
@@ -154,6 +156,13 @@ const RUN_INPUT_KINDS: Array<{id: RunInputKind; label: string}> = [
   {id: 'steer', label: '纠正当前任务'},
   {id: 'follow_up', label: '完成后追加'}
 ];
+type SubmissionIntent = 'send' | 'reply' | RunInputKind;
+const SUBMISSION_PENDING_LABELS: Record<SubmissionIntent, string> = {
+  send: '正在发送…',
+  reply: '正在提交回复…',
+  steer: '正在提交纠正…',
+  follow_up: '正在提交追加…'
+};
 
 function attachmentErrorMessage(caught: unknown): string {
   const message = errorMessage(caught);
@@ -194,6 +203,7 @@ export function AssistantComposer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [readingAttachments, setReadingAttachments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submittedIntent, setSubmittedIntent] = useState<SubmissionIntent | null>(null);
   const [runInputKind, setRunInputKind] = useState<RunInputKind>('steer');
   const scopeRef = useRef({ onDraftChange, active: true, reading: false, submitting: false });
   if (scopeRef.current.onDraftChange !== onDraftChange) {
@@ -201,6 +211,8 @@ export function AssistantComposer({
   }
   const scope = scopeRef.current;
   const sendPending = sending || submitting;
+  const currentIntent: SubmissionIntent = replyMode ? 'reply' : running ? runInputKind : 'send';
+  const pendingSendLabel = SUBMISSION_PENDING_LABELS[submittedIntent ?? currentIntent];
   const seedNonceRef = useRef<number | null>(null);
   const { onCompositionStart, onCompositionEnd, shouldIgnoreKeyDown } = useImeGuard();
   const attachmentsRef = useRef<HTMLDivElement | null>(null);
@@ -223,6 +235,7 @@ export function AssistantComposer({
     scope.active = true;
     setReadingAttachments(false);
     setSubmitting(false);
+    setSubmittedIntent(null);
     setAttachmentError(null);
     setRunInputKind('steer');
     dragDepthRef.current = 0;
@@ -232,6 +245,11 @@ export function AssistantComposer({
       attachmentTransitionRef.current?.skipTransition();
     };
   }, [scope]);
+
+  // Keep the original action while either the local request or its owner is pending.
+  useEffect(() => {
+    if (!sendPending) setSubmittedIntent(null);
+  }, [sendPending]);
 
   // A hand-off from another surface replaces the draft once per nonce.
   useEffect(() => {
@@ -351,6 +369,7 @@ export function AssistantComposer({
     }
     const submittedDraft = draft;
     scope.submitting = true;
+    setSubmittedIntent(replyMode ? 'reply' : running ? runInputKind : 'send');
     setSubmitting(true);
     setAttachmentError(null);
     try {
@@ -469,17 +488,27 @@ export function AssistantComposer({
       </div>
 
       {readingAttachments ? (
-        <p role="status" className="mb-1 flex items-center gap-1 text-muted text-[length:var(--font-micro-size)]">
-          <Loader2 size={11} aria-hidden="true" className="animate-spin" />
+        <ActionStatus state="pending" className="mb-1 text-muted text-[length:var(--font-micro-size)]">
           正在读取图片…
-        </p>
+        </ActionStatus>
       ) : null}
 
       {attachmentError === null ? null : (
-        <p role="alert" className="mb-1 wrap-anywhere text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+        <ActionStatus state="error" className="mb-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
           {attachmentError}
-        </p>
+        </ActionStatus>
       )}
+
+      {sendPending ? (
+        <ActionStatus state="pending" icon={null} testId="assistant-composer-send-status" className="sr-only">
+          {pendingSendLabel}
+        </ActionStatus>
+      ) : null}
+      {stopping ? (
+        <ActionStatus state="pending" icon={null} testId="assistant-composer-stop-status" className="sr-only">
+          正在停止…等待运行确认。
+        </ActionStatus>
+      ) : null}
 
       {suggestionItems.length === 0 ? null : (
         <ul
@@ -665,26 +694,22 @@ export function AssistantComposer({
                     data-testid="assistant-composer-stop"
                     className="flex h-[var(--control-height)] items-center gap-1 rounded-control border-[0.5px] border-line px-3 text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] aria-disabled:opacity-60"
                   >
-                    {stopping ? <Loader2 size={11} aria-hidden="true" className="animate-spin" /> : <Square size={11} aria-hidden="true" />}
+                    {stopping ? <Loader2 size={11} aria-hidden="true" className="motion-safe:animate-spin" /> : <Square size={11} aria-hidden="true" />}
                     {stopping ? '正在停止…' : '停止'}
                   </button>
                 ) : null}
               {!inputLocked ? (
-                <button
-                  type="button"
+                <ActionButton
+                  variant="primary"
                   onClick={() => void submit()}
-                  disabled={sendPending || readingAttachments || text.trim().length === 0}
-                  aria-busy={sendPending}
+                  disabled={readingAttachments || text.trim().length === 0}
+                  loading={sendPending}
+                  loadingLabel={pendingSendLabel}
                   data-testid="assistant-composer-send"
-                  className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 disabled:opacity-40"
                 >
-                  {sendPending ? (
-                    <Loader2 size={11} aria-hidden="true" className="animate-spin" />
-                  ) : (
-                    <ArrowUp size={11} aria-hidden="true" />
-                  )}
+                  <ArrowUp size={11} aria-hidden="true" />
                   {replyMode ? '回复' : running ? '提交' : '发送'}
-                </button>
+                </ActionButton>
               ) : null}
             </div>
           </div>

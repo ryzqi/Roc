@@ -3,7 +3,8 @@ import {researchArtifactLinksSchema} from '../../../shared/schemas/research-arti
 import {researchGateReviewRequestSchema, type ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
 import type {OpenResearchArtifact, ReadResearchGateContext} from '../../artifacts/artifact-interactions';
 import {useAsyncResource} from '../../app/use-async-resource';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
+import { ActionStatus } from '../../shared/action-status';
 import type { ChatPendingApproval, ChatResumeDecision } from '../../../shared/types';
 import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
 
@@ -83,7 +84,8 @@ function ApprovalShell({
         <strong className="text-ink text-[length:var(--font-body-size)]" style={{textWrap: 'balance', fontWeight: 'var(--font-weight-semibold)'}}>{title}</strong>
       </header>
       {children}
-      {pending ? <p role="status" className="mt-2 flex flex-wrap items-center gap-2 text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-approval-pending"><Loader2 size={12} aria-hidden="true" className="animate-spin" />正在提交审批决定…</p> : null}
+      {pending ? <ActionStatus state="pending" className="mt-2 text-muted text-[length:var(--font-meta-size)]"
+        testId="assistant-approval-pending">正在提交审批决定…</ActionStatus> : null}
     </section>
   );
 }
@@ -308,12 +310,12 @@ export function ResearchGateApprovalCard({
       <p className="text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-gate-summary">
         {summary === '' ? '确认通过本阶段产物并进入下一阶段。' : summary}
       </p>
-      {onApprovalDecision === undefined ? <p role="status" className="mt-2 text-muted" data-testid="assistant-gate-inactive">
+      {onApprovalDecision === undefined ? <ActionStatus state="idle" role="note" className="mt-2 text-muted" testId="assistant-gate-inactive">
         此审批已不在当前待恢复运行中。可查看工件，或在助手中重新请求本阶段审核。
-      </p> : null}
-      {reviewError === '' ? null : <p role="alert" className="mt-2 text-[var(--st-bad)]" data-testid="assistant-gate-review-error">
+      </ActionStatus> : null}
+      {reviewError === '' ? null : <ActionStatus state="error" className="mt-2 text-[var(--st-bad)]" testId="assistant-gate-review-error">
         上次决定未执行：{reviewError} 请核对下面的完整阶段上下文，再重新确认。
-      </p>}
+      </ActionStatus>}
       {links.success ? <ul className="mt-2 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
           <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
@@ -321,7 +323,7 @@ export function ResearchGateApprovalCard({
             {link.title}
           </button>
         </li>)}
-      </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</p>}
+      </ul> : <ActionStatus state="error" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</ActionStatus>}
       {isDiscovery ? plan?.success && /^[a-f0-9]{64}$/u.test(planHash) ? (
         <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
@@ -352,19 +354,19 @@ export function ResearchGateApprovalCard({
             ))}
           </ol>
         </div>
-      ) : <p role="alert" className="mt-2 text-[var(--st-bad)]">检索计划缺失或无效，请退回重做。</p> : null}
+      ) : <ActionStatus state="error" className="mt-2 text-[var(--st-bad)]">检索计划缺失或无效，请退回重做。</ActionStatus> : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" ref={refreshButton} data-testid="assistant-gate-refresh"
           disabled={!gateRequest.success || refreshed.status === 'loading'}
           aria-disabled={approvalPending || !gateRequest.success || refreshed.status === 'loading'}
           className={`${approvalButtonClass('neutral')} disabled:cursor-not-allowed disabled:opacity-50`}
           onClick={() => { if (!approvalPending) setRefreshNonce(value => value + 1); }}>重新读取本阶段审核上下文</button>
-        {refreshNonce > 0 && refreshed.status === 'loading' ? <span role="status" className="text-muted">正在读取全部阶段工件…</span> : null}
+        {refreshNonce > 0 && refreshed.status === 'loading' ? <ActionStatus state="pending" className="text-muted">正在读取全部阶段工件…</ActionStatus> : null}
         {context === null ? null : <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-gate-reviewed-at">
           已重读 {context.artifactLinks.length} 个工件，需重新确认，{context.readAt}
         </span>}
       </div>
-      {refreshNonce > 0 && refreshed.error !== null ? <p role="alert" className="mt-2 text-[var(--st-bad)]">{refreshed.error}</p> : null}
+      {refreshNonce > 0 && refreshed.error !== null ? <ActionStatus state="error" className="mt-2 text-[var(--st-bad)]">{refreshed.error}</ActionStatus> : null}
       {!gateRequest.success ? <p className="mt-1 text-muted">项目或阶段标识无效，请在助手中重新请求人工闸门。</p> : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {decisions.includes('approve') ? (

@@ -5,7 +5,7 @@ import {useWorkspaceScope} from '../app/workspace-scope';
 import {useAsyncResource} from '../app/use-async-resource';
 import {useLiterature} from '../literature/literature-scope';
 import {libraryItemTitle} from '../literature/format';
-import {researchTaskReasonLabel, researchTaskStatusLabels} from '../research/tasks/TaskSummary';
+import {researchTaskPresentation, researchTaskReasonLabel} from '../research/tasks/task-presentation';
 import {EmptyState} from '../shell/EmptyState';
 import {ErrorBar} from '../shell/ErrorBar';
 import {ActionButton, formSecondaryButtonClass} from '../shared/form-ui';
@@ -77,22 +77,21 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
   }, [active, reloadProject, reloadTasks, reloadArtifacts]);
 
   const recentTasks = [...(tasks.data?.tasks ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const currentTask = recentTasks.find(task => task.status === 'active') ??
-    recentTasks.find(task => task.status === 'waiting_approval') ??
-    recentTasks.find(task => ['paused', 'interrupted', 'failed'].includes(task.status));
+  const currentTask = recentTasks.find(task => researchTaskPresentation(task).group === 'current') ??
+    recentTasks.find(task => task.status === 'waiting_approval' && researchTaskPresentation(task).group === 'pending') ??
+    recentTasks.find(task => ['pending', 'failed'].includes(researchTaskPresentation(task).group));
   const diagnostics = useTaskDiagnostics(scope.client, active && currentTask !== undefined ? {projectId, taskId: currentTask.id} : null,
     currentTask?.updatedAt ?? '');
   const taskFacts = diagnostics.data;
   const continuation = diagnostics.status === 'ready' && taskFacts !== null && ['paused', 'interrupted', 'failed', 'cancelled'].includes(taskFacts.task.status) &&
-    taskFacts.continuationRunId !== null && !taskFacts.canRestoreApproval && taskFacts.task.statusReason !== 'research_task_cleanup_failed';
+    taskFacts.continuationRunId !== null && !taskFacts.canRestoreApproval && researchTaskPresentation(taskFacts.task).cleanupReason === null;
   const actionLabel = currentTask?.status === 'active' ? '查看运行' : currentTask?.status === 'waiting_approval' ? '处理审批' :
     currentTask !== undefined ? continuation ? '继续研究' : '查看任务' : tasks.error !== null ? '查看任务' : '开始研究';
   const primaryAction = (): void => {
     if (currentTask !== undefined || tasks.error !== null) scope.openTasks(currentTask?.id);
     else scope.openAssistant();
   };
-  const pendingTasks = recentTasks.filter(task =>
-    task.status === 'waiting_approval' || task.status === 'interrupted' || task.status === 'failed' || task.status === 'paused');
+  const pendingTasks = recentTasks.filter(task => ['pending', 'failed'].includes(researchTaskPresentation(task).group));
   const latestExecution = taskFacts?.executions.filter(execution => execution.endedAt !== null && ['completed', 'complete'].includes(execution.status))
     .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? ''))[0];
   const recentItems = [...literature.items].filter(item => !item.archived)
@@ -128,7 +127,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
           currentTask === undefined ? <EmptyState compact title={tasks.data.hasMore ? '近期任务中没有进行中的研究' : '暂无进行中的研究'} testId="overview-tasks-empty"/> :
             <PageListRow title={currentTask.goal} leading={<ListTodo size={16}/>} trailing={<ArrowRight size={16} aria-hidden="true"/>}
               data-testid="overview-current-task" onClick={() => scope.openTasks(currentTask.id)} description={<>
-                <span className="flex flex-wrap gap-x-3 gap-y-1"><span>{researchTaskStatusLabels[currentTask.status]}</span>
+                <span className="flex flex-wrap gap-x-3 gap-y-1"><span>{researchTaskPresentation(currentTask).label}</span>
                   {project.data === null ? null : <span>项目阶段：{projectStageLabel(project.data.currentStage)}</span>}
                   <time dateTime={currentTask.updatedAt} className="tabular-nums">更新于 {formatBeijingDateTime(currentTask.updatedAt)}</time></span>
                 {latestExecution === undefined ? null : <span className="mt-1 block">最近完成：{latestExecution.stage === null ? '任务执行' : projectStageLabel(latestExecution.stage)}</span>}
@@ -144,7 +143,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
             pendingTasks.length === 0 ? <EmptyState compact title={tasks.data.hasMore ? '近期任务中没有待办' : '暂无待办'}/> :
             <ul className="grid gap-1" data-testid="overview-pending">{pendingTasks.slice(0, 3).map(task => <li key={task.id}>
               <PageListRow title={task.goal} onClick={() => scope.openTasks(task.id)} trailing={<ArrowRight size={16} aria-hidden="true"/>}
-                description={<><span>{researchTaskStatusLabels[task.status]}</span>{researchTaskReasonLabel(task.statusReason) === null ? null :
+                description={<><span>{researchTaskPresentation(task).label}</span>{researchTaskReasonLabel(task.statusReason) === null ? null :
                   <span className="mt-1 block" data-testid={`overview-task-reason-${task.id}`}>{researchTaskReasonLabel(task.statusReason)}</span>}</>}/>
             </li>)}</ul>}
         </PageSection>

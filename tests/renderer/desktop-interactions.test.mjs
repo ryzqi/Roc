@@ -35,6 +35,7 @@ before(async () => {
       const [mode, setMode] = useState('chat');
       const [running, setRunning] = useState(false);
       const [sending, setSending] = useState(false);
+      const [replyMode, setReplyMode] = useState(false);
       const [seed, setSeed] = useState(null);
       const [modelChoices, setModelChoices] = useState([]);
       const [modelKey, setModelKey] = useState(null);
@@ -64,6 +65,7 @@ before(async () => {
       window.setDrawerOpen = setDrawerOpen;
       window.setRunning = setRunning;
       window.setSending = setSending;
+      window.setReplyMode = setReplyMode;
       window.setComposerDraft = setDraft;
       window.setComposerThread = setComposerThread;
       window.setComposerSeed = setSeed;
@@ -92,7 +94,7 @@ before(async () => {
         </div>
         <div style={{width: 360, marginTop: 180}}>
           <AssistantComposer mode={mode} onModeChange={setMode} draft={draft} onDraftChange={updateDraft}
-            skills={skills} imageInputSupported={true} sending={sending} running={running} replyMode={false}
+            skills={skills} imageInputSupported={true} sending={sending} running={running} replyMode={replyMode}
             seed={seed} onSeedConsumed={() => setSeed(null)}
             onSend={async payload => {
               window.sent.push(payload);
@@ -157,7 +159,7 @@ before(async () => {
         window.toolInput = {toJSON() {window.toolSerializations++; return {path: value};}};
       }
       flushSync(() => root.render(<main style={{width: 360, padding: 16}}>
-        <ToolCallBlock block={{id: 'tool-1', kind: 'tool_call', name: 'read_file', status: 'end',
+        <ToolCallBlock active={false} block={{id: 'tool-1', kind: 'tool_call', name: 'read_file', status: 'end',
           input: window.toolInput, output: null, error: null}} />
       </main>));
     };
@@ -194,7 +196,7 @@ after(async () => {
 async function resetComposer() {
   await page.evaluate(() => {
     window.sent = []; window.deferSend = false; window.sendFailure = null;
-    setRunning(false); setSending(false); setSkills([]);
+    setRunning(false); setSending(false); setReplyMode(false); setSkills([]);
     setComposerDraft({text: '', attachments: []});
     setModelChoices([]); setModelKey(null); setModelPending(false); setModelError(null);
     window.modelSelectCalls = [];
@@ -300,6 +302,40 @@ test('composer sends once per event before the parent pending state updates', as
   await page.evaluate(() => finishSend(true));
   await page.waitForFunction(() => !document.querySelector('[data-testid="assistant-composer-input"]').disabled);
   assert.equal(submittedCount, 1);
+  await resetComposer();
+});
+
+test('composer keeps the submitted action pending across mode changes and preserves a rejected draft', async () => {
+  await resetComposer();
+  await page.evaluate(() => setRunning(true));
+  const input = page.getByTestId('assistant-composer-input');
+  const send = page.getByTestId('assistant-composer-send');
+  const status = page.getByTestId('assistant-composer-send-status');
+  await input.fill('纠正当前任务的草稿');
+  await page.evaluate(() => {
+    window.deferSend = true;
+    const button = document.querySelector('[data-testid="assistant-composer-send"]');
+    button.click(); button.click();
+  });
+  await expect(send).toHaveText('正在提交纠正…');
+  await expect(send).toHaveAttribute('aria-busy', 'true');
+  await expect(send).toBeDisabled();
+  await page.evaluate(() => {setRunning(false); setReplyMode(true); setSending(true);});
+  await expect(send).toHaveText('正在提交纠正…');
+  await expect(status).toHaveText('正在提交纠正…');
+  await page.evaluate(() => document.querySelector('[data-testid="assistant-composer-send"]').click());
+  assert.equal(await page.evaluate(() => sent.length), 1);
+  assert.equal(await page.evaluate(() => sent[0].runInputKind), 'steer');
+  await page.evaluate(async () => {
+    finishSend(false);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  });
+  await expect(send).toHaveText('正在提交纠正…');
+  await page.evaluate(() => setSending(false));
+  await expect(send).toHaveText('回复');
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('纠正当前任务的草稿');
+  await expect(status).toHaveCount(0);
   await resetComposer();
 });
 

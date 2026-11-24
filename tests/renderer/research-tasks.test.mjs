@@ -7,12 +7,12 @@ import * as esbuild from 'esbuild';
 import electronPath from 'electron';
 import { _electron, expect } from '@playwright/test';
 
-let directory, app, page;
+let directory, app, page, artifacts;
 const rendererErrors = [];
-const artifacts = process.env.ROC_UI_CAPTURE_DIR ?? join(process.cwd(), '.artifacts/research-optimization/task-ui');
 
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-renderer-research-tasks-'));
+  artifacts = process.env.ROC_UI_CAPTURE_DIR ?? join(directory, 'captures');
   mkdirSync(artifacts, { recursive: true });
   await esbuild.build({
     stdin: {
@@ -563,10 +563,25 @@ test('task and event cursor pages reject repeated same-event loads and manual re
   assert.equal(await page.getByTestId('mgmt-task-event').count(), 51);
   assert.equal(await page.getByTestId('mgmt-task-select').locator('option[value="task-a"]').count(), 1);
   assert.equal(await page.getByTestId('mgmt-task-select').locator('option[value="task-b"]').count(), 1);
-  await page.getByTestId('mgmt-task-refresh').click();
+  await page.evaluate(() => {window.detailRead = deferred(); response = detailRead.promise;});
+  const refresh = page.getByTestId('mgmt-task-refresh');
+  await refresh.click();
+  await expect(refresh).toHaveAttribute('aria-busy', 'true');
+  await expect(refresh).toBeDisabled();
+  await expect(page.getByTestId('mgmt-task-feedback')).toHaveAttribute('data-action-state', 'pending');
+  await expect(page.getByTestId('task-status')).toHaveText('进行中');
+  await page.evaluate(() => detailRead.resolve({ok: false, error: {message: '任务详情读取失败'}}));
+  await expect(page.getByTestId('mgmt-task-feedback')).toHaveAttribute('data-action-state', 'error');
+  await expect(page.getByTestId('mgmt-task-feedback')).toHaveText('任务详情读取失败');
+  await expect(page.getByTestId('task-status')).toHaveText('进行中');
+  await expect(refresh).toBeEnabled();
+  await expect(refresh).not.toHaveAttribute('aria-busy', 'true');
+  await page.evaluate(() => {response = {ok: true, data: makeData()};});
+  await refresh.click();
   await page.waitForFunction(() => calls.filter(row => row.method === 'events').at(-1).request.afterSequence === 0);
   await page.getByTestId('mgmt-task-events-more').waitFor();
   assert.equal(await page.getByTestId('mgmt-task-event').count(), 50);
+  await expect(page.getByTestId('mgmt-task-feedback')).toHaveCount(0);
 });
 
 test('pilot enable and rollback share a synchronous lock and settled replies cannot refresh an unmounted section', async () => {
@@ -616,12 +631,25 @@ test('assistant reads authoritative usage and progress, handles keyboard detail 
   const previous = await page.evaluate(() => calls.length);
   await page.evaluate(() => { for (let index = 0; index < 5; index++) mount(); emit('other-task'); emit('task-a', 'other-project'); });
   assert.equal(await page.evaluate(() => calls.length), previous);
+  await page.evaluate(() => {window.progressRead = deferred(); response = progressRead.promise; emit();});
+  const feedback = page.getByTestId('assistant-task-feedback');
+  await expect(feedback).toHaveAttribute('data-action-state', 'pending');
+  await expect(feedback).toHaveText('正在更新任务进度…');
+  await expect(page.getByTestId('task-status')).toHaveText('进行中');
+  await page.evaluate(() => progressRead.resolve({ok: false, error: {message: '当前任务进度读取失败'}}));
+  await expect(feedback).toHaveAttribute('data-action-state', 'error');
+  await expect(feedback).toHaveText('当前任务进度读取失败');
+  await expect(page.getByTestId('task-status')).toHaveText('进行中');
+  await expect(page.getByTestId('task-controls')).toHaveCount(0);
   await page.evaluate(() => {
     response = {ok: true, data: {...makeData(), usage: {...makeData().usage,
       tokens: {...makeData().usage.tokens, settled: 95}}}};
-    emit();
   });
+  await page.getByRole('button', {name: '重试读取任务', exact: true}).click();
   await page.getByText('已知 95 tokens', {exact: true}).waitFor();
+  await expect(feedback).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => calls.filter(row => row.method === 'chat').at(-1).request),
+    {projectId: 'project-a', threadId: 'thread-a', runId: 'chat-a'});
   await page.evaluate(() => clear());
   assert.equal(await page.evaluate(() => listeners.size), 0);
 });
@@ -635,8 +663,19 @@ test('task telemetry records anonymous transitions and actual recovery without p
   await expect(page.getByTestId('task-status')).toHaveAttribute('data-status','failed');
   await page.evaluate(() => {response.data.task.status='active'; response.data.task.statusReason=null; emit();});
   await expect(page.getByTestId('task-status')).toHaveAttribute('data-status','active');
+  await page.evaluate(() => {
+    response.data.task.status='cancelled'; response.data.task.statusReason='research_task_cleanup_pending'; emit();
+  });
+  await expect(page.getByTestId('task-status')).toHaveText('正在取消');
+  await page.evaluate(() => {response.data.task.statusReason='research_task_cleanup_failed'; emit();});
+  await expect(page.getByTestId('task-status')).toHaveText('资源清理未确认');
+  await page.evaluate(() => {response.data.task.statusReason='research_task_cancelled'; emit();});
+  await expect(page.getByTestId('task-status')).toHaveText('已取消');
   const events = await page.evaluate(start => metrics().slice(start), initial);
-  assert.deepEqual(events.map(event => event.event),['task_state_changed','task_state_changed','error_recovered']);
+  assert.deepEqual(events.map(event => event.event),[
+    'task_state_changed','task_state_changed','error_recovered',
+    'task_state_changed','task_state_changed','task_state_changed','error_recovered'
+  ]);
   assert.ok(events.every(event => event.surface==='assistant' && Object.keys(event).sort().join(',')==='elapsedMs,event,surface'));
   assert.doesNotMatch(JSON.stringify(events),/task-a|project-a|synthetic failure/);
 });
@@ -655,6 +694,7 @@ test('first trusted task linkage refreshes an unlinked chat and stale project re
   await page.getByText('验证科研任务 task-b', {exact: true}).waitFor();
   await page.evaluate(() => oldRead.resolve({ok: true, data: makeData()}));
   assert.ok(!(await page.getByTestId('assistant-task').innerText()).includes('task-a'));
+  await expect(page.getByTestId('assistant-task-feedback')).toHaveCount(0);
 });
 
 test('cancellation keeps cleanup pending after terminal invalidation and displays persistent cleanup failure', async () => {
@@ -670,7 +710,9 @@ test('cancellation keeps cleanup pending after terminal invalidation and display
     data.continuationRunId = 'stage-a';
     response = {ok: true, data}; emit();
   });
-  await page.getByTestId('task-status').filter({hasText: '已取消'}).waitFor();
+  await expect(page.getByTestId('task-status')).toHaveText('正在取消');
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-status', 'cancelled');
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-action-state', 'pending');
   assert.equal(await page.getByTestId('task-continue').count(), 0);
   assert.ok((await page.getByTestId('task-action-pending').innerText()).includes('等待资源清理'));
   await page.evaluate(() => {
@@ -679,8 +721,30 @@ test('cancellation keeps cleanup pending after terminal invalidation and display
   });
   await page.getByRole('alert').filter({hasText: 'research_task_cleanup_failed'}).waitFor();
   await page.getByTestId('task-reason').waitFor();
+  await expect(page.getByTestId('task-status')).toHaveText('资源清理未确认');
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-status', 'cancelled');
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-action-state', 'error');
   assert.equal(await page.getByTestId('task-action-pending').count(), 0);
   assert.equal(await page.getByTestId('task-continue').count(), 0);
+  await page.evaluate(() => {
+    listResponse.data.tasks = [
+      {...response.data.task, id: 'cleanup-pending', goal: '等待清理', statusReason: 'research_task_cleanup_pending'},
+      {...response.data.task, id: 'cleanup-failed', goal: '清理待确认', statusReason: 'research_task_cleanup_failed'},
+      {...response.data.task, id: 'confirmed-cancelled', goal: '取消已确认', statusReason: 'research_task_cancelled'}
+    ];
+    mountDrawer('task-a', 'project-a', 'runs');
+  });
+  for (const [id, label] of [
+    ['cleanup-pending', '正在取消'], ['cleanup-failed', '资源清理未确认'], ['confirmed-cancelled', '已取消']
+  ]) {
+    await expect(page.getByTestId(`canvas-task-row-${id}`)).toContainText(label);
+  }
+  await page.evaluate(() => mountDrawer());
+  const options = page.getByTestId('mgmt-task-select').locator('option');
+  await expect(options.filter({hasText: '等待清理 / 正在取消'})).toHaveCount(1);
+  await expect(options.filter({hasText: '清理待确认 / 资源清理未确认'})).toHaveCount(1);
+  await expect(options.filter({hasText: '取消已确认 / 已取消'})).toHaveCount(1);
+  assert.deepEqual(await page.evaluate(() => listResponse.data.tasks.map(task => task.status)), ['cancelled', 'cancelled', 'cancelled']);
 });
 
 test('persisted cleanup blocks recovery after remount until cancellation is confirmed', async () => {

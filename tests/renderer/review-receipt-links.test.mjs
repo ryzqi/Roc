@@ -42,7 +42,7 @@ before(async () => {
     function Harness({output,projectId}) {
       const [selection,setSelection]=useState(null),[readingLocations]=useState(()=>new Map()),[reviewDrafts]=useState(()=>new Map());
       return <main><ReviewLinkActionsProvider value={{projectId,open:request=>setSelection({kind:'review',request})}}>
-        <ToolCallBlock block={{id:'exact-review-call',kind:'tool_call',name:'research_review_read',status:'end',input:null,output,error:null}}/>
+        <ToolCallBlock active={false} block={{id:'exact-review-call',kind:'tool_call',name:'research_review_read',status:'end',input:null,output,error:null}}/>
         {selection===null?null:<ArtifactInspector key={JSON.stringify(selection.request)} client={client} selection={selection}
           writable={true} readingLocations={readingLocations} reviewDrafts={reviewDrafts}
           onClose={()=>setSelection(null)} onOpenTask={()=>{throw new Error('readonly cannot open task')}}/>}

@@ -33,9 +33,10 @@ function formatDuration(durationMs: number | null): string {
 
 export type HookCallBlockProps = {
   block: HookCallBlockModel;
+  active: boolean;
 };
 
-export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element {
+export function HookCallBlock({ block, active }: HookCallBlockProps): React.JSX.Element {
   const state = HOOK_STATE[block.status];
   const { open, setOpen } = useActivityBlockState({
     defaultOpen: false,
@@ -65,6 +66,7 @@ export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element 
       title={`Hook，${block.event}`}
       statusLabel={state.label}
       tone={state.tone}
+      busy={active && block.status === 'running'}
       open={open}
       onToggle={setOpen}
     >
