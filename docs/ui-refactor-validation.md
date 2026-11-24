@@ -1,5 +1,17 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.7：文献定位中断与原生滚动
+
+状态：**Verified passing**（文献列表滚动与键盘范围）。外部选中第120条后，用户已经滚回顶部，Virtuoso仍因可变行高测量重试旧定位，将列表拖回约9900px；去掉焦点步骤和改用可见Electron真窗的wheel仍可复现。安装版本为react-virtuoso 4.18.23，定位在150ms无刷新后才结束，`scrollIntoView.done`可能在首次测量重试时提前通知，不能据此判定静稳。
+
+包装层仅暴露父级需要的`scrollIntoView`。手动wheel、指针或PageUp/PageDown接管后，下一次真实scroll通过公开`scrollToIndex`替换旧请求，使用无页头、无分组列表的零索引固定原点加当前scrollTop，避免远端未测量行锚点漂移。接管持续至scroll、已渲染条目和列表总高均静稳200ms；新键盘定位重新取得控制，items/查询/项目/归档/排序/分类与选择变化或卸载废弃旧回调及待聚焦目标。只有原定位拥有待恢复焦点且当前焦点已落到body时，才以preventScroll把键盘控制交回列表。
+
+真实滚动条进一步复现一次pointerdown后的连续移动被旧请求撤销：曾到约6053px，随后回到8619px。保持手动接管至静稳尾段修复此路径；同位置的公开定位不会再调用原生scrollTo，分数像素取整小于1px。最终拖动回归反向验证在撤回这一行时失败，恢复后通过。取样等待原生输入交付并冻结最终位置，不把拖动中曾到达的最小值或按下前几何当作最终期望；后续上移必须超出第一步，防止旧回跳污染期望值。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/renderer/literature-list-layout.test.mjs` 严格串行连续 **20轮，每轮10/10，累计200/200**。包含首次可见后立即wheel、连续四包wheel、一次按下四步原生滚动条拖动、199条结果替换并移除旧选择、End定位被wheel中断后Home继续导航；最终与已交付原生位置之差小于1px。保留真实行卸载、Tab复制按钮、Arrow/Home/End/Enter、多选、隐藏查询/项目失效和DOM有界断言，200条只挂载13行。
+
+`node --check tests/renderer/literature-list-layout.test.mjs`、`pnpm build`（含typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design`（278个组件）及`git diff --check`通过。eager为517980 bytes / 11 files，应用entry均未超500000 bytes。测试资料根自动清理；诊断和循环日志在正式结果落档后清理。上述为Playwright在真实Electron中驱动原生事件，不代替物理设备、系统IME或VoiceOver验收；最终全量、完整smoke、打包和性能另记。
+
 ## 2026-11-24 P8.6：阅读失败披露与可见恢复
 
 状态：**Verified passing**（阅读处理与布局范围）。常规处理阶段保持折叠；首次回执读取失败、处理失败或重试提交失败自动展开，不调用focus。同次失败的loading、错误文案更新和文档hydration保留手动收起；成功恢复或新代次失败可再次披露。新失败仅初始化尚未选择的阶段，保留用户正在使用的详情动作。

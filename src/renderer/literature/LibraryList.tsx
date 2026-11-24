@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VirtuosoHandle } from 'react-virtuoso';
+import type { LibraryVirtualizedRowsHandle } from './LibraryVirtualizedRows';
 import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { EmptyState } from '../shell/EmptyState';
@@ -71,7 +71,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   const [virtualizerReady, setVirtualizerReady] = useState(false);
   const listBodyRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
-  const virtualizerRef = useRef<VirtuosoHandle | null>(null);
+  const virtualizerRef = useRef<LibraryVirtualizedRowsHandle | null>(null);
   const pendingFocusId = useRef<string | null>(null);
   const lastScrolledSelection = useRef<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -102,9 +102,14 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   // A manually scrolled list keeps a Tab entry within the mounted range.
   const tabStopId = virtualize && (activeIndex < visibleRange.startIndex || activeIndex > visibleRange.endIndex)
     ? items[visibleRange.startIndex]?.id : activeId;
-  const setVirtualizerRef = useCallback((handle: VirtuosoHandle | null): void => {
+  const setVirtualizerRef = useCallback((handle: LibraryVirtualizedRowsHandle | null): void => {
     virtualizerRef.current = handle;
     setVirtualizerReady(handle !== null);
+  }, []);
+  const onNavigationInterrupted = useCallback((): void => {
+    const ownedFocus = pendingFocusId.current !== null;
+    pendingFocusId.current = null;
+    if (ownedFocus && document.activeElement === document.body) listBodyRef.current?.focus({preventScroll: true});
   }, []);
   useEffect(() => {
     if (selectedIndex < 0) {lastScrolledSelection.current = null; return;}
@@ -281,7 +286,8 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           {virtualize ? <LazyBoundary fallback={<p role="status" className="p-3 text-muted">正在准备文献列表…</p>}>
             <LazyLibraryVirtualizedRows ref={setVirtualizerRef} items={items}
               initialIndex={Math.max(0, selectedIndex)}
-              onRangeChanged={setVisibleRange} renderRow={renderRow}/>
+              navigationScope={JSON.stringify([literature.projectId, literature.selectedId, literature.query, literature.includeArchived, sort, entryType])}
+              onRangeChanged={setVisibleRange} onNavigationInterrupted={onNavigationInterrupted} renderRow={renderRow}/>
           </LazyBoundary> : <ul aria-label="文献列表" className="library-plain-list">
             {items.map((item, index) => <li key={item.id}>{renderRow(index, item)}</li>)}
           </ul>}
