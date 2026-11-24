@@ -250,3 +250,224 @@ reduce；局部共享反馈的减少动态效果合同沿用 P2，不据此声�
 PaperReader/PaperPdfView、LibraryVirtualizedRows、KnowledgeGraphView、
 其它工件/设置/管理入口沿用已有反馈，没有为数量覆盖而重写。完整回归、长时资源、
 最终帧对照及物理输入/真实服务缺口由 P6 汇总。
+
+<a id="p6"></a>
+
+## P6：当前构建质量门禁、性能与隔离打包
+
+状态：**Verified passing（功能、布局、包一致性与启动的自动化范围）**，2026-11-25。
+长流的 20ms 参考目标和完整实机验收尚未达到，具体范围见下文。
+
+P6 没有改动 Renderer 产品源码。普通生产构建复用 P0–P5 的最终实现，
+完整回归、布局、Electron 路径和性能采样串行执行。打包与 macOS smoke 增加显式
+临时根参数，候选包不覆盖现有 `release/`；源科研工具链继续读取
+`.runtime/research-toolchain/darwin-arm64`。命令与环境见[开发指南](../development.md)。
+
+| 检查命令 | 当次结果 |
+| --- | --- |
+| `pnpm build` | 通过，含 typecheck；普通 production dist |
+| `pnpm test:unit` | 初次 2782 项：2776 通过、5 失败、1 跳过；五项失败均为语料物化器拒绝仓库内临时输出，见下文定向补跑 |
+| `pnpm test:renderer` | 初次 1036 项：1035 通过、1 失败；唯一失败为 Wiki 布局旧选择器，见下行 |
+| `node --test tests/renderer/wiki.test.mjs` | 修正后 9/9；保留时间原值、换行、独立几何与默认折叠诊断的键盘披露 |
+| `pnpm audit:design` | 280 个目标文件，已实现规则 0 违规 |
+| `pnpm audit:motion` | 405 files，0 violations / 0 input failures |
+| `node scripts/ui-audit/index-interactions.mjs --check` | 405 源文件、1 registry，238 含控件文件、2258 模板/路由、35 合同；快照一致 |
+| `ROC_SMOKE_TARGET=dist pnpm audit:layout` | 783 状态、2097 控件/焦点检查；全部 cut=0，包含浅深、8 尺寸、减少动态效果及 125%/200%/400% 原生缩放 |
+| `pnpm check:renderer-chunks` | eager JS 530736 bytes / 32 files；每个应用入口 ≤500000 bytes，预算通过 |
+| `ROC_SMOKE_TARGET=dist node scripts/verify-p4-assistant.mjs` | 64/64；默认 250 次追加运行，累计 516 消息、持有窗口 116 消息、挂载 19 行；0 Renderer errors |
+| `ROC_SMOKE_TARGET=dist pnpm smoke:electron` | 核心 23/23、附带完整助手 64/64；0 Renderer errors |
+
+改动的 `scripts/lib/native-packaging.mjs`、`scripts/smoke-mac.mjs`、
+`scripts/smoke-electron.mjs`、`scripts/verify-p4-assistant.mjs` 和
+`tests/renderer/wiki.test.mjs` 分别以 `node --check <文件路径>` 检查，全部通过。
+提交前 `git diff --check` 通过；本阶段修改的 8 份 Markdown 文档共 94 个本地文件链接
+读回无缺失，六份正式 JSON 均为 complete / 5 轮，交互矩阵的静态列保持原值。
+
+单元补跑使用仓库外临时根，实际命令如下；五项全部通过。完整单元的已验证并集为
+**2781 通过、1 原有跳过**，不是把初次完整命令记作 exit 0。跳过项为
+`tests/unit/research-workspace-latex.test.mjs:82`，本轮未设置 `ROC_WORKSPACE_LATEX_TOOLCHAIN`。
+完整 Renderer 与最终 Wiki 文件补跑的已验证并集为 **1036/1036**；没有重跑其余 1027 项。
+
+```sh
+TMPDIR=/tmp/roc-ux-p6-os-20261125-qaZ4E3 node --test --test-concurrency=1 \
+  --test-name-pattern='architecture repair corpus materializes|template import verifies CRC|research TIFF parser rejects invalid dimensions|architecture repair corpus refuses|template ZIP reader rejects the attack' \
+  tests/unit/architecture-repair-corpus.test.mjs tests/unit/research-archive-libraries.test.mjs
+```
+
+Wiki 的 P1 诊断分层已将 `gen` 从常规内容移入默认折叠区域；原布局用例仍查找可见
+`gen` span，独立重现后改为核验可见 `<time>` 与原代次披露，没有放宽裁切或来源断言。
+Electron smoke 初次等待把保存 pending 当完成、在助手进入中测最终几何；
+现等待真实保存完成与实际对齐。助手深度脚本则将退出中的保留节点当作已打开，
+4 秒定向诊断确认 `data-open=false`、`inert=true`、输入未 disabled。现在按
+`aria-pressed` 打开并等待交互恢复，关闭检查核验实际隐藏及 inert，而不是旧 `hidden`
+属性。临时诊断已移除；完整场景保持审批、拒绝、提问、取消、强制终止及检查点工具去重。
+
+### 最终构建与五轮性能
+
+以下命令同样在仓库根执行，使用已有普通 production `dist`；采样期间不运行其它
+Electron 检查或构建。每份报告均为 **complete / 5 轮**，全部原始子报告保留在正式 JSON。
+报告路径不用于下一次重跑，复测须选新路径。
+
+| 检查命令 | 报告与范围 |
+| --- | --- |
+| `node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p6.json --samples 5` | [动作](after-p6.json)：八场景，各五轮，500 历史 / 500 增量 |
+| `node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p6-history-5000.json --samples 5 --history-messages 5000 --stream-chunks 500` | [长历史](after-p6-history-5000.json)：八场景，各五轮 |
+| `node scripts/performance/bench-ui-motion.mjs docs/ux-motion/reduced-motion.json --samples 5 --reduced-motion` | [减少动态效果](reduced-motion.json)：八场景，各五轮 |
+| `node scripts/performance/bench-ui-workloads.mjs docs/ux-motion/after-p6-workloads.json --samples 5 --idle-minutes 0` | [业务负载](after-p6-workloads.json)：文献、20 次切换、500/5000 历史与对应增量、0/1000/10000 事件启动 |
+| `node scripts/performance/bench-repeated-workloads.mjs docs/ux-motion/after-p6-pdf.json --samples 5 --workload pdf` | [PDF](after-p6-pdf.json)：每轮 400 页、200 次连续翻页，含打开/关闭、后台解析与隐藏解析 IPC |
+
+源码身份为 `5bbe60d735179e69fe340fee29b65cbacd233dc1`，`trackedDirty=true` 的未提交
+范围为 P6 验证脚本、打包目录参数、Wiki 回归和文档，Renderer 产品源码没有未提交修改。
+依赖锁 SHA256 为 `6130ac618350445948f63929d2fbeeefa06b7980e6034791603db6b32eaf1ccc`；
+完整 dist SHA256 为 `f460ecaac39e2df76e8fd205fda1727c04cd8c047c57927b55449985ffa8c5e9`。
+业务与 PDF 报告中的 main/preload/Renderer manifest 摘要对应这份构建。
+宿主为 M1 Pro / 32GiB、macOS 27.2.1、Electron 45.3.4 / Chromium 156.0.8078.100；
+动作报告记录 AC、低功耗关闭，原生内容区 1440×900，抽屉 CSS 视口 720×450。
+约 120Hz 的 Electron 显示元数据不构成实际显示帧验收。
+
+下表是**每轮分位数的五轮最大值**，不是合并全部 RAF 或输入事件的分位数。
+
+| 动作协议 | RAF P95（ms） | RAF P99（ms） | 输入→反馈代理 P95（ms） | ≥50ms 长任务 / RAF >50ms / 缺失反馈 |
+| --- | ---: | ---: | ---: | --- |
+| P0，500 历史 / 500 增量 | 9.4 | 24.8 | 9.0 | 0 / 0 / 0 |
+| P3，同负载 | 10.1 | 10.4 | 15.9 | 0 / 0 / 0 |
+| P6，同负载 | 10.2 | 15.9 | 15.9 | 0 / 0 / 0 |
+| P4，5000 历史 / 500 增量 | 10.3 | 16.3 | 15.9 | 0 / 0 / 0 |
+| P6，同长历史负载 | 10.2 | 10.4 | 16.1 | 0 / 0 / 0 |
+| P6，reduce，500 历史 / 500 增量 | 10.1 | 10.4 | 17.7 | 0 / 0 / 0 |
+
+P6 普通动作逐场景 RAF P95 最大依次为：项目集合 9.9ms、菜单 10.1ms、
+左抽屉 10.2ms、助手鼠标 10.0ms、助手键盘 10.1ms、拖拽 9.4ms、Escape 10.0ms、
+流式完成 10.1ms。拖动内每轮 0 写、释放 1 写、Escape 0 写；三份最终动作报告均一致。
+P0 拖动/Escape 曾写 20/21 次，现在消除了中间写入。菜单反馈从 8.5ms 到 15.9ms，
+P95 帧间隔也有小幅增加，不能称所有性能指标都改善。
+
+| 最终业务场景 | RAF P95 最大（ms） | 最大 RAF 间隔（ms） | 输入→第二次 RAF P95 最大（ms） | 最长主任务（ms） |
+| --- | ---: | ---: | ---: | ---: |
+| 100 项目搜索 | 10.0 | 10.0 | 22.7 | 11.109 |
+| 100 文献 | 9.6 | 10.4 | 15.8 | 8.068 |
+| 2000 文献 | 9.8 | 10.4 | 15.5 | 7.420 |
+| 10000 文献 | 9.8 | 10.4 | 16.0 | 12.896 |
+| 20 次画布切换 | 16.5 | 42.7 | 53.2 | 48.215 |
+| 500 历史 / 500 增量 | 10.0 | 17.5 | 17.2 | 15.047 |
+| 5000 历史 / 5000 增量 | **25.2** | 34.6 | 15.8 | 27.595 |
+| 400 页 PDF / 200 次连续翻页 | 10.0 | 10.4 | 15.2 | 5.114 |
+
+以上动作窗口的 ≥50ms 主线程长任务均为 0。文献的 1/10/50 页由真实“加载更多”
+全部取回，再 End/连续滚动；每轮最终挂载 12 行，10000 文献全部分页加载耗时
+五轮 P95 为 3663.0ms。历史长流每轮一次真实本地 SSE 请求，终态为 `run_completed`，
+终点挂载 1 行。Provider 增量数与 IPC 事件数不同，不能把 5000 增量称为 5000 次运行。
+PDF 每轮验证 200 个目标页与 200 次新栅格分配，单页栅格就绪 P95 的五轮最大值
+为 45.7ms，最多 1 Worker；打开/关闭场景首次栅格 P95 245.6ms、分配 1 次。
+后台解析 1823.3ms、隐藏解析 IPC 1.783ms。输入→第二次 RAF 和动作反馈是两个指标，
+都只是绘制机会代理，不能写成屏显 FPS。
+
+业务报告中的启动样本各五次，0/1000/10000 事件的主窗就绪 P95 分别为
+1174.6/1174.5/1183.0ms，首次内容绘制 188/180/184ms，助手输入区就绪
+543.5/548.7/544.3ms，挂载消息行 0/13/13。它们属于 UI workload fixture，
+不与更早的独立启动 fixture 合并或直接宣称提升。
+
+### 长流与画布切换的起点对照
+
+5000 历史加 5000 增量五轮 RAF P95 为 **25.0/25.0/25.1/24.9/25.2ms**，
+稳定超过方案 20ms 参考目标。额外一次普通构建 raw trace 复现 P95 25.0ms；
+Renderer 主线程 RunTask 总计 4885ms，FunctionCall 3168.6ms，Layout 1224.5ms / 367 次，
+Paint 244.9ms；Minor/Major GC 分别 28.25/9.65ms。嵌套耗时不相加，trace 只用于定位。
+
+随后在仓库外独立 worktree 固定 `3eb8fd6ba1f6f5315ea7670f26c165994c2d34ef`，
+复用同一依赖、执行 `pnpm build` 和
+`node scripts/performance/bench-ui-workloads.mjs /Users/Apple_501/Desktop/Roc/Roc/docs/ux-motion/baseline-workloads-3eb8fd6.json --samples 5 --idle-minutes 0`，
+取得[起点完整业务报告](baseline-workloads-3eb8fd6.json)，complete / 5 轮。
+实际工作目录为 `/tmp/roc-ux-p6-os-20261125-qaZ4E3/baseline-worktree`。
+该 worktree 的唯一 tracked 差异是复用 P0 的 `electron-lifecycle.mjs` 正常退出修复；
+它在测量后捕获本次 ChildProcess，不改变 Renderer、RAF 或场景。
+因此基线报告也保留 `trackedDirty=true`。两个业务报告的协议、fixture、lockfile、
+9 个上层仪器/夹具文件摘要全部相同；基线完整 dist SHA256 为
+`89123bb07b6474d8c351e724af6b969d1e481b31fd9d43dca286b0678bb52a17`。
+
+| 同负载指标 | 起点五轮最大 | P6 五轮最大 |
+| --- | ---: | ---: |
+| 5000 增量 RAF P95（ms） | 25.1 | 25.2 |
+| 5000 增量最大 RAF 间隔（ms） | 34.0 | 34.6 |
+| 5000 增量输入→第二次 RAF P95（ms） | 18.7 | 15.8 |
+| 5000 增量最长主任务（ms） | 25.148 | 27.595 |
+| 5000 增量 Layout 总计（ms） | 1241.495 | 1231.206 |
+| 5000 增量顶层 busy 总计（ms） | 4935.039 | 4932.434 |
+| 20 次切换 RAF P95（ms） | 10.4 | 16.5 |
+| 20 次切换最大 RAF 间隔（ms） | 43.4 | 42.7 |
+| 20 次切换输入→第二次 RAF P95（ms） | 51.1 | 53.2 |
+| 20 次切换最长主任务（ms） | 46.798 | 48.215 |
+
+起点长流五轮 P95 为 25.1/25.0/24.9/25.1/24.9ms，也没有 ≥50ms 长任务。
+长流限制在方案起点已经存在；正文仍沿用完整累积文本的流式渲染，相关解析器未改变。
+该负载继续标为 **20ms 目标未达**，不修改仪器、阈值或删除样本。
+画布切换的 P95 增加 6.1ms，当前仍在 20ms 参考预算内，输入代理在 100ms 内；
+保留这项代价，不用常规动作成绩声称全部负载无性能回退。
+
+### 布局、资源与覆盖范围
+
+布局审计包含浅深、8 种尺寸、reduce/no-preference 与原生 125%/200%/400% 缩放，
+783 状态 / 2097 控件与焦点检查全部 cut=0。读回了深色 640px 设置、浅色 800px PDF
+批注、深色 380px RAG、宽窗写作、深色 400% 设置以及原生包门户和设置代表截图。
+这证明所列状态的几何与自动化焦点，物理输入和系统读屏仍需独立验收。
+
+eager JS 从 P0 的 517980 bytes / 11 files 到最终 530736 bytes / 32 files，
+各应用入口仍 ≤500000 bytes，Renderer chunk 预算通过。
+业务 workload 的 after heap 最大点采样为 83307260 bytes（约 79.4MiB），
+after DOM 最大 78225；起点分别为 74213828 bytes、65656。
+这些计数包含缓存与未 GC 节点，各轮点采样不能证明峰值、泄漏或持续增长。
+长流终点消息行与文献虚拟行仍有界。未运行 30 分钟可见/隐藏空闲与持续流式，
+不作长期内存稳定结论。
+
+35 个合同的当前证据映射已同步到[交互矩阵](interaction-matrix.csv)和
+[界面清单](surface-inventory.md)。全量回归覆盖的是现有测试的指定路径，
+没有把 2258 个静态模板算作已验收状态，也没有将每个合同全组合标为通过。
+S30 的独立后端 RAG 计数/诊断运行仍待验证。
+
+### 隔离 macOS 候选包
+
+实际打包命令如下，工作目录为仓库根。执行器先调用
+`createPackagingEnvironment()`，使缓存和 TMPDIR 实际进入本次临时根；
+源工具链预检通过，打包 19.0 秒，原生 smoke 7.7 秒，均 exit 0。
+
+```sh
+ROC_PACKAGING_RUNTIME_DIR=/Users/Apple_501/Desktop/Roc/Roc/.runtime/roc-ux-p6-20261125-837IGC/packaging-runtime \
+  pnpm exec electron-builder --mac --dir --arm64 --publish never \
+  --config electron-builder.yml \
+  --config.directories.output=/Users/Apple_501/Desktop/Roc/Roc/.runtime/roc-ux-p6-20261125-837IGC/package
+ROC_SMOKE_ARTIFACT_DIR=/Users/Apple_501/Desktop/Roc/Roc/.runtime/roc-ux-p6-20261125-837IGC/mac-smoke \
+ROC_SMOKE_RUNTIME_DIR=/Users/Apple_501/Desktop/Roc/Roc/.runtime/roc-ux-p6-20261125-837IGC/mac-runtime \
+  node scripts/smoke-mac.mjs \
+  /Users/Apple_501/Desktop/Roc/Roc/.runtime/roc-ux-p6-20261125-837IGC/package/mac-arm64/Roc.app
+codesign --verify --deep --strict --verbose=2 \
+  .runtime/roc-ux-p6-20261125-837IGC/package/mac-arm64/Roc.app
+```
+
+第一条是实际 builder 参数；单独重跑须按[开发指南](../development.md)把
+`createPackagingEnvironment()` 的完整返回值传给 child，设置变量本身不会配置第三方 builder。
+候选包 366 个 dist 运行文件逐字节等于被测 dist，文件集合也一致；
+`electron-builder.yml` 显式排除的两份 `.vite` 构建元数据独立列出。
+运行文件集合 SHA256 为
+`140e80032e293341d37d1b3e44bf8aeb019f5a033e9713d65503281f9e108c89`，
+没有额外 dist 文件。严格签名检查通过。
+
+macOS smoke 通过真实 packaged SQLite/sqlite-vec、PTY/shell、RTK、科研工具链、
+文件 preview 和 BibTeX parser；10k chunk 检索两次共用一个 Worker，10 hits，
+shutdown 确认 Worker 已停止。主窗口 2916ms 就绪，关闭隐藏后原生 activate 恢复同一窗口，
+系统外观事件到达，字体就绪，3 份 stylesheet，0 missing images / 0 Renderer errors。
+原生控件留白、模板 tray 与主行动可见。该 smoke 使用隔离资料根，
+没有测试默认 `~/.roc` 的 Finder 启动路径。
+
+### 清理与剩余实机验收
+
+本次 `.artifacts`、`.runtime/tmp` 曾临时映射到任务目录，结束后已恢复原目录；
+清理前后核对原 device/inode，`release/` 始终使用原目录，候选包输出另置。
+只保留本次六份正式 JSON、可复跑工具、必要回归和合同；派生 Markdown、逐轮报告、
+原始 trace、截图、日志、候选包与原版本临时 worktree 已在核验后删除，worktree 注册已移除。
+本次任务根和仓库外临时根也已删除，共享 `node_modules` 保留，仓库外 UI 临时根无新增；
+真实 `~/.roc`、预存缓存和研究资料未修改。
+
+未完成的实机范围：独立实际 60Hz/120Hz 显示帧与 GPU 合成帧、低功耗、第二代 Mac、
+物理触控板、中文 IME、VoiceOver、系统减少动态效果切换、真人八旅程、真实外部服务、
+默认资料根的 Finder 启动，以及长期资源稳定性。自动化的合成 IME、CSS 缩放、
+受控 SSE、reduced-motion 模拟和 isolated native smoke 分别保留其证据边界。

@@ -72,4 +72,30 @@ Electron smoke 用隔离 `ROC_DATA_ROOT` 启动，夹具入口是 [tests/smoke/l
 
 `scripts/` 保留构建、测试、维护和可重跑的评测入口。仅绑定已丢失历史输入或不存在 Git 基线、且无当前调用方的专项脚本已移除；不要仅凭未列入 `package.json` 判断脚本无用。
 
+完成普通构建并准备好科研工具链后，可以在新的验证根生成候选包：
+
+```sh
+ROC_VERIFY_ROOT="$(mktemp -d "$PWD/.runtime/mac-verify-XXXXXX")"
+ROC_VERIFY_ROOT="$ROC_VERIFY_ROOT" \
+  ROC_PACKAGING_RUNTIME_DIR="$ROC_VERIFY_ROOT/build-runtime" \
+  node --input-type=module <<'NODE'
+import {createPackagingEnvironment, runCommand} from './scripts/lib/native-packaging.mjs';
+process.exit(runCommand('pnpm', [
+  'exec', 'electron-builder', '--mac', '--dir', '--arm64', '--publish', 'never',
+  '--config', 'electron-builder.yml',
+  '--config.directories.output=' + process.env.ROC_VERIFY_ROOT + '/package'
+], {cwd: process.cwd(), env: createPackagingEnvironment()}));
+NODE
+ROC_SMOKE_ARTIFACT_DIR="$ROC_VERIFY_ROOT/smoke" \
+  ROC_SMOKE_RUNTIME_DIR="$ROC_VERIFY_ROOT/smoke-runtime" \
+  node scripts/smoke-mac.mjs "$ROC_VERIFY_ROOT/package/mac-arm64/Roc.app"
+```
+
+`ROC_PACKAGING_RUNTIME_DIR` 重定向打包缓存和临时目录，源工具链仍读取
+`.runtime/research-toolchain/`；默认继续使用 `.runtime/`。直接调用 electron-builder
+时也要传入 `createPackagingEnvironment()`，使主命令与 hooks 使用同一临时根。两个 smoke 参数分别
+重定向报告和隔离资料根，默认目录行为保持。核验后只清理本次验证根，
+既有 `release/` 与资料根保留。全量测试的 `TMPDIR` 应放仓库外，语料物化器
+会拒绝仓库内输出；源码 bundle 则使用仓库内 `.runtime/tmp/` 以解析本地依赖。
+
 重跑使用新的输出路径，并检查参数及全部输入。固定结果 JSON 不能代替原始输入或当次执行；缺少原始资料时不能续跑、比较或独立重评分。清理输出后不再据旧报告声明当前验收通过。

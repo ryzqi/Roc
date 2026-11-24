@@ -101,21 +101,30 @@ async function openAssistant(page, projectId) {
 async function revealAssistant(page) {
   // A canvas destination dismisses the floating assistant. Open it only after
   // establishing the sessions context, and release any narrow sidebar overlay first.
-  if (await page.getByTestId('sidebar-drawer').isVisible()) {
+  if (await page.getByTestId('sidebar-drawer').count() > 0) {
     await page.getByTestId('sidebar-drawer-close').click();
     await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
   }
-  if (!await page.getByTestId('assistant-panel').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
+  // The retained panel can still be visible while logically closed and inert.
+  if ((await page.getByTestId('titlebar-toggle-assistant').getAttribute('aria-pressed')) !== 'true') {
+    await page.getByTestId('titlebar-toggle-assistant').click();
+  }
+  await page.waitForFunction(() => {
+    const pane = document.querySelector('[data-workspace-pane="assistant"]');
+    return pane?.getAttribute('data-open') === 'true' && !pane.hasAttribute('inert');
+  }, undefined, { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
 }
 
 async function openSessions(page) {
   // An assistant overlay makes the background context inert even when visible.
-  if (await page.getByTestId('assistant-drawer').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
+  if (await page.getByTestId('assistant-drawer').count() > 0) await page.getByTestId('titlebar-toggle-assistant').click();
   const runs = page.getByTestId('activity-nav-runs');
   if ((await runs.getAttribute('aria-current')) !== 'page') await runs.click();
-  if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  if ((await page.getByTestId('titlebar-toggle-sidebar').getAttribute('aria-pressed')) !== 'true') {
+    await page.getByTestId('titlebar-toggle-sidebar').click();
+  }
 }
 
 async function waitForStatus(page, status, timeoutMs = 90_000) {
@@ -722,12 +731,12 @@ try {
   assertCheck('5 恢复', '运行中出现流式内容', beforeClose.includes('G5S-'), '');
 
   await page.click('[data-testid="titlebar-toggle-assistant"]');
-  await page.waitForFunction(() => document.querySelector('[aria-label="研究助手"]')?.hidden === true, undefined, {timeout: 10_000});
+  const assistantPane = page.locator('[data-workspace-pane="assistant"]');
+  await assistantPane.waitFor({state: 'hidden', timeout: 10_000});
   assertCheck('5 恢复', '关闭助手面板后界面隐藏且运行状态可保留',
-    await page.locator('[aria-label="研究助手"]').evaluate(element => element.hidden), '');
+    await assistantPane.evaluate(element => element.getAttribute('data-open') === 'false' && element.hasAttribute('inert')), '');
   await page.waitForTimeout(1_500);
-  await page.click('[data-testid="titlebar-toggle-assistant"]');
-  await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
+  await revealAssistant(page);
   await waitForStatus(page, 'running', 30_000);
   const afterReopen = await waitForTranscript(page, 'G5S-0003', 30_000);
   assertCheck(

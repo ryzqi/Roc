@@ -390,7 +390,8 @@ try {
   await page.waitForFunction(
     () => {
       const bar = document.querySelector('[data-testid="settings-dirty-bar"]');
-      return bar !== null && !/^未保存/u.test((bar.textContent ?? '').trim());
+      return bar !== null && bar.getAttribute('aria-busy') !== 'true'
+        && (bar.textContent ?? '').trim() === '所有修改已保存';
     },
     undefined,
     { timeout: 30_000 }
@@ -419,6 +420,12 @@ try {
     const beforeAssistant = await measureCanvas();
     await page.getByTestId('titlebar-toggle-assistant').click();
     await page.getByTestId('assistant-drawer').waitFor();
+    await page.waitForFunction(() => {
+      const drawer = document.querySelector('[data-testid="assistant-drawer"]');
+      const canvas = document.querySelector('[data-testid="canvas-column"]');
+      return drawer !== null && canvas !== null
+        && Math.abs(drawer.getBoundingClientRect().right - canvas.getBoundingClientRect().right) <= 1;
+    });
     const assistantBounds = await page.getByTestId('assistant-drawer').evaluate(node => {
       const {left, right, width} = node.getBoundingClientRect(); return {left, right, width};
     });

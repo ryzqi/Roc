@@ -47,6 +47,23 @@ node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p4-history-500
 node scripts/performance/bench-ui-motion.mjs docs/ux-motion/reduced-motion.json --samples 5 --reduced-motion
 ```
 
+P6 在最终普通构建上分别保存同负载、长历史和业务负载报告；PDF 另用已有独立
+采样器，不把 UI 动作报告当成 PDF 翻页成绩：
+
+```sh
+node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p6.json --samples 5
+node scripts/performance/bench-ui-motion.mjs docs/ux-motion/after-p6-history-5000.json --samples 5 --history-messages 5000 --stream-chunks 500
+node scripts/performance/bench-ui-motion.mjs docs/ux-motion/reduced-motion.json --samples 5 --reduced-motion
+node scripts/performance/bench-ui-workloads.mjs docs/ux-motion/after-p6-workloads.json --samples 5 --idle-minutes 0
+node scripts/performance/bench-repeated-workloads.mjs docs/ux-motion/after-p6-pdf.json --samples 5 --workload pdf
+```
+
+P6 另在仓库外临时 worktree 固定 `3eb8fd6`、复用同一依赖并普通 build，补测
+[起点业务负载](baseline-workloads-3eb8fd6.json)。该 worktree 仅复用 P0 的 Electron
+正常退出修复；两份业务报告的协议、fixture、lockfile 和 9 个仪器/夹具摘要相同。
+准确命令、两个完整 dist 摘要、五轮结果和清理范围见[阶段验证](validation.md#p6)。
+这是同负载对照，不改写 P0 原动作报告。
+
 脚本不 build，不覆盖已有报告。启动环境复用 `benchmarkChildEnvironment`，清理开发 Renderer URL、Electron Node 模式与旧 `ROC_PERF_*` 标记。只保留指定正式 JSON；短 CDP trace 在内存聚合，临时数据根、模块 bundle 和诊断文件在 `finally` 清理。不得并发运行采样、布局审计或另一套 Electron 测试。已有长内容/长期资源采样按需使用 `bench-ui-workloads.mjs`、`bench-repeated-workloads.mjs`，不在每个低风险阶段全量重复。
 
 ## 指标解释与门槛
@@ -79,3 +96,8 @@ node scripts/performance/bench-ui-motion.mjs docs/ux-motion/reduced-motion.json 
 ## 实机验收缺口
 
 P0 只能确认当前可用机器与供电状态。60Hz/120Hz、低功耗以及另一代 Mac 分别建立报告；没有硬件或明确授权的系统状态切换时标记待验证。物理触控板、中文 IME、VoiceOver、真人任务感知与录屏需独立完成。禁止以布局测试全绿、普通 RAF 达标或旧版启动基线替代这些结果。
+
+P6 的常规动作、长历史与 reduce 五轮符合上述动作窗口参考预算；5000 历史加
+5000 增量 P95 最高 25.2ms，起点 25.1ms，20ms 目标仍未达。20 次画布切换的
+P95 为 10.4→16.5ms，增量代价保留。正式报告保留所有轮次，物理显示帧和长期
+资源仍未验收，不能由 complete 状态推导全部性能或实机门槛通过。

@@ -22,8 +22,9 @@ const executablePath = join(appPath, 'Contents', 'MacOS', 'Roc');
 const signature = spawnSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { encoding: 'utf8' });
 assert.equal(signature.status, 0, signature.stderr || signature.error?.message);
 
-const artifactDir = join(projectRoot, '.artifacts', diagnosticRollback ? 'mac-package-diagnostic' : 'mac-package');
-const runtimeRoot = join(projectRoot, '.runtime', 'mac-smoke');
+const artifactDir = resolve(process.env.ROC_SMOKE_ARTIFACT_DIR ??
+  join(projectRoot, '.artifacts', diagnosticRollback ? 'mac-package-diagnostic' : 'mac-package'));
+const runtimeRoot = resolve(process.env.ROC_SMOKE_RUNTIME_DIR ?? join(projectRoot, '.runtime', 'mac-smoke'));
 mkdirSync(artifactDir, { recursive: true });
 mkdirSync(runtimeRoot, { recursive: true });
 const runRoot = mkdtempSync(join(runtimeRoot, 'run-'));

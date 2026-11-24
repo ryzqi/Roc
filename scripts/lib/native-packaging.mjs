@@ -20,7 +20,6 @@ export const betterSqlite3ModuleName = 'better-sqlite3';
 export const betterSqlite3WorkspaceRequireBase = packageJsonPath;
 
 const probeScriptPath = resolve(projectRoot, 'scripts', 'probe-better-sqlite3.cjs');
-const electronBuilderCache = resolve(projectRoot, '.runtime', 'electron-builder-cache');
 
 export function hasBundledPnpmRelativeImports(source) {
   return typeof source === 'string' && source.includes('node_modules/.pnpm/');
@@ -131,12 +130,13 @@ export function sanitizeLanggraphSdkForPackaging({
 }
 
 export function createPackagingEnvironment(baseEnvironment = process.env) {
+  const runtimeRoot = resolve(baseEnvironment.ROC_PACKAGING_RUNTIME_DIR ?? join(projectRoot, '.runtime'));
   const localPaths = {
-    ELECTRON_BUILDER_CACHE: electronBuilderCache,
-    ELECTRON_CACHE: resolve(projectRoot, '.runtime', 'electron-cache'),
-    npm_config_cache: resolve(projectRoot, '.runtime', 'npm-cache'),
-    XDG_CACHE_HOME: resolve(projectRoot, '.runtime', 'cache'),
-    TMPDIR: resolve(projectRoot, '.runtime', 'tmp')
+    ELECTRON_BUILDER_CACHE: join(runtimeRoot, 'electron-builder-cache'),
+    ELECTRON_CACHE: join(runtimeRoot, 'electron-cache'),
+    npm_config_cache: join(runtimeRoot, 'npm-cache'),
+    XDG_CACHE_HOME: join(runtimeRoot, 'cache'),
+    TMPDIR: join(runtimeRoot, 'tmp')
   };
   for (const directory of Object.values(localPaths)) {
     mkdirSync(directory, { recursive: true });

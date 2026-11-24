@@ -271,6 +271,11 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
   await page.getByTestId('rag-index-toggle').click();
   await page.getByTestId('rag-file-layout-file').waitFor();
   await page.getByTestId('rag-job-layout-job').waitFor();
+  const fixture=await page.evaluate(()=>window.indexLayoutFixture);
+  const diagnostic=page.getByTestId('rag-job-diagnostics-layout-job');
+  const generation=diagnostic.locator('p');
+  await expect(generation).toHaveText('索引代次 2');
+  await expect(generation).toBeHidden();
   for(const theme of ['light','dark']){
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     for(const width of [1100,380]){
@@ -285,7 +290,7 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
         const job=document.querySelector('[data-testid="rag-job-layout-job"]');
         const path=Array.from(job.querySelectorAll('span')).find(el=>el.textContent===window.indexLayoutFixture.path);
         const pathRect=path.getBoundingClientRect();
-        const metadata=Array.from(job.querySelectorAll('span')).find(el=>el.textContent.includes('gen '));
+        const metadata=job.querySelector('time');
         const metadataRect=metadata.getBoundingClientRect();
         return {paneWidth:pane.clientWidth,paneScrollWidth:pane.scrollWidth,
           tableWidth:table.getBoundingClientRect().width,
@@ -294,6 +299,8 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
           fileErrorFitsCell:fileStatus.scrollWidth<=fileStatus.clientWidth+1,
           pathWidth:pathRect.width,pathHasFullText:path.scrollWidth<=path.clientWidth+1,
           pathHasTitle:path.title===window.indexLayoutFixture.path,
+          timestampText:metadata.textContent,timestampDateTime:metadata.dateTime,
+          timestampHasFullText:metadata.scrollWidth<=metadata.clientWidth+1,
           pathMetadataOverlap:pathRect.left<metadataRect.right&&pathRect.right>metadataRect.left&&
             pathRect.top<metadataRect.bottom&&pathRect.bottom>metadataRect.top,
           viewportScrollWidth:document.documentElement.scrollWidth};
@@ -315,7 +322,10 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
     assert.ok(measurement.pathHasFullText,`${label}: the full job path must be readable without hovering`);
     assert.ok(measurement.filePathHasFullText,`${label}: the table path must wrap inside its cell`);
     assert.ok(measurement.fileErrorFitsCell,`${label}: the failure details must wrap inside their cell`);
-    assert.equal(measurement.pathMetadataOverlap,false,`${label}: the path and generation must occupy separate space`);
+    assert.equal(measurement.timestampText,fixture.timestamp,`${label}: the completion time must retain the source value`);
+    assert.equal(measurement.timestampDateTime,fixture.timestamp,`${label}: the completion time must remain machine readable`);
+    assert.ok(measurement.timestampHasFullText,`${label}: the full completion time must wrap without clipping`);
+    assert.equal(measurement.pathMetadataOverlap,false,`${label}: the path and completion time must occupy separate space`);
     assert.equal(measurement.clip.cut,0,`${label}: focus and surface shadows must survive clipping`);
     if(measurement.tableWidth>measurement.paneWidth){
       assert.match(measurement.tableParentOverflow,/auto|scroll/u,`${label}: only the table owns its horizontal scrolling`);
@@ -327,7 +337,11 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(()=>document.activeElement?.scrollLeft>0);
   assert.ok(await region.evaluate(el=>el.scrollLeft)>scrollBefore);
-  const fixture=await page.evaluate(()=>window.indexLayoutFixture);
+  await diagnostic.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(generation).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(generation).toBeHidden();
   const file=page.getByTestId('rag-file-layout-file');
   assert.equal(await file.locator('td').first().getAttribute('title'),fixture.path);
   assert.match(await file.innerText(),/synthetic_runtime_fixture_with_long_error_code/u);
