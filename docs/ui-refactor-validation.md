@@ -1,5 +1,35 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.12：最终工程验收与本地打包
+
+状态：**Verified passing**（工程重构、功能集成、布局与本地打包范围）。P8.8–P8.11记录的分页滚动、助手提交、阅读恢复和管理导航问题均已修正。最终完整Renderer、功能smoke、管理验收、浅深布局与macOS应用包通过；P1–P6主体工程及P8工程验收完成。性能按用户要求跳过，真人与外部服务验收仍单独保留。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`；macOS 27.2.1 arm64、Node 26.13.1、pnpm 12.21.0、Electron 45.3.4、React 19.3.1、TypeScript 7.0.2。以下为本轮最终证据，未把前序失败轮次计作成功：
+
+| 检查命令 | 结果 |
+| --- | --- |
+| `pnpm test:unit` | 完整2775项：2774通过、0失败、1跳过。该轮在P8.11新增路由回归之前执行；没有重新运行新增后的2776项全量 |
+| `node --test tests/unit/surfaces.test.mjs` | P8.11修改后的路由门禁17/17，含新增真实`runs`闭集回归 |
+| `ROC_WORKSPACE_LATEX_TOOLCHAIN=/Users/Apple_501/Desktop/Roc/Roc/.runtime/research-toolchain/darwin-arm64 ROC_DATA_ROOT=/tmp/roc-ui-complete-20261124.ngMhV0/latex-probe-data node --test --test-name-pattern='current workspace compiles with the installed offline toolchain' tests/unit/research-workspace-latex.test.mjs` | 上述唯一跳过项补跑1/1：真实离线编译生成有效PDF，作业快照清理通过 |
+| `pnpm test:renderer` | 最终完整1021/1021，0失败、0跳过 |
+| `ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/p8-complete-smoke pnpm smoke:electron` | 核心23/23、助手64/64，无Renderer错误 |
+| `ROC_SMOKE_TARGET=dist pnpm verify:p9-management` | 90/90记录＝86/86断言＋4条说明，provider请求3次，无Renderer错误；任务仍running，本轮删除分支未执行 |
+| `ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/p8-complete-layout pnpm audit:layout` | 783个状态、2097个控件/焦点检查通过，cut=0；浅深主题125%/200%/400%原生缩放12/12 |
+| `pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design` | 最终生产修改后全部通过；打包再次执行build与分包门禁。278个组件通过已实现设计规则，eager为517980 bytes / 11 files，应用entry均≤500000 bytes |
+| `pnpm package:mac` | 本地`--publish never`生成`release/mac-arm64/Roc.app`，自带隔离packaged smoke通过，深度严格签名检查通过 |
+| `ROC_DATA_ROOT=/tmp/roc-ui-complete-20261124.ngMhV0/native-probe-data pnpm verify:native-packaging` | Electron实际加载SQLite成功，ripgrep校验及ONNX darwin/arm64校验通过 |
+| `pnpm verify:arm64-only -- --strict` | 20/20，应用可执行文件仅arm64；Resources中扫描的6个原生库均为arm64，universal=0、pureX64=0 |
+
+完整功能smoke验证提问恢复后的慢流、原生上滚保持、回到最新、取消、切项目、崩溃检查点续跑与工具去重。516条累计消息仅持有116条窗口消息，挂载19行。完整布局报告无文字重叠、字号违规、文本溢出、小热区、面板溢出或页面横滚；原生窗口最小尺寸1184×640，三个缩放等级的实际CSS视口分别为1152×720、720×450、360×225。已查看浅深宽画布及全部12张原生缩放截图。报告中432条`hidden`均为贴窗口边缘管理抽屉向上、右、下的外投影；已核对抽屉截图，朝画布一侧的边界完整，不将这些离窗投影算作可见裁切。
+
+打包smoke实际验证包内SQLite、sqlite-vec、PTY、shell IPC、文件预览与BibTeX导入；10,000块受控语料的两次只读查询复用同一Worker，正常退出后一个Worker已停止。系统强调色通知、原生菜单、交通灯预留、模板托盘、关闭隐藏后恢复同一窗口、字体与资源加载均通过。该轮使用`.runtime/mac-smoke/run-*/data`和独立Chromium目录，资料根由smoke自动清理；没有用默认`~/.roc`执行Finder启动验收。
+
+构建身份以生产修复已落地的`d03d4cf`工作树为准。打包重建的dist与完整Renderer、功能smoke及布局所用构建逐项一致：**348文件、19207642 bytes，SHA256 `4ca75fc5fe32d0d9d7a12726af1b70a0ad24695f0efd31771e29ab4407e70f09`**。摘要算法按相对路径排序，累计`path + NUL + sha256(content).hex + newline`，再对累计内容计算SHA256。按照现有打包配置排除`renderer/.vite/chunk-packages.json`与`renderer/.vite/manifest.json`后，通过`@electron/asar`逐项读取包内dist并核对路径、大小与内容摘要：**346文件、19026385 bytes，摘要 `478fdeaa5db0325a1d03853bc1fbe6070fc74ab82b915f8e06170c83506400c0`**。最终`app.asar`自身SHA256为`437db18e1a3fe2d4d5171324851885340ecece855bf12ec31d402c86c91aaeec`。
+
+本轮临时日志、截图、原始审计报告、构建manifest、隔离资料根、诊断脚本、dist及新增打包缓存已清理；原本为空的`.runtime/tmp`目录仍保留为空。清理后重新核对最终`app.asar`与既有P0原始报告的摘要均未改变，`release/mac-arm64`仅保留`Roc.app`。正式计划与验证记录保留；只读复核未发现P8.11的语义错误、验证削弱或P8.12的成绩夸大，最终文档提交不改变生产构建。
+
+仍缺少真人T1/T2/T3、真实外部服务、系统中文IME、VoiceOver、物理滚轮/触控板与实际刷新率的独立验收。剩余性能预检、benchmark、独立Profiler及启动/UI/PDF/长期性能采样均按要求跳过；受控功能夹具与packaged smoke不支持当前性能预算、改善比例或整体体验已验证的声明。
+
 ## 2026-11-24 P8.11：管理验收导航与路由门禁
 
 状态：**Verified passing**（管理验收路径与静态路由门禁范围）。最终完整管理验收首次在62条已通过记录后等待`canvas-task-category-background`超时，整轮失败。此前脚本一直处于写作画布，任务检查没有显式进入运行画布。补齐导航后，按钮出现但仍被`inert`阻止；有界真窗诊断确认`canvas-column`为inert，唯一可见dialog为`assistant-drawer`，地址仍带`assistant=1`。正常画布导航会收起窄窗覆盖助手，脚本手工改URL则保留了它。
