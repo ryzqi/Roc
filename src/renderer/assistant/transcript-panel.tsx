@@ -1,5 +1,5 @@
 import type {OpenResearchArtifact, ReadResearchGateContext} from '../artifacts/artifact-interactions';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { ChevronDown } from 'lucide-react';
@@ -42,6 +42,8 @@ export type ChatTranscriptPanelProps = {
   hasMoreBefore: boolean;
   loadingOlder: boolean;
   loadingLatest?: boolean;
+  /** Successful composer submissions explicitly return to the current output. */
+  jumpToLatestRequest?: number;
   loadOlder(): Promise<void>;
   onJumpToLatest(): Promise<void>;
   onOpenArtifact: OpenResearchArtifact;
@@ -79,6 +81,7 @@ export function ChatTranscriptPanel({
   hasMoreBefore,
   loadingOlder,
   loadingLatest = false,
+  jumpToLatestRequest = 0,
   loadOlder,
   onJumpToLatest,
   onApprovalDecision,
@@ -101,6 +104,8 @@ export function ChatTranscriptPanel({
   });
   const previousThreadIdRef = useRef<string | null>(threadId);
   const previousEpochRef = useRef(windowEpoch);
+  const previousJumpRequest = useRef({threadId, windowEpoch, request: jumpToLatestRequest});
+  const submissionJumpPending = useRef(false);
   const disclosure = useRef({threadId, windowEpoch, messages: new Map<string, MessageDisclosure>()});
   if (disclosure.current.threadId !== threadId || disclosure.current.windowEpoch !== windowEpoch) {
     disclosure.current = {threadId, windowEpoch, messages: new Map()};
@@ -148,17 +153,51 @@ export function ChatTranscriptPanel({
     };
   }, [messages.length, threadId, windowEpoch]);
 
-  function handleScrollBottomClick(): void {
+  const handleScrollBottomClick = useCallback((): void => {
     if (loadingLatest) return;
     if (tailTrimmed) {
       void onJumpToLatest();
       return;
     }
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
+  }, [loadingLatest, onJumpToLatest, tailTrimmed]);
+
+  useEffect(() => {
+    const previous = previousJumpRequest.current;
+    previousJumpRequest.current = {threadId, windowEpoch, request: jumpToLatestRequest};
+    if (previous.threadId !== threadId || previous.windowEpoch !== windowEpoch) {
+      submissionJumpPending.current = false;
+    } else if (previous.request !== jumpToLatestRequest) {
+      submissionJumpPending.current = true;
+    }
+    if (!submissionJumpPending.current) return;
+    // The composer and the new transcript window can change in separate commits.
+    // Let Virtuoso measure both before resolving LAST; a changed window restarts
+    // this alignment, and native input can cancel it before it takes control.
+    let settleFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      settleFrame = window.requestAnimationFrame(() => {
+        if (!submissionJumpPending.current) return;
+        submissionJumpPending.current = false;
+        handleScrollBottomClick();
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (settleFrame !== 0) window.cancelAnimationFrame(settleFrame);
+    };
+  }, [handleScrollBottomClick, jumpToLatestRequest, messages.length, threadId, windowEpoch]);
+
+  function cancelSubmissionJump(): void {
+    submissionJumpPending.current = false;
   }
 
   return (
-    <div className="relative min-h-0 flex-1" data-testid="assistant-transcript-host">
+    <div className="relative min-h-0 flex-1" data-testid="assistant-transcript-host"
+      onWheelCapture={cancelSubmissionJump} onPointerDownCapture={cancelSubmissionJump}
+      onKeyDownCapture={event => {
+        if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) cancelSubmissionJump();
+      }}>
       <Virtuoso
         key={`${threadId === null ? 'none' : threadId}:${windowEpoch}:${messages.length === 0 ? 'empty' : 'loaded'}`}
         ref={virtuosoRef}

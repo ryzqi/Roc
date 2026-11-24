@@ -1984,6 +1984,123 @@ test('transcript preserves an intentional scroll away from the bottom when new o
   assert.ok(Math.abs(afterTop - beforeTop) <= 2, `reading position moved from ${beforeTop}px to ${afterTop}px`);
 });
 
+test('accepted submission returns to latest and subsequent streaming respects native history scrolling', async () => {
+  await page.evaluate(() => {
+    clearHook();
+    const base = {source: 'persisted', role: 'user', reasoning: null, blocks: [], interrupts: [], isStreaming: false};
+    window.acceptedMessages = Array.from({length: 80}, (_, index) => ({
+      ...base, key: `accepted-history-${index}`, content: `历史记录 ${index}，保留原始阅读位置。`
+    }));
+    window.acceptedRequest = 0;
+    window.renderAcceptedTranscript = () => {
+      mountTranscript({
+        threadId: 'accepted-submission', messages: acceptedMessages, jumpToLatestRequest: acceptedRequest,
+        prependRevision: 0, trimRevision: 0, windowEpoch: 0, tailTrimmed: false,
+        hasMoreBefore: false, loadingOlder: false, loadOlder: async () => {}, onJumpToLatest: async () => {},
+        onOpenArtifact: () => {}, onReadGateContext: async () => null
+      });
+      Object.assign(document.getElementById('transcript-fixture').style, {width: '344px', height: '536px'});
+    };
+    renderAcceptedTranscript();
+  });
+  const scroller = page.getByTestId('assistant-transcript');
+  const jump = page.getByTestId('assistant-scroll-bottom');
+  const atBottom = () => page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node.querySelector('[data-testid="virtuoso-item-list"]').checkVisibility({visibilityProperty: true}) &&
+      node.scrollTop > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  }, null, {timeout: 2_000}).catch(async error => {
+    throw new Error(`Accepted submission position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+  });
+  const settledTop = () => scroller.evaluate(node => new Promise((resolve, reject) => {
+    let previous = node.scrollTop, since = performance.now(), frame = 0;
+    const timeout = window.setTimeout(() => {
+      cancelAnimationFrame(frame);
+      reject(new Error('Transcript native scroll did not settle'));
+    }, 2_000);
+    const settle = () => {
+      const current = node.scrollTop, now = performance.now();
+      if (current !== previous) {previous = current; since = now;}
+      if (now - since >= 200) {window.clearTimeout(timeout); resolve(current);}
+      else frame = requestAnimationFrame(settle);
+    };
+    frame = requestAnimationFrame(settle);
+  }));
+  const readHistory = async () => {
+    await scroller.hover({position: {x: 24, y: 100}});
+    await page.mouse.wheel(0, -480);
+    await jump.waitFor({state: 'visible'});
+    await page.waitForFunction(() => {
+      const node = document.querySelector('[data-testid="assistant-transcript"]');
+      return node.scrollHeight - node.clientHeight - node.scrollTop >= 200;
+    });
+    return settledTop();
+  };
+  await atBottom();
+  await settledTop();
+  const originalTop = await readHistory();
+  await page.evaluate(() => {
+    acceptedMessages = [...acceptedMessages, {
+      ...acceptedMessages[0], key: 'background-output', source: 'live', role: 'assistant',
+      content: '后台输出不能移走历史阅读位置。', isStreaming: true
+    }];
+    renderAcceptedTranscript();
+  });
+  await page.waitForTimeout(200);
+  const beforeAcceptanceTop = await scroller.evaluate(node => node.scrollTop);
+  assert.ok(Math.abs(beforeAcceptanceTop - originalTop) <= 2,
+    `streamed data alone must preserve the native history position: ${originalTop}px to ${beforeAcceptanceTop}px`);
+  await page.evaluate(() => new Promise(resolve => {
+    acceptedRequest += 1;
+    renderAcceptedTranscript();
+    // Acceptance and the first new output can arrive in separate renderer commits.
+    requestAnimationFrame(() => {
+      acceptedMessages = [...acceptedMessages,
+        {...acceptedMessages[0], key: 'accepted-prompt', source: 'live', content: '成功发送后查看当前输出。'},
+        {...acceptedMessages[0], key: 'accepted-output', source: 'live', role: 'assistant',
+          content: 'CURRENT-OUTPUT '.repeat(120), isStreaming: true}];
+      renderAcceptedTranscript();
+      resolve();
+    });
+  }));
+  await atBottom();
+  await expect(scroller).toContainText('CURRENT-OUTPUT');
+  const readingTop = await readHistory();
+  await page.evaluate(() => {
+    acceptedMessages = acceptedMessages.map(message => message.key === 'accepted-output'
+      ? {...message, content: message.content + 'LATER-OUTPUT '.repeat(120)} : message);
+    renderAcceptedTranscript();
+  });
+  await page.waitForTimeout(200);
+  assert.ok(Math.abs(await scroller.evaluate(node => node.scrollTop) - readingTop) <= 2,
+    'later streaming must respect wheel input after the accepted submission');
+  await expect(jump).toBeVisible();
+  await jump.focus();
+  await page.keyboard.press('Enter');
+  await atBottom();
+  await expect(scroller).toContainText('LATER-OUTPUT');
+  const latestTop = await settledTop();
+  await page.evaluate(() => {
+    // Deliver acceptance before the native wheel packet reaches React capture,
+    // so user input can take over while the requested end alignment is pending.
+    document.addEventListener('wheel', () => {
+      acceptedRequest += 1;
+      renderAcceptedTranscript();
+    }, {capture: true, once: true});
+  });
+  const interruptedTop = await readHistory();
+  assert.ok(latestTop - interruptedTop >= 200,
+    'native wheel must cancel the pending submission jump and reach history');
+  await page.evaluate(() => {
+    acceptedMessages = acceptedMessages.map(message => message.key === 'accepted-output'
+      ? {...message, content: message.content + 'AFTER-TAKEOVER '.repeat(120)} : message);
+    renderAcceptedTranscript();
+  });
+  await page.waitForTimeout(200);
+  assert.ok(Math.abs(await scroller.evaluate(node => node.scrollTop) - interruptedTop) <= 2,
+    'streaming after native takeover must preserve the reading position');
+});
+
 test('switching conversations ignores replay already in flight', async () => {
   await chatFixture();
   await page.evaluate(() => activeA.resolve(ok({runId: 'ra'})));

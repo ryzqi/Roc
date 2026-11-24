@@ -1,5 +1,17 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.9：助手提交与布局交接
+
+状态：**Verified passing**（助手提交、转录与完整功能smoke范围）。提问恢复后的下一次提交已被后端接收，400条输出也已生成，但新回复行没有进入可见窗口；点击现有“滚动到最新”后立即可见。当前提交接收与转录插入分属不同提交，消息数从8到10再到11，输入区同时改变转录视口高度。立即对旧窗口执行LAST仍会复现首次慢流超时；开启虚拟器日志会扰动时序，因此该诊断通过不计入修复成绩。
+
+当前作用域的发送、回答提问或补充指令成功返回后，助手增加一次最新定位请求。转录在两帧布局测量后复用已有LAST/最新窗口加载路径，待执行期间消息数变化重新安排；会话或历史epoch变化取消旧请求。真实wheel、指针与滚动导航键可取消待执行定位，保留原生事件。定位结束后仍由Virtuoso的`followOutput="auto"`决定流式跟随，用户可以继续上滚阅读。
+
+正式回归使用自包含消息夹具，覆盖后台数据更新保留历史、接收提交早于新输出、成功提交回最新、拒绝提交及迟到响应保留阅读位置、等待布局时原生wheel接管、后续增长保留位置以及Enter操作最新按钮。暂时撤回wheel取消处理后，新接管断言失败于最新按钮无法出现；恢复后通过。原始事件回放测试、绝对临时文件依赖、生产诊断与库日志均已移除。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test --test-concurrency=1 tests/renderer/lifecycles.test.mjs tests/renderer/assistant-panel-guards.test.mjs` **124/124**；`pnpm build`（含typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`、`pnpm audit:design`（278个组件）及`git diff --check`通过，eager为517980 bytes / 11 files。
+
+`ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-complete-20261124.ngMhV0/p8-settled-submission-smoke pnpm smoke:electron` 无诊断完整运行，核心 **23/23**、助手 **64/64**。真实提问恢复后的慢流可见、原生上滚、回最新、取消、切项目、崩溃检查点恢复和工具不重复均通过，无Renderer错误；516条累计消息持有116条窗口消息、挂载19行。全量Renderer与最终macOS包另验，性能按用户要求跳过；隔离资料根自动清理，诊断、回放与日志在最终结果落档后清理。
+
 ## 2026-11-24 P8.8：文献分页滚动夹具
 
 状态：**Verified passing**（分页回归范围）。`pnpm test:renderer`完成1017项，1016通过、1失败；唯一失败在选中首条并直接调用DOM `scrollTo()`后，首条仍挂载，尚未进入下一页加载。单项原夹具循环第4轮复现；有界位置诊断第1轮复现10000px→0px，容器始终连接、选择始终为首条，scrollHeight从17227px变为16897px，clientHeight为538px。直接DOM滚动没有用户输入接管事件，未结束的选择定位在行高刷新后重试。

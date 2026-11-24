@@ -95,6 +95,11 @@ before(async () => {
       checkpointResumeAvailable: available, criteria: [], remainingItems: [], blockedBy: ['process_restart'],
       nextSafeAction: '从已保存的检查点继续'
     });
+    window.scrollHistory = threadId => Array.from({length: 80}, (_, index) => persistedTaskEventSchema.parse({
+      id: 'history-' + index, sequence: index + 1, threadId, runId: 'history-run-' + index,
+      createdAt: '2026-11-24T00:00:00.000Z', type: 'message',
+      payload: {role: 'user', content: '历史消息 ' + index + '，保持当前阅读位置。'}
+    }));
     window.mountCheckpoint = available => window.mount('a', [persistedTaskEventSchema.parse({
       id: 'checkpoint-receipt', sequence: 1, threadId: 'a', runId: 'checkpoint-run',
       createdAt: '2026-11-12T00:00:00.000Z', type: 'task_acceptance',
@@ -339,6 +344,74 @@ test('assistant panel ignores an old dispatch after switching threads and retain
   await expect(input).toHaveValue('线程 B 的草稿');
   await page.evaluate(() => setPanelThread('a'));
   await expect(input).toHaveValue('线程 A 的草稿');
+});
+
+async function transcriptAtBottom() {
+  await page.waitForFunction(() => {
+    const node = document.querySelector('[data-testid="assistant-transcript"]');
+    return node?.scrollTop > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 2;
+  });
+}
+
+async function readTranscriptHistory() {
+  const scroller = page.getByTestId('assistant-transcript');
+  await transcriptAtBottom();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await scroller.hover({position: {x: 24, y: 100}});
+  await page.mouse.wheel(0, -480);
+  await page.getByTestId('assistant-scroll-bottom').waitFor();
+  return scroller.evaluate(node => new Promise((resolve, reject) => {
+    let previous = node.scrollTop, since = performance.now(), frame = 0;
+    const timeout = window.setTimeout(() => {
+      cancelAnimationFrame(frame);
+      reject(new Error('Assistant native scroll did not settle'));
+    }, 2_000);
+    const settle = () => {
+      const current = node.scrollTop, now = performance.now();
+      if (current !== previous) {previous = current; since = now;}
+      if (now - since >= 200) {window.clearTimeout(timeout); resolve(current);}
+      else frame = requestAnimationFrame(settle);
+    };
+    frame = requestAnimationFrame(settle);
+  }));
+}
+
+test('assistant accepted send returns to latest while a rejected send preserves native history', async () => {
+  await page.evaluate(() => mount('a', scrollHistory('a')));
+  const readingTop = await readTranscriptHistory();
+  const scroller = page.getByTestId('assistant-transcript');
+  const input = page.getByTestId('assistant-composer-input');
+  await input.fill('查看最新输出');
+  await input.press('Enter');
+  await page.waitForFunction(() => sendCalls.length === 1);
+  await page.evaluate(() => finishSend({ok: false, error: {message: '发送未接收'}}));
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('查看最新输出');
+  await expect(page.getByTestId('assistant-scroll-bottom')).toBeVisible();
+  assert.ok(Math.abs(await scroller.evaluate(node => node.scrollTop) - readingTop) <= 2,
+    'a failed send must preserve the native history position');
+  await input.press('Enter');
+  await page.waitForFunction(() => sendCalls.length === 2);
+  await page.evaluate(() => finishSend({ok: true, data: {runId: 'accepted-run', threadId: 'a'}}));
+  await expect(input).toHaveValue('');
+  await transcriptAtBottom();
+});
+
+test('assistant stale send acceptance does not move another conversation from native history', async () => {
+  await page.evaluate(() => mount('a', scrollHistory('a')));
+  const input = page.getByTestId('assistant-composer-input');
+  await input.fill('线程 A 的请求');
+  await input.press('Enter');
+  await page.waitForFunction(() => sendCalls.length === 1);
+  await page.evaluate(() => {historyItems = scrollHistory('b'); setPanelThread('b');});
+  await expect(input).toBeEnabled();
+  const readingTop = await readTranscriptHistory();
+  await input.fill('线程 B 的草稿');
+  await page.evaluate(() => finishSend({ok: true, data: {runId: 'stale-run', threadId: 'a'}}));
+  await expect(input).toHaveValue('线程 B 的草稿');
+  await expect(page.getByTestId('assistant-scroll-bottom')).toBeVisible();
+  assert.ok(Math.abs(await page.getByTestId('assistant-transcript').evaluate(node => node.scrollTop) - readingTop) <= 2,
+    'a late acceptance must preserve the other conversation reading position');
 });
 
 test('checkpoint continuation follows the latest live availability receipt and stays hidden during execution', async () => {

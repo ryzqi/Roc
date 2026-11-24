@@ -147,6 +147,7 @@ export function AssistantPanel({
     }
   }, [settings.data]);
   const [mode, setMode] = useState<ChatRunMode>('chat');
+  const [jumpToLatestRequest, setJumpToLatestRequest] = useState(0);
   const currentThreadIdRef = useRef(threadId);
   currentThreadIdRef.current = threadId;
   const { draft: composerDraft, updateDraft: updateComposerDraft } = useAssistantComposerDraft(projectId, threadId);
@@ -417,6 +418,7 @@ export function AssistantPanel({
             hasMoreBefore={session.history.hasMoreBefore}
             loadingOlder={session.history.loadingOlder}
             loadingLatest={session.history.loadingLatest}
+            jumpToLatestRequest={jumpToLatestRequest}
             loadOlder={session.history.loadOlder}
             onJumpToLatest={session.history.reloadLatest}
             onApprovalDecision={session.runState.runId !== null && waitingUser ? onApprovalDecision : undefined}
@@ -509,6 +511,9 @@ export function AssistantPanel({
           if (sent) {
             clearAssistantComposerDraft(projectId, threadId, submittedDraft);
             clearAssistantComposerDraft(projectId, currentThreadIdRef.current, submittedDraft);
+            // The session accepts only current-scope responses. Later streaming
+            // still lets Virtuoso respect a user's scroll back into history.
+            setJumpToLatestRequest(request => request + 1);
           }
           return sent;
         }}
