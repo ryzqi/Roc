@@ -848,6 +848,33 @@ test('canvas view buttons retain native focus and do not intercept action-button
   await expect(library).toHaveAttribute('aria-current', 'page');
 });
 
+test('selected workspace suggests an editable project name and still requires a research goal', async () => {
+  await page.evaluate(() => {
+    window.projectSubmissions = []; window.setProjectPending(false); window.setProjectOpen(true);
+  });
+  const panel = page.getByTestId('portal-create-dialog-panel');
+  try {
+    await expect(page.getByTestId('project-form-title')).toHaveValue('');
+    await page.getByTestId('project-form-pick-workspace').click();
+    await expect(page.getByTestId('project-form-workspace')).toHaveAttribute('title', '/research/workspace');
+    await expect(page.getByTestId('project-form-title')).toHaveValue('workspace');
+    await page.getByTestId('project-form-submit').click();
+    await expect(page.getByTestId('project-form-description-error')).toBeVisible();
+    assert.equal(await page.evaluate(() => window.projectSubmissions.length), 0);
+
+    await page.getByTestId('project-form-title').fill('我的研究项目');
+    await page.evaluate(() => {window.deferWorkspacePick = true;});
+    await page.getByTestId('project-form-pick-workspace').click();
+    await expect.poll(() => page.evaluate(() => typeof window.finishWorkspacePick)).toBe('function');
+    await page.evaluate(() => window.finishWorkspacePick({status: 'picked', path: '/research/another-workspace'}));
+    await expect(page.getByTestId('project-form-workspace')).toHaveAttribute('title', '/research/another-workspace');
+    await expect(page.getByTestId('project-form-title')).toHaveValue('我的研究项目');
+  } finally {
+    await page.evaluate(() => {window.deferWorkspacePick = false; window.setProjectOpen(false);});
+    await panel.waitFor({state: 'detached'});
+  }
+});
+
 test('project save freezes submitted fields and closing until the request settles', async () => {
   await page.evaluate(() => {
     window.projectSubmissions = []; window.projectCancels = 0;
@@ -859,6 +886,7 @@ test('project save freezes submitted fields and closing until the request settle
     await page.getByTestId('project-form-description').fill('研究目标');
     await page.getByTestId('project-form-pick-workspace').click();
     await expect(page.getByTestId('project-form-workspace')).toHaveAttribute('title', '/research/workspace');
+    await expect(page.getByTestId('project-form-title')).toHaveValue('研究项目');
     await page.getByTestId('project-form-submit').click();
     await expect(page.getByTestId('project-form-title')).toBeDisabled();
     await expect(page.getByTestId('project-form-description')).toBeDisabled();
@@ -907,6 +935,7 @@ test('project language uses radio keyboard navigation and a stale native selecti
     await panel.waitFor();
     await page.evaluate(() => {window.finishWorkspacePick({status: 'picked', path: '/stale/workspace'});});
     await expect(page.getByTestId('project-form-workspace')).toHaveAttribute('title', '');
+    await expect(page.getByTestId('project-form-title')).toHaveValue('');
     await expect(page.getByTestId('project-form-pick-workspace')).toBeEnabled();
   } finally {
     await page.evaluate(() => {window.deferWorkspacePick = false; window.setProjectOpen(false);});

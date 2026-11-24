@@ -167,11 +167,18 @@ export default function MonitorEditor({client, projectId, items, writable, activ
   const targetChanged = draft.target !== null && target.status === 'ready' && !targetCurrent;
   const editable = writable && !busy && command === null;
   return <div className="monitor-editor space-y-3" data-testid="literature-monitor-editor">
-    {monitor === null ? <p className="font-medium">新建文献监控</p> : <dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
+    {monitor === null ? <p className="font-medium">新建文献监控</p> : <><dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
       <dt>状态</dt><dd>{monitor.status === 'active' ? '已启用' : '已暂停'}</dd>
-      <dt>查询版本</dt><dd>{monitor.queryVersion}</dd><dt>控制版本</dt><dd>{monitor.revision}</dd>
       <dt>下次检查</dt><dd>{monitor.nextCheckAt}</dd>
-    </dl>}
+    </dl>
+      <details className="text-muted" data-testid="literature-monitor-diagnostics"><summary className="cursor-pointer">监控诊断</summary>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 py-1">
+          <dt>查询版本</dt><dd className="tabular-nums">{monitor.queryVersion}</dd>
+          <dt>控制版本</dt><dd className="tabular-nums">{monitor.revision}</dd>
+          {running === undefined ? null : <><dt>当前检查 ID</dt><dd className="break-all">{running.id}</dd></>}
+        </dl>
+      </details>
+    </>}
     {monitor?.lastError === null || monitor === null ? null : <p role="alert" className="break-all">{monitor.lastError}</p>}
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(100px,auto)] gap-2">
       <label>监控名称<input className={fieldStyle} aria-label="监控名称" value={draft.title} maxLength={200} disabled={!editable}
@@ -219,7 +226,10 @@ export default function MonitorEditor({client, projectId, items, writable, activ
           <option value={`${draft.target.itemId}:${draft.target.itemRevision}`}>已绑定目标 / {draft.target.doi}</option> : null}
         {eligible.map(item => <option key={item.id} value={`${item.id}:${item.revision}`}>{item.metadata.title} / {item.metadata.doi}</option>)}
       </select></label>
-      {draft.target === null ? null : <p className="break-all text-muted">{draft.target.doi} / 文献版本 {draft.target.itemRevision}</p>}
+      {draft.target === null ? null : <details className="text-muted" data-testid="literature-monitor-target-details">
+        <summary className="cursor-pointer">目标文献版本</summary>
+        <p className="break-all py-1">{draft.target.doi} / 文献版本 {draft.target.itemRevision}</p>
+      </details>}
       <MonitorReadState resource={target} label="目标文献"/>
       {targetChanged ? <p role="alert">目标文献已变化；重新选择后保存新的查询版本。</p> : null}
     </>}
@@ -247,7 +257,7 @@ export default function MonitorEditor({client, projectId, items, writable, activ
     {cancel.error === null ? null : <p role="alert" className="break-words text-[var(--st-bad)]">{cancel.error}</p>}
     {note === null ? null : <p role="status">{note}</p>}
     <MonitorReadState resource={live} label="当前检查"/>
-    {running === undefined ? null : <p role="status" className="break-all">检查中 / {running.id}</p>}
+    {running === undefined ? null : <p role="status">检查中</p>}
     {pollCount.current >= 120 && running !== undefined ? <p className="text-muted">自动刷新已停止，请手动刷新检查状态。</p> : null}
     {monitor === null ? null : <MonitorHistory client={client} projectId={projectId} monitorId={monitor.id}
       queryVersion={monitor.queryVersion} refresh={refresh} locked={locked} writable={writable}

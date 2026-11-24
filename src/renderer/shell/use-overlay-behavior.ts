@@ -172,26 +172,32 @@ export function useOverlayBehavior({
  * `document.activeElement` is the body and focus would land nowhere. When the selector
  * matches nothing the captured opener wins.
  */
-export function OverlayFocusRestore({ returnFocusSelector, restoreWhen }: {
+export function OverlayFocusRestore({ returnFocusSelector, restoreWhen, panelRef }: {
   returnFocusSelector?: string | undefined;
   restoreWhen?: () => boolean;
+  panelRef?: RefObject<HTMLElement | null>;
 }): null {
-  const openerRef = useRef<HTMLElement | null>(null);
+  const openerRef = useRef<HTMLElement | null | undefined>(undefined);
   const restoreWhenRef = useRef(restoreWhen);
   restoreWhenRef.current = restoreWhen;
 
   useEffect(() => {
     // Runs before `useOverlayBehavior`'s effect (child effects fire first), so the
     // opener is still the focused element when it is captured.
-    openerRef.current =
-      returnFocusSelector === undefined
-        ? captureDialogOpener()
-        : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
+    if (openerRef.current === undefined) {
+      openerRef.current =
+        returnFocusSelector === undefined
+          ? captureDialogOpener()
+          : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
+    }
+    // StrictMode replays effects and detaches refs while keeping the panel DOM.
+    const panel = panelRef?.current;
 
     return () => {
-      if (restoreWhenRef.current?.() ?? true) restoreDialogFocus(openerRef.current);
+      if (panel?.isConnected) return;
+      if (restoreWhenRef.current?.() ?? true) restoreDialogFocus(openerRef.current ?? null);
     };
-  }, [returnFocusSelector]);
+  }, [returnFocusSelector, panelRef]);
 
   return null;
 }

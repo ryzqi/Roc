@@ -21,6 +21,7 @@ before(async()=>{
     import {ProjectPortalView} from './src/renderer/project/ProjectPortalView';
     import {SessionListView} from './src/renderer/assistant/SessionListView';
     import {SearchPaletteModal} from './src/renderer/shell/SearchPaletteModal';
+    import {WindowChrome} from './src/renderer/shell/WindowChrome';
     import './src/renderer/styles/index.css';
     const ok=data=>({ok:true,data});
     const project=(id,title,status='active')=>({id,title,status,description:'研究科学证据的可追溯性，保留实验条件与原始来源以便复核。',workspacePath:'/synthetic/'+id,language:'zh',origin:null,currentStage:'reading',createdAt:'2026-11-20T00:00:00Z',updatedAt:'2026-11-20T00:00:00Z'});
@@ -33,9 +34,14 @@ before(async()=>{
         return ok({threads:window.threadData});
       },onUpdated:()=>()=>{},deleteThread:async({threadId})=>{window.deleted.push(threadId);return ok(null);}}}};
     function Search(){const [query,setQuery]=useState('研究');return <SearchPaletteModal open onClose={()=>{}} query={query} onQueryChange={setQuery} groups={[{id:'project',label:'项目',status:'ready',items:projects.map(p=>({id:p.id,title:p.title,subtitle:p.description,onOpen:()=>window.opened.push(p.id)}))}]}/>;}
+    function Chrome(){const [current,setCurrent]=useState(projects[0].id);return <WindowChrome
+      projectId={current} projectName={projects.find(p=>p.id===current)?.title??null} projects={projects}
+      onOpenProject={id=>{window.opened.push(id);setCurrent(id);}} onBackToPortal={()=>{}} onOpenSearch={()=>{}}
+      sidebarCollapsed={false} onToggleSidebar={()=>{}} assistantOpen={false} onToggleAssistant={()=>{}}
+      assistantRunning={false} onOpenGit={()=>{}} onOpenManagement={()=>{}} layoutPreset="research" onChangePreset={()=>{}}/>;}
     const root=createRoot(document.getElementById('root'));let key=0;
     window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict><React.Fragment key={++key}>
-      {surface==='portal'?<ProjectPortalView client={client} createFormRequested={false} onRequestConsumed={()=>{}} onOpenProject={id=>window.opened.push(id)}/>:surface==='search'?<Search/>:<SessionListView client={client} activeThreadId="one" onSelectThread={id=>window.opened.push(id)} onStartNewThread={()=>window.created++} onThreadDeleted={()=>{}}/>}
+      {surface==='chrome'?<Chrome/>:surface==='portal'?<ProjectPortalView client={client} createFormRequested={false} onRequestConsumed={()=>{}} onOpenProject={id=>window.opened.push(id)}/>:surface==='search'?<Search/>:<SessionListView client={client} activeThreadId="one" onSelectThread={id=>window.opened.push(id)} onStartNewThread={()=>window.created++} onThreadDeleted={()=>{}}/>}
     </React.Fragment></LazyMotion></MotionConfig></SWRConfig>));
   `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory,'data'))});app.whenReady().then(()=>new BrowserWindow({show:false,width:1450,height:900}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);
@@ -44,6 +50,48 @@ before(async()=>{
   await page.waitForFunction(()=>typeof window.mount==='function');
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
+
+test('project menu searches one hundred titles, clears empty results and retains native keyboard closing',async()=>{
+  await page.evaluate(()=>{
+    window.savedProjects=structuredClone(window.projectData);window.savedOpened=window.opened.length;
+    const base=window.projectData[0];window.projectData.length=0;
+    for(let index=0;index<100;index++)window.projectData.push({...base,id:'menu-'+index,title:'规模项目 '+index});
+    mount('chrome');
+  });
+  try {
+    const trigger=page.getByTestId('titlebar-projects');
+    await trigger.focus();await page.keyboard.press('Enter');
+    const search=page.getByTestId('titlebar-project-search');
+    await expect(search).toBeFocused();
+    await expect(page.getByTestId('titlebar-project-menu-0')).toHaveAttribute('aria-current','page');
+    await search.fill('不存在');
+    await expect(page.getByTestId('titlebar-project-empty')).toBeVisible();
+    await page.getByRole('button',{name:'清空项目搜索',exact:true}).click();
+    await expect(search).toHaveValue('');
+    await expect(search).toBeFocused();
+    await expect(page.locator('[data-testid^="titlebar-project-menu-"]')).toHaveCount(100);
+    await search.fill('规模项目 99');
+    await expect(page.locator('[data-testid^="titlebar-project-menu-"]')).toHaveCount(1);
+    await page.getByTestId('titlebar-project-menu-99').focus();await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>window.opened.at(-1)),'menu-99');
+    await expect(search).toBeHidden();
+    await trigger.click();
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue('');
+    await expect(page.getByTestId('titlebar-project-menu-99')).toHaveAttribute('aria-current','page');
+    await page.getByTestId('titlebar-project-menu-99').focus();await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>window.opened.length-window.savedOpened),1,'choosing current project does not navigate again');
+    await expect(search).toBeHidden();
+    await trigger.click();await expect(search).toBeFocused();
+    await search.fill('规模项目');await page.keyboard.press('Escape');
+    await expect(search).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(search).toBeHidden();
+    await expect(trigger).toBeFocused();
+  } finally {
+    await page.evaluate(()=>{window.projectData.splice(0,window.projectData.length,...window.savedProjects);delete window.savedProjects;mount('portal');});
+  }
+});
 
 test('project actions disclose locally and editing retains the current project and draft guard',async()=>{
   await page.evaluate(()=>mount('portal'));

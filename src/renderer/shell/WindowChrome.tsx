@@ -1,5 +1,5 @@
-import { useId, useRef } from 'react';
-import { Bot, Check, ChevronDown, Columns2, FolderOpen, GitBranch, PanelLeft, PanelLeftClose, PencilLine, Search, Sliders, Telescope } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { Bot, Check, ChevronDown, Columns2, FolderOpen, GitBranch, PanelLeft, PanelLeftClose, PencilLine, Search, Sliders, Telescope, X } from 'lucide-react';
 import type { LayoutPreset } from '../app/routes';
 import './chrome.css';
 
@@ -38,8 +38,13 @@ export function WindowChrome({
   const inProject = projectId !== null;
   const menuId = useId();
   const projectMenu = useRef<HTMLDivElement>(null);
+  const projectSearch = useRef<HTMLInputElement>(null);
   const layoutMenuId = useId();
   const layoutMenu = useRef<HTMLDivElement>(null);
+  const [projectQuery, setProjectQuery] = useState('');
+  const searchableProjects = projects.length > 12;
+  const normalizedQuery = searchableProjects ? projectQuery.trim().toLocaleLowerCase() : '';
+  const visibleProjects = projects.filter(project => project.title.toLocaleLowerCase().includes(normalizedQuery));
   const branch = branchLabel ?? 'Git';
   const gitLabel = gitChangeCount === null ? branch : `${branch}，${gitChangeCount.toLocaleString('zh-CN')} 项变更`;
 
@@ -61,7 +66,11 @@ export function WindowChrome({
             <span className="min-w-0 truncate font-medium text-ink" data-testid="titlebar-project-name">{projectName ?? '研究项目'}</span>
             <ChevronDown size={12} aria-hidden="true" className="shrink-0" />
           </button>
-          <div popover="auto" ref={projectMenu} id={menuId} className="no-drag titlebar-project-menu" role="group" aria-label="研究项目">
+          <div popover="auto" ref={projectMenu} id={menuId} className="no-drag titlebar-project-menu" role="group" aria-label="研究项目"
+            onToggle={event => {
+              if ((event.nativeEvent as ToggleEvent).newState === 'closed') setProjectQuery('');
+              else projectSearch.current?.focus();
+            }}>
             <button type="button" className="chrome-control w-full justify-start" onClick={() => {
               projectMenu.current?.hidePopover();
               onBackToPortal();
@@ -69,8 +78,22 @@ export function WindowChrome({
               <FolderOpen size={14} aria-hidden="true" />所有项目
             </button>
             <div className="mt-1 border-t-[0.5px] border-line pt-1">
-              {projects.map(project => (
+              {searchableProjects ? (
+                <label className="mb-1 flex min-h-8 items-center gap-2 rounded-control border-[0.5px] border-line-default bg-surface-raised px-2">
+                  <Search size={14} aria-hidden="true" className="shrink-0 text-ink-muted" />
+                  <input ref={projectSearch} type="search" aria-label="搜索项目" placeholder="搜索项目" value={projectQuery}
+                    onChange={event => setProjectQuery(event.target.value)} data-testid="titlebar-project-search"
+                    className="min-w-0 flex-1 bg-transparent py-1 text-ink-primary" />
+                  {projectQuery.length > 0 ? <button type="button" aria-label="清空项目搜索" className="chrome-control shrink-0"
+                    onClick={() => { setProjectQuery(''); projectSearch.current?.focus(); }}>
+                    <X size={14} aria-hidden="true" />
+                  </button> : null}
+                </label>
+              ) : null}
+              {visibleProjects.length === 0 ? <p role="status" className="px-2 py-3 text-ink-muted" data-testid="titlebar-project-empty">没有匹配的项目</p> : null}
+              {visibleProjects.map(project => (
                 <button key={project.id} type="button" title={project.title} className="chrome-control w-full justify-between"
+                  data-testid={`titlebar-project-${project.id}`}
                   aria-current={project.id === projectId ? 'page' : undefined} onClick={() => {
                     projectMenu.current?.hidePopover();
                     if (project.id !== projectId) onOpenProject(project.id);

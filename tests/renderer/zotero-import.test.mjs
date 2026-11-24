@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
@@ -677,6 +677,7 @@ test('local/source differences retain both sides and stale or failed comparison 
   await row('ITEM0000').locator('input').check();
   await page.getByTestId('literature-zotero-source-review').waitFor();
   const reviewed=page.getByTestId('literature-zotero-reviewed-object');
+  assert.doesNotMatch(await reviewed.locator(':scope > summary').innerText(),/本地版本 \d+|已记录对象版本 \d+/u);
   await reviewed.locator(':scope > summary').click();
   await reviewed.getByRole('table').waitFor({state:'visible'});
   const text=await reviewed.innerText();
@@ -820,7 +821,13 @@ test('sync UI restores a paused pending page and actual import receipts before e
   await page.getByTestId('literature-zotero-sync-skip-reason').fill('Excluded after reading the final page');
   await page.getByTestId('literature-zotero-sync-confirm').click();
   await page.waitForFunction(()=>document.querySelector('[data-testid="literature-zotero-sync"]').textContent.includes('本次核对完成'));
-  assert.match(await page.getByTestId('literature-zotero-sync').innerText(),/已确认 43.*完整版本 20/u);
+  assert.match(await page.getByTestId('literature-zotero-sync').innerText(),/已确认 43.*完整检查点已建立/u);
+  const diagnostics=page.getByTestId('literature-zotero-sync-diagnostics');
+  assert.equal(await diagnostics.evaluate(node=>node.open),false);
+  assert.equal(await diagnostics.getByText(/完整版本 20/u).isVisible(),false);
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await diagnostics.getByText(/完整版本 20/u).waitFor({state:'visible'});
+  await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),1);
   await inspect('sync-complete');
 });
@@ -916,7 +923,12 @@ test('source-state details read saved observations and only explicit checking re
   await previous.getByTestId('literature-zotero-source-observation').waitFor();
   assert.match(await previous.innerText(),/来源存在/u);
   assert.match(await previous.innerText(),/未核对集合/u);
-  assert.match(await previous.innerText(),/原收录对象版本 7，当前对象版本 8/u);
+  const diagnostics=previous.getByTestId('literature-zotero-source-diagnostics');
+  const versions=diagnostics.getByText('原收录对象版本 7，当前对象版本 8',{exact:true});
+  assert.equal(await versions.isVisible(),false);
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await versions.waitFor({state:'visible'});
+  await page.keyboard.press('Enter');
   assert.match(await previous.innerText(),/2026-11-04T00:00:00.000Z/u);
   assert.deepEqual(await page.evaluate(()=>calls.find(call=>call.method==='sourceObserve').input),
     {serverId:'synthetic-instance',library:{kind:'user',id:0},projectId:'project-a',
@@ -956,7 +968,10 @@ test('source-state UI displays truthful membership trash missing and version out
     assert.match(await previous.innerText(),expected);
     if(sourceCurrent.status==='not_found'){
       assert.match(await previous.innerText(),/不能据此确认永久删除/u);
-      assert.match(await previous.innerText(),/当前对象版本 未知/u);
+      const diagnostics=previous.getByTestId('literature-zotero-source-diagnostics');
+      await diagnostics.locator('summary').click();
+      await expect(diagnostics.locator('p')).toContainText('当前对象版本 未知');
+      await diagnostics.locator('summary').click();
     }
     if(sourceCurrent.status || sourceCurrent.membership==='not_listed') assert.match(await previous.innerText(),/题录、证据与附件保留/u);
     assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),0);
@@ -1055,7 +1070,13 @@ test('attachment steps disclose exact input scope, native cancellation and retry
   await open({reviewDifference:true,grantCancelOnce:true,attachmentImportFailOnce:true});
   await preview();
   const detail=await discoverAttachments();
-  assert.match(await detail.innerText(),/子项 1–20 \/ 23，\s*文库版本 20/u);
+  assert.match(await detail.innerText(),/子项 1–20 \/ 23/u);
+  const diagnostics=detail.getByTestId('literature-zotero-children-diagnostics');
+  assert.equal(await diagnostics.evaluate(node=>node.open),false);
+  assert.equal(await diagnostics.getByText('文库版本 20',{exact:true}).isVisible(),false);
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await diagnostics.getByText('文库版本 20',{exact:true}).waitFor({state:'visible'});
+  await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>calls.filter(call=>call.method.startsWith('attachment')).length),0);
   assert.deepEqual(await page.evaluate(()=>calls.find(call=>call.method==='children').input),{
     serverId:'synthetic-instance',library:{kind:'user',id:0},projectId:'project-a',operationId:'prior-operation',

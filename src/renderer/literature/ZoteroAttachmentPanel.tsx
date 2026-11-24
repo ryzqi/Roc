@@ -36,17 +36,21 @@ export function ZoteroAttachmentPanel({client, original, jobs}: {
       </button>
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {page === null ? null : <>
-        <p role="status" className="tabular-nums">子项 {(page.page.offset + (page.page.records.length > 0 ? 1 : 0)).toLocaleString('zh-CN')}–{(page.page.offset + page.page.records.length).toLocaleString('zh-CN')} / {page.page.total.toLocaleString('zh-CN')}，
-          文库版本 {page.page.libraryVersion}</p>
+        <p role="status" className="tabular-nums">子项 {(page.page.offset + (page.page.records.length > 0 ? 1 : 0)).toLocaleString('zh-CN')}–{(page.page.offset + page.page.records.length).toLocaleString('zh-CN')} / {page.page.total.toLocaleString('zh-CN')}</p>
+        <details className="text-muted" data-testid="literature-zotero-children-diagnostics">
+          <summary className="cursor-pointer">子项读取详情</summary>
+          <p className="tabular-nums py-1">文库版本 {page.page.libraryVersion}</p>
+        </details>
         <ul aria-label="Zotero 当前子项">
           {page.page.records.map(item => <li key={item.key} className="border-b-[0.5px] border-line py-2"
             data-testid="literature-zotero-child" data-item-key={item.key}>
             <p className="break-words text-ink">{typeof item.data.title === 'string' ? item.data.title : item.key}</p>
-            <p className="flex flex-wrap gap-x-3 text-muted"><span>{item.data.itemType}</span><span>对象 {item.key}</span><span>版本 {item.version}</span></p>
+            <p className="text-muted">{item.data.itemType}</p>
             {item.data.itemType !== 'attachment' ? <p>笔记或批注，不作为附件导入。</p> :
               <Attachment item={item} jobs={jobs} source={{...original.scope, operationId: original.operationId,
                 itemKey: original.itemKey, attachmentKey: item.key}} />}
             <details><summary className="cursor-pointer">子项原文</summary>
+              <p className="py-1 text-muted">对象 {item.key}，版本 {item.version}</p>
               <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(item, null, 2)}</pre>
             </details>
           </li>)}

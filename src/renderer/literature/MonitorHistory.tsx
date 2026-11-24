@@ -43,8 +43,9 @@ export function MonitorCheckView({check}: {check: MonitorCheck}): React.JSX.Elem
   const selected = useViewSelected();
   const [open, setOpen] = useState(false);
   return <details className="py-2" data-testid="literature-monitor-check" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer break-words">{monitorStatus[check.status]} / 查询版本 {check.queryVersion} / {check.startedAt}</summary>
+    <summary className="cursor-pointer break-words">{monitorStatus[check.status]} / 新增提醒 {check.alertCount} / {check.startedAt}</summary>
     {open ? <><dl className="break-all space-y-1 py-2"><dt>检查 ID</dt><dd>{check.id}</dd><dt>触发</dt><dd>{check.trigger === 'manual' ? '手动' : '计划'}</dd>
+      <dt>查询版本</dt><dd>{check.queryVersion}</dd>
       <dt>结束时间</dt><dd>{check.finishedAt ?? '尚未结束'}</dd><dt>新增提醒</dt><dd>{check.alertCount}</dd>
       <dt>错误</dt><dd>{check.errorCode ?? '无已报告错误'}</dd></dl>
     {check.sources.map(source => <details key={source.source} className="py-1" data-testid="literature-monitor-source">
@@ -93,8 +94,9 @@ export default function MonitorHistory({client, projectId, monitorId, queryVersi
       {alerts.data === null ? null : <>{alerts.data.records.length === 0 ? <p className="py-2 text-muted">暂无提醒</p> :
         <ul className="divide-y divide-line">{alerts.data.records.map(value => <li key={value.id} className="space-y-1 py-2" data-testid="literature-monitor-alert">
           <p className="break-words">{eventLabels[value.kind]} / {value.title}</p>
-          <p className="break-all text-muted">{value.source} / 查询版本 {value.queryVersion} / {value.observedAt}</p>
+          <p className="break-all text-muted">{value.source} / {value.observedAt}</p>
           <details><summary className="cursor-pointer text-muted">提醒来源</summary><dl className="break-all">
+            <dt>查询版本</dt><dd>{value.queryVersion}</dd>
             <dt>原始字段</dt><dd>{value.field}</dd><dt>来源类型</dt><dd>{value.providerType ?? '未报告'}</dd>
             <dt>目标 DOI</dt><dd>{value.subjectDoi ?? '未报告'}</dd><dt>通知 DOI</dt><dd>{value.noticeDoi ?? '未报告'}</dd>
             <dt>检查 ID</dt><dd>{value.checkId}</dd><dt>来源哈希</dt><dd>{value.sourceHash}</dd></dl></details>

@@ -6,6 +6,7 @@ import { ModalShell } from '../shell/ModalShell';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { errorMessage } from '../app/loaded-state';
 import { formButtonClass, formPrimaryButtonClass } from '../shared/form-ui';
+import { fileName } from '../workspace/paths';
 import type { WorkspacePickResult } from './use-projects';
 
 /**
@@ -150,7 +151,11 @@ export function ProjectFormDialog({
       if (result.status === 'cancelled') {
         return;
       }
-      setValues((current) => ({ ...current, workspacePath: result.path }));
+      setValues((current) => ({
+        ...current,
+        workspacePath: result.path,
+        title: mode === 'create' && current.title.trim().length === 0 ? fileName(result.path) : current.title
+      }));
       setErrors((current) => ({ ...current, workspacePath: undefined }));
     } catch (error) {
       if (generation === pickerGeneration.current) setWorkspaceError(errorMessage(error));

@@ -100,6 +100,14 @@ test('query is primary, management loads on demand and returning keeps search re
   await page.getByTestId('rag-index-toggle').click();
   await expect(page.getByRole('button',{name:'返回检索'})).toBeFocused();
   await page.waitForFunction(()=>window.calls.files===1&&window.calls.jobs===1&&window.calls.sourceJobs===1);
+  await expect(page.getByTestId('rag-counts')).toContainText('2 个工作区文件，已索引 2');
+  const diagnostics=page.getByTestId('rag-index-diagnostics');
+  assert.equal(await diagnostics.evaluate(node=>node.open),false);
+  await expect(diagnostics.locator('dd').first()).toBeHidden();
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await expect(diagnostics.locator('dd').first()).toBeVisible();
+  await expect(diagnostics.locator('dd')).toHaveText(['idle','7','2']);
+  await page.keyboard.press('Enter');
   await page.getByTestId('rag-scan').click();
   assert.deepEqual(await page.evaluate(()=>window.calls.controls),[{projectId:'p1',action:'scan',expectedRevision:7}]);
   await page.getByRole('button',{name:'返回检索'}).click();

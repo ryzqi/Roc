@@ -489,10 +489,11 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                       <span className="shrink-0 text-muted">{JOB_STATUS_LABELS[job.status]}</span>
                       <span title={job.path} className="min-w-0 flex-1 break-all font-mono text-ink">{job.path}</span>
                     </div>
-                    <span className="mt-1 flex flex-wrap gap-x-2 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]">
-                      <span>gen {job.generation}</span>
-                      {job.finishedAt === null ? null : <time dateTime={job.finishedAt} className="break-all">{job.finishedAt}</time>}
-                    </span>
+                    {job.finishedAt === null ? null : <time dateTime={job.finishedAt} className="mt-1 block break-all tabular-nums text-subtle text-[length:var(--font-micro-size)]">{job.finishedAt}</time>}
+                    <details className="mt-1 text-subtle text-[length:var(--font-micro-size)]" data-testid={`rag-job-diagnostics-${job.id}`}>
+                      <summary className="cursor-pointer">作业诊断</summary>
+                      <p className="tabular-nums">索引代次 {job.generation}</p>
+                    </details>
                   </div>
                   <button
                     type="button"
@@ -525,10 +526,6 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
           </h3>
           {status === null ? null : (
             <dl className="rag-settings-grid" data-testid="rag-settings">
-              <dt className="text-subtle">设置版本</dt>
-              <dd className="text-ink">{status.settings.revision}</dd>
-              <dt className="text-subtle">索引版本</dt>
-              <dd className="text-ink">{status.generation}</dd>
               <dt className="text-subtle">文件类型</dt>
               <dd className="text-ink">{status.settings.kinds.join(', ')}</dd>
               <dt className="text-subtle">包含路径</dt>
@@ -546,6 +543,16 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
               <dt className="text-subtle">最近扫描</dt>
               <dd className="text-ink">{status.lastScanAt ?? '从未'}</dd>
             </dl>
+          )}
+          {status === null ? null : (
+            <details className="rag-result-details mt-2" data-testid="rag-index-diagnostics">
+              <summary>索引诊断</summary>
+              <dl className="rag-settings-grid py-1">
+                <dt className="text-subtle">阶段</dt><dd className="font-mono text-ink">{status.phase}</dd>
+                <dt className="text-subtle">设置修订</dt><dd className="tabular-nums text-ink">{status.settings.revision}</dd>
+                <dt className="text-subtle">索引代次</dt><dd className="tabular-nums text-ink">{status.generation}</dd>
+              </dl>
+            </details>
           )}
           {status === null ? null : status.error === null ? null : (
             <p role="alert" className="mt-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">

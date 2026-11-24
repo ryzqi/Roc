@@ -379,7 +379,7 @@ test('runs task list uses a 260px master column and stacks in a narrow canvas in
 
 test('task controls serialize same-event opposing actions and ignore completion after unmount', async () => {
   for (const [button, status, restore] of [
-    ['task-pause', 'active', false], ['task-cancel', 'active', false],
+    ['task-pause', 'active', false],
     ['task-continue', 'interrupted', false], ['task-restore-approval', 'paused', true]
   ]) {
     await page.evaluate(({status, restore}) => {
@@ -399,6 +399,66 @@ test('task controls serialize same-event opposing actions and ignore completion 
     await page.evaluate(() => {clear(); actionGate.resolve({ok: true, data: makeData().task});});
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'changed').length), 0);
+  }
+});
+
+test('task cancellation requires a deliberate confirmation for the current task', async () => {
+  await page.evaluate(() => {
+    reset(); window.actionGate = deferred(); actionResponse = actionGate.promise; mountControls();
+  });
+  const panel = page.getByTestId('task-cancel-dialog-panel');
+  const cancelCalls = () => page.evaluate(() => calls.filter(row => row.method === 'cancel'));
+  await page.getByTestId('task-cancel').click();
+  await expect(page.getByTestId('task-cancel-dialog-message')).toContainText('验证科研任务 task-a');
+  await expect(panel).toContainText('不撤销已完成的操作');
+  await expect(page.getByTestId('task-cancel-dialog-cancel')).toBeFocused();
+  assert.deepEqual(await cancelCalls(), []);
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(page.getByTestId('task-cancel')).toBeFocused();
+  assert.deepEqual(await cancelCalls(), []);
+  await page.getByTestId('task-cancel').click();
+  await page.getByTestId('task-cancel-dialog-cancel').click();
+  await expect(panel).toBeHidden();
+  assert.deepEqual(await cancelCalls(), []);
+
+  await page.getByTestId('task-cancel').click();
+  await page.evaluate(() => {response.data.task.status = 'cancelled'; mountControls();});
+  await expect(panel).toBeHidden();
+  await page.evaluate(() => {response.data.task.status = 'active'; mountControls();});
+  await expect(panel).toBeHidden();
+  await page.getByTestId('task-cancel').click();
+  await page.evaluate(() => {response = {ok: true, data: makeData('project-b', 'task-b')}; mountControls();});
+  await expect(panel).toBeHidden();
+  assert.deepEqual(await cancelCalls(), []);
+
+  await page.getByTestId('task-cancel').click();
+  await expect(page.getByTestId('task-cancel-dialog-message')).toContainText('验证科研任务 task-b');
+  await page.evaluate(() => {
+    const confirm = document.querySelector('[data-testid="task-cancel-dialog-confirm"]');
+    confirm.click(); confirm.click();
+  });
+  await page.getByTestId('task-action-pending').waitFor();
+  assert.deepEqual(await cancelCalls(), [{method: 'cancel', request: {projectId: 'project-b', taskId: 'task-b'}}]);
+  await page.evaluate(() => {clear(); actionGate.resolve({ok: true, data: makeData('project-b', 'task-b').task});});
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'changed').length), 0);
+
+  await page.evaluate(() => {
+    reset();
+    const opener = document.createElement('button');
+    opener.dataset.testid = 'task-owner-opener';
+    document.body.append(opener);
+    opener.focus();
+    mountControls();
+    document.querySelector('[data-testid="task-cancel"]').click();
+  });
+  try {
+    await expect(page.getByTestId('task-cancel-dialog-cancel')).toBeFocused();
+    await page.evaluate(() => clear());
+    await expect(page.getByTestId('task-owner-opener')).toBeFocused();
+  } finally {
+    await page.evaluate(() => {clear(); document.querySelector('[data-testid="task-owner-opener"]').remove();});
   }
 });
 
@@ -601,15 +661,17 @@ test('cancellation keeps cleanup pending after terminal invalidation and display
   await page.evaluate(() => { reset(); window.cleanup = deferred(); actionResponse = cleanup.promise; mount(); });
   await ready();
   await page.getByTestId('task-cancel').click();
+  await page.getByTestId('task-cancel-dialog-confirm').click();
   await page.getByTestId('task-action-pending').waitFor();
   await page.evaluate(() => {
     const data = makeData();
     data.task.status = 'cancelled';
+    data.task.statusReason = 'research_task_cleanup_pending';
     data.continuationRunId = 'stage-a';
     response = {ok: true, data}; emit();
   });
   await page.getByTestId('task-status').filter({hasText: '已取消'}).waitFor();
-  assert.equal(await page.getByTestId('task-continue').isDisabled(), true);
+  assert.equal(await page.getByTestId('task-continue').count(), 0);
   assert.ok((await page.getByTestId('task-action-pending').innerText()).includes('等待资源清理'));
   await page.evaluate(() => {
     response.data.task.statusReason = 'research_task_cleanup_failed';
@@ -619,6 +681,33 @@ test('cancellation keeps cleanup pending after terminal invalidation and display
   await page.getByTestId('task-reason').waitFor();
   assert.equal(await page.getByTestId('task-action-pending').count(), 0);
   assert.equal(await page.getByTestId('task-continue').count(), 0);
+});
+
+test('persisted cleanup blocks recovery after remount until cancellation is confirmed', async () => {
+  for (const reason of ['research_task_cleanup_pending', 'research_task_cleanup_failed']) {
+    await page.evaluate(reason => {
+      reset(); response.data.task.status = 'cancelled'; response.data.task.statusReason = reason;
+      response.data.continuationRunId = 'stage-a'; mountControls(); clear(); mountControls();
+    }, reason);
+    assert.equal(await page.getByTestId('task-continue').count(), 0);
+    if (reason === 'research_task_cleanup_pending') {
+      await expect(page.getByTestId('task-controls')).toHaveAttribute('aria-busy', 'true');
+      await expect(page.getByTestId('task-action-pending')).toContainText('等待资源清理');
+    } else {
+      await expect(page.getByRole('alert')).toContainText(reason);
+      assert.equal(await page.getByTestId('task-action-pending').count(), 0);
+    }
+    await page.evaluate(() => {response.data.canRestoreApproval = true; clear(); mountControls();});
+    assert.equal(await page.getByTestId('task-restore-approval').count(), 0);
+    assert.equal(await page.evaluate(() => calls.filter(row => ['continue', 'restore'].includes(row.method)).length), 0);
+  }
+  await page.evaluate(() => {
+    reset(); response.data.task.status = 'cancelled'; response.data.task.statusReason = 'research_task_cancelled';
+    response.data.continuationRunId = 'stage-a'; mountControls();
+  });
+  await page.getByTestId('task-continue').click();
+  await page.waitForFunction(() => calls.some(row => row.method === 'continue'));
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'continue').length), 1);
 });
 
 test('continuation and approval restoration only dispatch explicit actions with the original task identity', async () => {

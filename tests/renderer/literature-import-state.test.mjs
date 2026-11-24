@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {build} from 'esbuild';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
@@ -17,6 +17,7 @@ before(async () => {
     import {flushSync} from 'react-dom';
     import {LazyMotion, MotionConfig, domAnimation} from 'motion/react';
     import {ImportDialog} from './src/renderer/literature/ImportDialog';
+    window.documentImports = [];
     function Harness() {
       const [open, setOpen] = useState(true);
       const [item, setItem] = useState({id: 'paper-a', title: 'Paper A'});
@@ -25,7 +26,11 @@ before(async () => {
       return React.createElement(ImportDialog, {open, onClose: () => setOpen(false),
         projectId: 'project-fixture', client: {}, onZoteroImported: () => {},
         selectedItem: {id: item.id, title: item.title}, canAttachToSelection: true,
-        pickFile: async () => '/fixture/source.pdf'});
+        pickFile: async () => '/fixture/source.pdf',
+        addDocumentToNewItem: async input => {
+          window.documentImports.push(input);
+          return {ok: true, createdCount: 1, duplicateCount: 0};
+        }});
     }
     const root = createRoot(document.getElementById('root'));
     flushSync(() => root.render(React.createElement(MotionConfig, {reducedMotion:'always'},
@@ -72,14 +77,58 @@ test('same literature identity preserves selected PDF and typed DOI across paren
   assert.equal(await page.getByTestId('literature-import-doi').inputValue(), '10.1234/retained');
 });
 
+test('document citation suggestions preserve manual edits and empty values until restored', async () => {
+  await page.evaluate(() => window.setImportOpen(false));
+  await page.getByTestId('literature-import-dialog').waitFor({state: 'hidden'});
+  await page.evaluate(() => window.setImportOpen(true));
+  await page.getByTestId('literature-import-target-new').check();
+  await page.getByTestId('literature-import-pick-document').click();
+  const title = page.getByTestId('literature-import-document-title');
+  const key = page.getByTestId('literature-import-document-key');
+  const submit = page.getByTestId('literature-import-document-submit');
+  await title.fill('Alpha study');
+  await expect(key).toHaveValue('alpha');
+  await key.fill('my-reference');
+  await title.fill('Beta study');
+  await refreshItem();
+  await expect(key).toHaveValue('my-reference');
+  await submit.click();
+  await page.waitForFunction(() => window.documentImports.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.documentImports[0]),
+    {sourcePath: '/fixture/source.pdf', title: 'Beta study', citationKey: 'my-reference'});
+
+  await key.fill('');
+  await title.fill('Gamma study');
+  await expect(key).toHaveValue('');
+  await expect(submit).toBeDisabled();
+  await page.getByTestId('literature-import-document-key-auto').click();
+  await expect(key).toHaveValue('gamma');
+  await title.fill('Delta study');
+  await expect(key).toHaveValue('delta');
+  await submit.click();
+  await page.waitForFunction(() => window.documentImports.length === 2);
+  assert.equal(await page.evaluate(() => window.documentImports[1].citationKey), 'delta');
+  await key.fill('retained-reference');
+});
+
 test('reopening and changing selected literature reset the import form', async () => {
   await page.evaluate(() => window.setImportOpen(false));
   await page.getByTestId('literature-import-dialog').waitFor({state:'hidden'});
   await page.evaluate(() => window.setImportOpen(true));
   assert.equal(await page.getByTestId('literature-import-document-path').innerText(), '未选择');
+  await page.getByTestId('literature-import-target-new').check();
+  await expect(page.getByTestId('literature-import-document-title')).toHaveValue('');
+  await expect(page.getByTestId('literature-import-document-key')).toHaveValue('');
+  assert.equal(await page.getByTestId('literature-import-document-key-auto').count(), 0);
+  await page.getByTestId('literature-import-document-title').fill('Retained study');
+  await page.getByTestId('literature-import-document-key').fill('manual-reference');
   await page.getByTestId('literature-import-pick-document').click();
   await refreshItem('paper-b');
   assert.equal(await page.getByTestId('literature-import-document-path').innerText(), '未选择');
+  await page.getByTestId('literature-import-target-new').check();
+  await expect(page.getByTestId('literature-import-document-title')).toHaveValue('');
+  await expect(page.getByTestId('literature-import-document-key')).toHaveValue('');
+  assert.equal(await page.getByTestId('literature-import-document-key-auto').count(), 0);
   assert.equal(await page.getByTestId('literature-import-document-submit').isDisabled(), true);
 });
 

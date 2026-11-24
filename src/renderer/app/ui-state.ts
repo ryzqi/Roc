@@ -26,6 +26,8 @@ export const uiStateKeys = {
   fileTreeExpanded: `${UI_STATE_PREFIX}files.expanded`,
   /** Last viewed memory category; never stores memory content. */
   memoryCategory: `${UI_STATE_PREFIX}memory.category`,
+  /** Last settings navigation section; never stores settings values or drafts. */
+  settingsSection: `${UI_STATE_PREFIX}settings.section`,
   /** Versioned visibility preference; never records completion of project work. */
   onboardingDismissed: `${UI_STATE_PREFIX}onboarding.dismissed`
 } as const;
@@ -146,6 +148,14 @@ export function writeMemoryCategory(category: string): void {
   if (/^(global:(user|agents|memory)|workspace:(agents|memory))$/u.test(category)) {
     writeRaw(uiStateKeys.memoryCategory, category);
   }
+}
+
+export function readSettingsSection(): string | null {
+  return readRaw(uiStateKeys.settingsSection);
+}
+
+export function writeSettingsSection(section: string): void {
+  writeRaw(uiStateKeys.settingsSection, section);
 }
 
 export function readOnboardingDismissed(): boolean {

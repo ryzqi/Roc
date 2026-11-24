@@ -24,6 +24,8 @@ P0 源码已确认：现有 CSS 与 Motion 分别保存数值，`tabIndicatorTra
 
 原生 CSS transitions 优先用于受控显示、选中和 anchored popover；需要保留卸载视觉时才引入 presence。已有 `AnimatePresence` 必须让退出子树读取实时 presence，不能依靠卸载前捕获的 `open=true`。View Transition 只作用于附件等局部稳定身份，检查支持与拒绝并在反向、换对象或卸载时跳过旧 transition。
 
+`ModalShell` 的焦点恢复保留首次打开者（包含无打开者的情况），以实际 panel DOM 是否脱离文档判断卸载。React StrictMode 的 effect 重放和 ref detach 不代表弹层已移除；不能在模拟清理时把焦点还给背景。父级直接卸载仍沿用真实恢复，嵌套弹层顺序保持原合同。
+
 ## 减少动态效果
 
 根 `MotionConfig reducedMotion="user"` 禁用 transform 与布局动画，仍可能保留 opacity。全局 CSS 同时抑制 transition、循环动画和 `::details-content`。用文字、状态属性和焦点保留同等信息；不要让“没有位移”成为菜单或抽屉仍可交互的关闭状态。

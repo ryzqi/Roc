@@ -104,7 +104,14 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   await page.getByRole('button',{name:'恢复 r1 为新修订',exact:true}).click();
   const status = detail.getByTestId('wiki-page-status');
   await status.getByText('历史恢复',{exact:true}).waitFor();
-  assert.match(await status.innerText(),/比较\s+草稿 r\d+\s+已编译\s+历史恢复/);
+  assert.match(await status.innerText(),/比较\s+草稿\s+已编译\s+历史恢复/);
+  assert.doesNotMatch(await status.innerText(),/r\d+/);
+  const diagnostics=detail.getByTestId('wiki-page-diagnostics');
+  const revisionText=diagnostics.getByText(`草稿修订 r${f.repository.wiki.read(f.project.id,topic.id).page.revision}`,{exact:true});
+  assert.equal(await diagnostics.evaluate(node=>node.open),false);
+  assert.equal(await revisionText.isVisible(),false);
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await revisionText.waitFor({state:'visible'});
   assert.match(await detail.getByTestId('wiki-page-lint').innerText(),/失效/);
   assert.equal(f.repository.wiki.read(f.project.id,topic.id).current.reason,'rollback');
   const search = page.getByLabel('搜索持久页面');

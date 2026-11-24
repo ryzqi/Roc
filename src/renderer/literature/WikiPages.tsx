@@ -199,7 +199,7 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
   return <article className="knowledge-article space-y-3" data-testid="wiki-page-detail" aria-busy={pending}>
     <h2 className="break-words text-[length:var(--font-h2-size)] font-medium">{data.page.title}</h2>
     <p className="flex flex-wrap gap-x-2 text-xs text-subtle" data-testid="wiki-page-status">
-      <span>{kinds[data.page.kind]}</span><span className="tabular-nums">草稿 r{data.page.revision}</span>
+      <span>{kinds[data.page.kind]}</span><span>草稿</span>
       <span>{data.page.job ? jobs[data.page.job.status] : '待编译'}</span>
       {data.paperJob && data.paperJob.status !== 'ready' && <span>论文卡片：{data.paperJob.status === 'failed' ? '生成失败' : '生成中'}</span>}
       {data.current && <span>{reasons[data.current.reason]}</span>}
@@ -214,6 +214,9 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
         onClick={() => {void mutate(() => retryPaper.run());}}>重新生成论文卡片</button>}
       <button className={button} disabled={locked} aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)}>修订历史</button>
         </div>
+      </details>
+      <details className="knowledge-maintenance" data-testid="wiki-page-diagnostics"><summary>页面诊断</summary>
+        <p className="break-all py-2 text-xs tabular-nums text-subtle">草稿修订 r{data.page.revision}</p>
       </details>
       {onAskAssistant && <button className={button} disabled={locked} onClick={() => onAskAssistant(
         `请用 research_wiki_read 读取当前项目的 Wiki 页面 ${pageId}（${data.page.title}），核对 lint 与原始证据后综合主题草稿。每个事实注明原始 evidenceId；过期依据先回原文检索。可用 research_wiki_draft 保存生成章节，保留人工章节，不确认科学支持。`)}>交给助手综合</button>}

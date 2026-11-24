@@ -47,11 +47,11 @@ export function ZoteroSourceStatePanel({client, projectId, collectionKey, origin
     {state === null ? null : <div className="flex flex-col gap-1" role="status" data-testid="literature-zotero-source-observation">
       <p className="flex flex-wrap gap-x-3 gap-y-1 text-ink"><span>{availability[state.remote.status]}</span>
         <span>{membership[state.membership]}</span><span>{versions[state.versionState]}</span></p>
-      <p>原收录对象版本 {state.importedObjectVersion}，当前对象版本 {state.remote.objectVersion ?? '未知'}</p>
       <p>检查时间 <time dateTime={state.remote.checkedAt}>{state.remote.checkedAt}</time></p>
       {state.remote.status === 'not_found' ? <p>本次未找到来源，不能据此确认永久删除。</p> : null}
       {state.remote.status === 'present' && state.membership !== 'not_listed' ? null : <p>Roc 已收录的题录、证据与附件保留。</p>}
-      <details><summary className="cursor-pointer">来源状态观察原文</summary>
+      <details data-testid="literature-zotero-source-diagnostics"><summary className="cursor-pointer">来源状态观察原文</summary>
+        <p className="py-1">原收录对象版本 {state.importedObjectVersion}，当前对象版本 {state.remote.objectVersion ?? '未知'}</p>
         <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(state, null, 2)}</pre>
       </details>
     </div>}

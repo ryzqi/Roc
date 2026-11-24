@@ -183,6 +183,13 @@ test('editing monitor metadata preserves frozen dates and explicit or omitted re
       ...(rerank === undefined ? {} : {rerank})}};
     const monitor = f.save('Dated monitor', null, query);
     await mount(f); await open(); await select('Dated monitor');
+    const diagnostics=page.getByTestId('literature-monitor-diagnostics');
+    assert.equal(await diagnostics.evaluate(node=>node.open),false);
+    await expect(diagnostics.locator('dd').first()).toBeHidden();
+    await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+    await expect(diagnostics.locator('dd').first()).toBeVisible();
+    await expect(diagnostics.locator('dd')).toHaveText([String(monitor.queryVersion),String(monitor.revision)]);
+    await page.keyboard.press('Enter');
     await page.getByText('检索范围', {exact: true}).click();
     await expect(page.getByLabel('起始日期', {exact: true})).toHaveValue('2024-11-19');
     await expect(page.getByLabel('截止日期', {exact: true})).toHaveValue('2026-11-19');
@@ -288,7 +295,9 @@ test('existing hub loads monitor reads only on first visit and creates real sear
   await page.getByTestId('literature-monitor-alert').getByText('新论文 / Synthetic newpaper', {exact: true}).waitFor();
   await page.getByRole('button', {name: '标为已读', exact: true}).click();
   await page.getByTestId('literature-monitor-alert').getByText(/^已读/).waitFor();
-  const checkView = page.getByTestId('literature-monitor-check').first(); await checkView.locator('summary').first().click();
+  const checkView = page.getByTestId('literature-monitor-check').first();
+  assert.doesNotMatch(await checkView.locator('summary').first().innerText(),/查询版本/);
+  await checkView.locator('summary').first().click();
   await checkView.getByTestId('literature-monitor-source').locator('summary').first().click();
   await expect(checkView).toContainText('来源报告结束');
   await checkView.getByText('请求回执与来源快照',{exact:true}).click();
@@ -322,7 +331,9 @@ test('DOI target selection binds project item revision and first retraction/corr
   await target.selectOption(`${changed.id}:${changed.revision}`);
   await page.getByRole('button', {name: '保存查询版本', exact: true}).click();
   await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('Safety');
-  await page.getByTestId('literature-monitor-editor').getByText('2', {exact: true}).first().waitFor();
+  const diagnostics = page.getByTestId('literature-monitor-diagnostics');
+  await diagnostics.locator('summary').focus(); await page.keyboard.press('Enter');
+  await expect(diagnostics.getByText('2', {exact: true}).first()).toBeVisible();
 });
 
 test('lost save/control/check/ack replies retry exact commands without duplicate durable writes or provider reads', async () => {
@@ -359,6 +370,11 @@ test('running checks expose real durable ID and cancellation signal before termi
   await page.getByRole('button', {name: '立即检查', exact: true}).click(); await f.networkStarted.promise;
   await page.getByRole('button', {name: '取消当前检查', exact: true}).waitFor();
   const checkId = f.db.prepare("SELECT id FROM research_monitor_checks WHERE status='running'").pluck().get();
+  await expect(page.getByText('检查中',{exact:true})).toBeVisible();
+  const diagnostics=page.getByTestId('literature-monitor-diagnostics');
+  assert.equal(await diagnostics.getByText(checkId,{exact:true}).isVisible(),false);
+  await diagnostics.locator('summary').focus();await page.keyboard.press('Enter');
+  await expect(diagnostics.getByText(checkId,{exact:true})).toBeVisible();
   await page.getByRole('button', {name: '取消当前检查', exact: true}).click(); await f.abortObserved.promise;
   await page.getByText('主进程已接收取消信号；等待检查终态。', {exact: true}).waitFor();
   assert.equal(f.db.prepare('SELECT status FROM research_monitor_checks WHERE id=?').pluck().get(checkId), 'running');

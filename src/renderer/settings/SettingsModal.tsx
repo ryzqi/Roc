@@ -19,7 +19,7 @@ import {
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
 import { formInputClass } from '../shared/form-ui';
 import { EmptyState } from '../shell/EmptyState';
-import type { ThemeOverride } from '../app/ui-state';
+import { readSettingsSection, writeSettingsSection, type ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
 import { SETTINGS_SECTIONS, highImpactChanges, sectionForDraftPath, type SettingsSectionId } from './settings-rules';
 import { useSettingsStore, type SettingsStore } from './settings-scope';
@@ -184,8 +184,11 @@ function renderPanel(
 
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const store = useSettingsStore(props.client, props.projectId);
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('models');
-  const [activeDomain, setActiveDomain] = useState<SettingsDomainId>(() => domainForSection('models').id);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(() => {
+    const recent = readSettingsSection();
+    return SETTINGS_SECTIONS.find(section => section.id === recent)?.id ?? 'models';
+  });
+  const [activeDomain, setActiveDomain] = useState<SettingsDomainId>(() => domainForSection(activeSection).id);
   const [searchQuery, setSearchQuery] = useState('');
   const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | 'navigate' | null>(null);
   const [closeAfterDiscard, setCloseAfterDiscard] = useState(false);
@@ -285,6 +288,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
     const select = (): void => {
       setActiveSection(id);
       setActiveDomain(domainForSection(id).id);
+      writeSettingsSection(id);
       if (focusPanel) setFocusIssue(true);
       else {
         const button = listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`);

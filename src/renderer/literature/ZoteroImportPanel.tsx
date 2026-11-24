@@ -326,10 +326,15 @@ function LibraryPreview({client, scope, libraryName, job, attachments, draftGuar
       </div>
       {sync === null ? <p className="text-subtle">逐页收录或明确跳过后才推进检查点；中断后可继续。</p> : <p className="tabular-nums break-words text-muted" role="status">
         {sync.status === 'active' ? '核对中' : sync.status === 'paused' ? '已暂停' : sync.status === 'completed' ? '本次核对完成' : '需要重新建立核对'}
-        {'，'}已确认 {sync.nextOffset.toLocaleString('zh-CN')} 个对象，完整版本 {sync.checkpointVersion ?? '尚未建立'}
-        {sync.targetVersion === null ? null : `，本次版本 ${sync.targetVersion}`}
+        {'，'}已确认 {sync.nextOffset.toLocaleString('zh-CN')} 个对象，
+        {sync.checkpointVersion === null ? '完整检查点尚未建立' : '完整检查点已建立'}
         {sync.errorCode === null ? null : `，${sync.errorCode}`}
       </p>}
+      {sync === null ? null : <details className="text-subtle" data-testid="literature-zotero-sync-diagnostics">
+        <summary className="cursor-pointer">核对诊断</summary>
+        <p className="tabular-nums py-1">核对修订 {sync.revision}，完整版本 {sync.checkpointVersion ?? '尚未建立'}
+          {sync.targetVersion === null ? null : `，本次版本 ${sync.targetVersion}`}</p>
+      </details>}
       {sync?.mode === 'rebaseline' ? <p className="text-subtle">本次按当前来源版本重新建立检查点；旧核对历史与本地资料保留。</p> : null}
       {[lookup.error, begin.error, syncPage.error, readPending.error, readState.error, control.error, acknowledge.error]
         .filter((message): message is string => message !== null).map((message, index) => <Failure key={index} message={message} />)}
@@ -411,12 +416,13 @@ function ObjectRow({item, checked, disabled, imported, onSelect, client, attachm
       <span className="min-w-0 break-words text-[length:var(--font-body-size)] text-ink">{title || '题名未提供'}</span>
     </label>
     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-5 text-subtle">
-      <span>{item.data.itemType}</span><span>对象 {item.key}</span><span>版本 {item.version}</span>
+      <span>{item.data.itemType}</span>
       {reason === null ? null : <span>{reason}</span>}
       {imported ? <span>本页已收录</span> : null}
     </div>
     <details className="mt-1 pl-5" data-testid="literature-zotero-object-details">
       <summary className="cursor-pointer text-muted">题录、标签、集合与附件引用</summary>
+      <p className="mt-1 text-subtle">对象 {item.key}，版本 {item.version}</p>
       <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)] text-muted">{JSON.stringify(item, null, 2)}</pre>
     </details>
     {imported ? <ImportedSource client={client} attachments={attachments} previewId={previewId} itemKey={item.key} collectionKey={collectionKey} /> : null}
@@ -458,11 +464,13 @@ function SourceReview({review, client, projectId, collectionKey, attachments}: {
         <summary className="cursor-pointer break-words text-ink">
           {item.source.metadata.title}{' '}
           <span className="ml-2 text-muted">{states[item.objectState]}</span>{' '}
-          {item.mappedVersion === null ? null : <><span className="ml-2 text-subtle">已记录对象版本 {item.mappedVersion}</span>{' '}</>}
-          {item.local === null ? null : <><span className="ml-2 text-subtle">本地版本 {item.local.revision}</span>{' '}</>}
           {item.local?.archived ? <><span className="ml-2 text-muted">已归档，不能收录</span>{' '}</> : null}
           <span className="ml-2 text-subtle">{item.differences.length} 个字段不同</span>
         </summary>
+        <p className="mt-1 flex flex-wrap gap-x-3 text-subtle">
+          {item.mappedVersion === null ? null : <span>已记录对象版本 {item.mappedVersion}</span>}
+          {item.local === null ? null : <span>本地版本 {item.local.revision}</span>}
+        </p>
         <CitationKeyMapping mapping={item.citationKeyMapping} preview />
         {item.local?.archived ? <p className="mt-1 text-muted">本地文献已归档，恢复后才能收录。</p> : null}
         {item.differences.length === 0 ? null : <table className="mt-2 w-full table-fixed text-left">

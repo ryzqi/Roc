@@ -27,6 +27,10 @@ P0 扫描共 **402 个 Renderer 源文件 + 1 个注册表文件**，236 个文�
 details 205、summary 205、select 134、input 168、textarea 83；其它为共享控件及事件入口。
 所有模板均获得所属合同；S34 覆盖启动/项目失败入口与阅读、写作共用的选区命令。
 
+P1 更新后仍为 402 个 Renderer 源文件、35 个合同，静态模板/路由为 2146 个；
+新增量主要来自诊断披露、取消确认和项目搜索。当前源码摘要与定向证据保存在 CSV，
+具体运行覆盖见阶段验证，不能将模板数量当作已通过用例数。
+
 ```sh
 # 工作目录：仓库根目录
 node scripts/ui-audit/index-interactions.mjs
@@ -104,14 +108,14 @@ AppShell（唯一窗口壳）
 | --- | --- | --- | --- |
 | <a id="s01"></a>**S01 壳体左右栏与检视区** | 关闭/内联/浮动 → 顶栏开关或快捷键 → 视觉进出 → 目标栏可用。源码使用 `hidden` 和条件遮罩；P3 补 present/interactive。 | Escape/遮罩走原关闭入口；工件脏状态仍由离开守卫决定。 | 快速反向、跨断点、左栏与右栏切换不产生双焦点区；关闭立即 inert，保留 mounted 重资源。`app/WorkspaceLayout.tsx`；F01。运行：待验证。 |
 | <a id="s02"></a>**S02 分栏拖拽** | 当前宽度 → 指针/方向键/重置 → RAF 跟手 → 最终宽度持久化。源码每次 resize 同步写偏好。 | Escape 恢复拖动起点；pointercancel/lost capture 清理。P3 确保中间值未落盘。 | 指针反向不 tween；对象切换/卸载安全收尾；键盘可达，有真实范围值；长内容帧采样待验证。`shell/ResizableDivider.tsx`、`app/useLayoutPersistence.ts`；F02/F14。 |
-| <a id="s03"></a>**S03 顶栏菜单/项目切换** | 当前项目/布局 → 原生 Popover → 选项可读 → 选择项目或布局。多项目搜索是 P1 待实施项。 | Escape/点击外部关闭，项目切换走草稿守卫，加载失败仍有回退。 | 二次点击开关不等待；焦点回触发点；长项目列表可检索。原生锚点保持。`shell/WindowChrome.tsx`、`shell/chrome.css`；F05/F17。运行：输入比例已校准，五轮菜单/左右栏共 150 次可信鼠标操作均命中目标并反向；项目选择、焦点和物理鼠标仍待对应验证。 |
+| <a id="s03"></a>**S03 顶栏菜单/项目切换** | 当前项目/布局 → 原生 Popover → 选项可读 → 选择项目或布局。超过 12 项提供本地题名搜索和清空。 | Escape/点击外部关闭，项目切换走草稿守卫，加载失败仍有回退。 | 打开搜索聚焦，关闭重置查询；当前项目不重复导航；原生搜索先清空、再 Escape 关闭。`shell/WindowChrome.tsx`、`shell/chrome.css`；F05/F17。P1 的 100 项选择/空态/焦点回归见阶段验证；P0 输入比例成绩仅对应原基线，物理鼠标仍待验证。 |
 | <a id="s04"></a>**S04 画布/侧栏导航** | 当前 view/subview → 导航/快捷键 → 新模块加载，旧页保留 → ready 后交接。 | 模块失败显示错误与重试，旧内容可读。 | 保留项目身份、草稿与滚动；轻量选中标记可过渡，正文不弹跳。`canvas/WorkspaceCanvas.tsx`、`shell/AppNavigation.tsx`、`app/ViewContent.tsx`；F03/F04。运行：待验证。 |
 | <a id="s05"></a>**S05 命令搜索** | 当前项目/选中对象 → 搜索快捷键 → 分组检索 → 键盘选择目标。 | 无结果给可理解空态；关闭不改变现有对象。 | CJK IME、方向键/Enter/Escape、跨对象结果隔离；长列表有界。`shell/SearchPaletteModal.tsx`、`shell/use-search-groups.ts`。运行：待验证。 |
 | <a id="s06"></a>**S06 通用浮层/确认/空态/错误** | 触发点 → Modal/Confirm → pending 禁止重复确认 → 服务完成后关闭并还焦点。 | 错误 `role=alert` 常驻；危险确认默认聚焦取消；遮罩不确认。 | 再开不被旧退出回调关闭；关后不可点击；深浅/窄高/减少动态效果等效。`shell/ModalShell.tsx`、`ConfirmDialog.tsx`、`ErrorBar.tsx`。运行：待验证。 |
-| <a id="s07"></a>**S07 新建/编辑项目** | 初始字段/已有项目 → 编辑并明确选目录 → 原生目录选择/提交 pending → 打开真实项目。标题、研究目标与目录当前必填。 | 字段错误与目录选择失败单独展示；脏草稿关闭先确认；不默许目录写入。 | 用户改写不覆盖；目录 picker generation 隔离旧响应；首焦点标题，语言编辑限制保持。`project/ProjectFormDialog.tsx`、`use-projects.ts`；F06。运行：待验证。 |
+| <a id="s07"></a>**S07 新建/编辑项目** | 初始字段/已有项目 → 编辑并明确选目录 → 原生目录选择/提交 pending → 打开真实项目。新建空标题建议已选目录名，研究目标仍必填。 | 字段错误与目录选择失败单独展示；脏草稿关闭先确认；不默许目录写入。 | 手改标题和已有项目标题不覆盖；目录 picker generation 隔离旧响应；首焦点标题，语言编辑限制保持。`project/ProjectFormDialog.tsx`、`use-projects.ts`；F06。P1 定向路径见阶段验证。 |
 | <a id="s08"></a>**S08 项目门户/排序/归档/删除** | 搜索/筛选/最近/置顶 → 打开或操作项目 → action pending → 列表按真实结果刷新。当前 40 条增量可见。 | 删除已有确认；归档/恢复与删除后果不同；失败留原对象和错误。 | 筛选收缩钳制键盘索引；小列表位置反馈不影响大列表滚动；焦点不能落已删行。`project/ProjectPortalView.tsx`、`ProjectRow.tsx`；F12。运行：待验证。 |
 | <a id="s09"></a>**S09 总览与首次任务** | 当前项目及可用资源 → 主要行动/FirstSteps → 对应任务或视图 pending → 到目标对象。 | 项目缺失/只读/加载失败说明下一步。 | 同一入口重复触发不增加步骤；项目切换不保留错项目提示；窄窗行动可达。`project/OverviewView.tsx`、`FirstSteps.tsx`。运行：待验证。 |
-| <a id="s10"></a>**S10 文献导入** | 文件/DOI/检索/手工字段 → 自动建议与可改引用键 → 明确导入 pending → 入库回执。 | 重复候选明确选择；错误常驻；取消 file picker 不授权读取；脏草稿有守卫。 | 源码标题联动会覆盖 `documentKey`；P1 加 auto/manual。旧 operation/session 不覆盖新对象；入库不宣称索引完成。`literature/ImportDialog.tsx`、`format.ts`；F07。运行：待验证。 |
+| <a id="s10"></a>**S10 文献导入** | 文件/DOI/检索/手工字段 → 自动建议与可改引用键 → 明确导入 pending → 入库回执。 | 重复候选明确选择；错误常驻；取消 file picker 不授权读取；脏草稿有守卫。 | P1 引用键首次人工改写后保留，包括空值；“恢复自动生成”重新使用题名派生。旧 operation/session 不覆盖新对象；入库不宣称索引完成。`literature/ImportDialog.tsx`、`format.ts`；F07。P1 定向路径见阶段验证。 |
 | <a id="s11"></a>**S11 Zotero 导入/附件/同步** | 连接/来源/预览 → 选择条目、文件授权、同步计划 → import/check pending → receipt 与 source state。 | 文件缺失/拒绝/断链明确；取消授权区别于取消后台 import；真实重试/ack。 | 保留 previewId/syncId/revision；过期响应不覆盖新页；原始对象移入详情仍可读。`literature/Zotero*Panel.tsx`、`use-zotero-*.ts`；F09。运行：待验证。 |
 | <a id="s12"></a>**S12 发现/雷达/资源/外部来源** | 查询与筛选 → 搜索/候选预览/下载 → 获取 pending → 显示真实候选或资源状态。 | 离线/降级/低置信度与失败明确；不能自动授权外部提交或费用。 | 新查询覆盖旧展示目标；选择与滚轮优先；分页/大结果不整列动画。`literature/DiscoverySearch.tsx`、`RadarBrowser.tsx`、`OpenReview*`、`HuggingFace*`、`Resource*`。运行：待验证。 |
 | <a id="s13"></a>**S13 文献库** | 当前列表/选中论文 → 筛选/分页/选择/入库 → 局部 pending → 真实列表/阅读对象。 | 空态、分页失败与重复项区分；重试不清空可读列表。 | `LibraryVirtualizedRows` 保持窗口化；键盘与手动滚动优先；项目/论文 identity 明确。`literature/LibraryList.tsx`、`LibraryVirtualizedRows.tsx`、`LiteratureHubView.tsx`。运行：待验证。 |
@@ -129,10 +133,10 @@ AppShell（唯一窗口壳）
 | <a id="s25"></a>**S25 助手转录/历史** | 当前会话/用户阅读位置 → prepend/tail/new message/定位 → history loading → 可读历史/当前消息状态。 | 历史失败保留现有转录；定位可取消。 | `react-virtuoso` 与用户滚动接管保持；500/5000/10k 有界 DOM；离屏消息不动效；跨会话恢复不整列 FLIP。`assistant/transcript-panel.tsx`、`blocks/message-row.tsx`。运行：待验证。 |
 | <a id="s26"></a>**S26 助手科研任务进度** | 后端 task status → 进度/详情/控制 → 真实 action pending → 终态留在原位置。 | needs_input/failed/interrupted/cleanup_failed 区分；有能力才继续/恢复。 | 与任务中心状态文案一致；低频数字等宽，流式变化不逐点动画；不抢读者焦点。`ResearchTaskProgress.tsx`、`StatusPillHeader.tsx`；F13。运行：待验证。 |
 | <a id="s27"></a>**S27 工具/活动/会话/诊断** | 当前活动或 session → 披露/复制/切换/重试 → 局部 pending → 真实工具/会话状态。 | tool/hook/guardrail 失败可读；诊断保留证据与复制。 | 原生 details 双向展开复用；退出不可操作；工具 identity 不共享到别的执行；无 token 逐字动效。`assistant/blocks/*`、`SessionListView.tsx`、`RunDiagnostics.tsx`。运行：待验证。 |
-| <a id="s28"></a>**S28 科研任务控制与诊断** | active/waiting_approval/paused 等 → 暂停/取消/继续/恢复审批 → 等待清理/恢复 → 真正 task status。 | 源码取消直接执行；P1 根据实际恢复能力加确认。cancelled 有 continuationRunId 时可能可继续，不能一律写“不可恢复”。 | running ref 已防重复；取消确认绑定当前 task；cleanup_failed 不伪称清理完成；长图与诊断原值可达。`research/tasks/TaskControls.tsx`、`TaskFactsPanel.tsx`；F10。运行：待验证。 |
+| <a id="s28"></a>**S28 科研任务控制与诊断** | active/waiting_approval/paused 等 → 暂停/取消/继续/恢复审批 → 等待清理/恢复 → 真正 task status。 | 取消需确认当前任务，说明不撤销已完成操作；暂停一键。cancelled 有 continuationRunId 时可能可继续，不能一律写“不可恢复”。 | running ref 防重复；身份或状态变化清除旧确认；cleanup_pending/failed 持久阻止恢复，重挂载不伪称清理完成。`research/tasks/TaskControls.tsx`、`TaskFactsPanel.tsx`；F10。P1 定向路径见阶段验证。 |
 | <a id="s29"></a>**S29 管理/任务中心** | 当前管理领域/作用域 → 记忆/技能/MCP/任务/环境行动 → 共享 store pending → 真实结果与状态。 | 删除/配置改动按真实后果确认；busy/dirty 离开守卫；失败保留草稿。 | scope identity 隔离项目/全局；与助手任务状态一致；原始诊断可展开；长列表和后台任务不抢焦点。`management/ManagementPanel.tsx`、`TaskCenterOverview.tsx`、`sections/*`。运行：待验证。 |
-| <a id="s30"></a>**S30 RAG 设置** | 当前配置/知识索引 → 编辑/探测/保存 → 保存与读取 pending → 真配置及收录状态。 | 原始 error 保留；探测/保存失败不丢字段；秘密不持久化到 renderer。 | 源码头部 raw phase/revision/ready 待分层；expectedRevision 使用 settings.revision；IME/焦点/草稿保持。`settings/sections/RagSection.tsx`；F08。运行：待验证。 |
-| <a id="s31"></a>**S31 设置全部领域** | 当前 13 分区、搜索、脏状态 → 导航/编辑/保存 → save pending → 真正配置完成。 | 重大影响确认、脏草稿关闭/重置确认与失败持久；可重试，不削弱守卫。 | 当前分区默认为 models；P1 可记最近相关分区，P3 弱交接保持导航焦点；密集表单可滚动，缩放不裁切。`SettingsModal.tsx`、`settingsRegistry.ts`、`sections/*`；F11。运行：待验证。 |
+| <a id="s30"></a>**S30 RAG 设置** | 当前配置/知识索引 → 编辑/探测/保存 → 保存与读取 pending → 真配置及收录状态。 | 原始 error 保留；探测/保存失败不丢字段；秘密不持久化到 renderer。 | P1 默认显示阶段、收录/剩余计数；phase/revision/generation 保留在诊断。expectedRevision 使用 settings.revision；IME/焦点/草稿保持。`settings/sections/RagSection.tsx`；F08。设置定向路径见阶段验证。 |
+| <a id="s31"></a>**S31 设置全部领域** | 当前 13 分区、搜索、脏状态 → 导航/编辑/保存 → save pending → 真正配置完成。 | 重大影响确认、脏草稿关闭/重置确认与失败持久；可重试，不削弱守卫。 | P1 记最近合法分区，未通过草稿守卫的切换不写偏好；只保存导航 ID。P3 弱交接保持焦点；密集表单可滚动，缩放不裁切。`SettingsModal.tsx`、`settingsRegistry.ts`、`sections/*`；F11。P1 的 29 项设置回归见阶段验证。 |
 | <a id="s32"></a>**S32 工件/审阅/出版/生产** | 当前 artifact/version/source/proposal → 检视/编辑/审阅/发布 → command pending → 真回执/产物。 | expectedRevision 失败不伪成功；删除/发布/外部协作权限保持；脏编辑离开守卫。 | 版本/证据 identity 分开；正常/失败/换对象三个用例按业务区执行；长表/代码无全容器动画。`artifacts/ArtifactInspector.tsx`、`ReviewInspector.tsx`、`*Editor.tsx`、`*Receipt.tsx`。运行：待验证。 |
 | <a id="s33"></a>**S33 共享表单/页面反馈** | idle/可编辑字段 → trigger → loading/disabled/aria-busy → success 内容投影。 | Field/FormNote/ErrorBar 保留可见标签、原始失败与重试；不自造业务完成态。 | ActionButton 仅展示 loading，调用者防重；统一 duration/status，减少动态效果有同等语义；长字段不裁切。`shared/form-ui.tsx`、`page-ui.tsx`、`shell/DelayedFallback.tsx`；F13/F14。运行：待验证。 |
 | <a id="s34"></a>**S34 启动/项目失败入口与选区命令** | 启动/项目读取失败 → 重试或返回门户；阅读/写作选区 → 选区命令/替换预览 → pending → 真实提案或应用到草稿。 | 项目失败仍有返回入口；拒绝提案不更改原文；选区变化时丢弃过期预览。 | Skip-to-canvas 保留；选区命令不拥有路由/Agent 状态；⌘K、IME、焦点与原选区归属保持。`app/AppShellContent.tsx`、`canvas/InlineCommandBar.tsx`。运行：待验证。 |

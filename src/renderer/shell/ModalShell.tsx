@@ -189,7 +189,7 @@ export function ModalShell({
   if (embedded) {
     return open ? <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={testId ?? 'overlay'}
       data-presentation="embedded">
-      <OverlayFocusRestore returnFocusSelector={returnFocusSelector} />
+      <OverlayFocusRestore returnFocusSelector={returnFocusSelector} panelRef={panelRef} />
       <section ref={panelRef} aria-labelledby={titleId} aria-describedby={bodyId}
         data-testid={testId === undefined ? undefined : `${testId}-panel`}
         className={`flex min-h-0 min-w-0 flex-1 flex-col bg-surface-rail ${widthClassName ?? ''}`}
@@ -216,7 +216,7 @@ export function ModalShell({
         >
           {/* Mounted with the panel, not with `ModalShell`: its unmount is the panel's
               removal, which is when focus may safely go back to the opener. */}
-          <OverlayFocusRestore returnFocusSelector={returnFocusSelector} />
+          <OverlayFocusRestore returnFocusSelector={returnFocusSelector} panelRef={panelRef} />
 
           {/* The scrim is a child covering the container, so the click must be
               handled *here*: on the container, `event.target` would always be the

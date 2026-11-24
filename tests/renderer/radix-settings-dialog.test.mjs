@@ -68,6 +68,7 @@ before(async () => {
         import { useKeyboardShortcuts } from './src/renderer/app/shortcuts';
         import { useAppRoute } from './src/renderer/app/use-app-route';
         import { BEFORE_NAVIGATE } from './src/renderer/app/navigation-guard';
+        import { writeSettingsSection } from './src/renderer/app/ui-state';
 
         const ok = data => ({ok: true, data});
         function createClient(providers = []) {
@@ -193,7 +194,8 @@ before(async () => {
           if (navigationGuard) window.addEventListener(BEFORE_NAVIGATE, navigationGuard);
         };
         let generation = 0;
-        window.mount = (providers = [], routeClose = false) => {
+        window.mount = (providers = [], routeClose = false, preserveSection = false) => {
+          if (!preserveSection) writeSettingsSection('models');
           window.setNavigationGuard(null);
           window.navigationGuardCalls = 0;
           window.releaseSettingsClose = null;
@@ -263,6 +265,28 @@ const labelBySection = {
   memory: '记忆策略', tasks: '任务与调度', guardrail: '智能体安全', sandbox: '编译与沙箱', authorization: '授权与安全',
   hooks: 'Hooks', pilot: '受限试点', backup: '偏好与备份'
 };
+
+test('settings restores the recent section and domain only after a guarded navigation succeeds', async () => {
+  await page.evaluate(() => window.mount());
+  await page.getByTestId('activity-settings').click();
+  await clickSection('app');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('settings-modal-panel')).toHaveCount(0);
+  await page.evaluate(() => window.mount([], false, true));
+  await page.getByTestId('activity-settings').click();
+  await expect(page.getByTestId('settings-section-app')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('settings-domain-general')).toHaveAttribute('aria-pressed', 'true');
+  await clickSection('backup');
+  await page.getByTestId('settings-import-text').fill('{');
+  await clickSection('app');
+  await expect(page.getByTestId('settings-editor-discard-panel')).toBeVisible();
+  await page.getByTestId('settings-editor-discard-cancel').click();
+  await page.evaluate(() => window.mount([], false, true));
+  await page.getByTestId('activity-settings').click();
+  await expect(page.getByTestId('settings-section-backup')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('settings-domain-advanced')).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => window.mount());
+});
 
 async function assertScrollableControlVisible(control) {
   await control.scrollIntoViewIfNeeded();

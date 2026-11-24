@@ -149,7 +149,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const [documentPath, setDocumentPath] = useState<string | null>(null);
   const [documentTarget, setDocumentTarget] = useState<'new-item' | 'library-item'>('new-item');
   const [documentTitle, setDocumentTitle] = useState('');
-  const [documentKey, setDocumentKey] = useState('');
+  const [documentKeyOverride, setDocumentKeyOverride] = useState<string | null>(null);
 
   // DOI tab
   const [doiInput, setDoiInput] = useState('');
@@ -200,7 +200,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setMessage(null);
     setDocumentPath(null);
     setDocumentTitle('');
-    setDocumentKey('');
+    setDocumentKeyOverride(null);
     setDoiInput('');
     setBibliographyPath(null);
     setManualTitle('');
@@ -229,6 +229,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     () => deriveCitationKey({ title: documentTitle, authors: [], year: null }),
     [documentTitle]
   );
+  const documentKey = documentKeyOverride ?? documentDerivedKey ?? '';
 
   const normalizedDoi = useMemo(() => normalizeDoi(doiInput), [doiInput]);
   const arxivId = useMemo(() => arxivQueryFromInput(searchQuery), [searchQuery]);
@@ -237,8 +238,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   // in other tabs still need a deliberate discard when the dialog closes.
   const manualFields = [manualTitle, manualAuthors, manualYear, manualDoi, manualUrl, manualAbstract, manualKey];
   const draftSignatures: Partial<Record<ImportTabRequest, string>> = {
-    document: documentPath !== null || documentTitle.length > 0 || documentKey.length > 0
-      ? JSON.stringify([documentPath, documentTarget, documentTitle, documentKey]) : '',
+    document: documentPath !== null || documentTitle.length > 0 || documentKeyOverride !== null
+      ? JSON.stringify([documentPath, documentTarget, documentTitle, documentKeyOverride]) : '',
     doi: doiInput,
     bibliography: bibliographyPath === null ? '' : JSON.stringify([bibliographyPath, bibliographyFormat]),
     manual: manualFields.some(value => value.length > 0) ? JSON.stringify(manualFields) : ''
@@ -416,10 +417,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   id="literature-import-document-title"
                   ref={titleRef}
                   value={documentTitle}
-                  onChange={(event) => {
-                    setDocumentTitle(event.target.value);
-                    setDocumentKey(deriveCitationKey({ title: event.target.value, authors: [], year: null }) ?? '');
-                  }}
+                  onChange={(event) => setDocumentTitle(event.target.value)}
                   className={fieldClass}
                   data-testid="literature-import-document-title"
                 />
@@ -429,10 +427,16 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 <input
                   id="literature-import-document-key"
                   value={documentKey}
-                  onChange={(event) => setDocumentKey(event.target.value)}
+                  onChange={(event) => setDocumentKeyOverride(event.target.value)}
                   className={fieldClass}
                   data-testid="literature-import-document-key"
                 />
+                {documentKeyOverride === null ? null : (
+                  <button type="button" className={`${formSecondaryButtonClass} self-start`}
+                    onClick={() => setDocumentKeyOverride(null)} data-testid="literature-import-document-key-auto">
+                    恢复自动生成
+                  </button>
+                )}
                 {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
                   <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                     引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。

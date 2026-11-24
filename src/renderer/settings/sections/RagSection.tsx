@@ -48,6 +48,16 @@ import {
  * registered in findings F22.
  */
 
+const INDEX_PHASE_LABELS = {
+  unavailable: '未绑定工作目录',
+  idle: '当前无待处理任务',
+  queued: '等待处理',
+  scanning: '正在扫描文件',
+  indexing: '正在索引文件',
+  paused: '索引已暂停',
+  failed: '索引失败'
+};
+
 type EmbeddingForm = {
   id: string;
   name: string;
@@ -202,12 +212,23 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         <header className="flex flex-wrap items-center gap-2">
           <h4 className="text-ink text-[length:var(--font-meta-size)]">索引（当前项目）</h4>
           {indexStatus === null ? null : (
-            <span className="font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-index-status">
-              phase {indexStatus.phase}，revision {indexStatus.settings.revision}，ready {indexStatus.counts.ready}/
-              {indexStatus.counts.total}
+            <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-index-status">
+              已索引 <span className="tabular-nums">{indexStatus.counts.ready}/{indexStatus.counts.total}</span> 个文件，
+              {INDEX_PHASE_LABELS[indexStatus.phase]}
+              {indexStatus.counts.failed > 0 ? `，${indexStatus.counts.failed} 个失败` : ''}
             </span>
           )}
         </header>
+        {indexStatus === null ? null : (
+          <details className="text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-index-diagnostics">
+            <summary className="cursor-pointer">索引诊断</summary>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 pt-1">
+              <dt>阶段</dt><dd className="font-mono">{indexStatus.phase}</dd>
+              <dt>设置修订</dt><dd className="tabular-nums">{indexStatus.settings.revision}</dd>
+              <dt>索引代次</dt><dd className="tabular-nums">{indexStatus.generation}</dd>
+            </dl>
+          </details>
+        )}
 
         {store.projectId === null ? (
           <p className="text-muted" data-testid="settings-index-no-project">未打开项目</p>
