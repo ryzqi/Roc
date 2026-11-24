@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.4：原生退出夹具契约
+
+状态：**Verified passing**（原生退出回归范围）。全量Renderer为1003/1008，退出测试停在内核关闭前；隔离运行再次失败。生产窗口销毁路径已经通过`kernel.runtime.publishEvent`通知终端所有者结束，旧内核替身缺少此异步契约，导致销毁回调抛错。仅补齐测试替身，并记录实际事件与关闭顺序。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/renderer/native-quit-guards.test.mjs` **3/3**。拒绝退出和关闭隐藏均保持零次销毁事件；接受退出时，保存的真实WebContents ID恰好收到一次`terminal.owner.closed`，来源为`@roc/main`，发布早于`shutdown-start`；所有窗口先关闭、tray释放一次，内核关闭完成前进程保持存活，最后正常退出。测试资料根自动清理。全量Renderer其余四项失败及最终整轮复验另记。
+
 ## 2026-11-24 P8.2：完整布局矩阵与原生缩放
 
 状态：**Verified passing**（布局范围）。同一CDP会话负责设置和清除CSS视口模拟，原生缩放前从该会话解除模拟；画布截图等待真实CodeMirror正文可见，退出时释放会话，避免将模拟尺寸误记为原生缩放。

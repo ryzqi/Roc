@@ -46,6 +46,10 @@ before(async () => {
           paths:{configDir},performanceObserverService:input.performanceObserverService,
           logService:{info(){},warn(){},error(){}},
           configService:{getSettings:()=>({startup:{openAtLogin:false},globalHotkey:null})},
+          runtime:{async publishEvent(event) {
+            globalThis.auditPublishedEvents.push(event);
+            appendFileSync(globalThis.auditLogPath,'terminal-owner-closed\\n');
+          }},
           async start(){},startDatabaseMaintenance(){},subscribeEvent(){},
           async invokeCapability() {
             globalThis.auditCapabilityReads++;
@@ -102,6 +106,7 @@ beforeEach(async () => {
     app.setPath('userData',${JSON.stringify(join(directory, `data-${fixture}`))});
     globalThis.auditLogPath=${JSON.stringify(logPath)};
     globalThis.auditShutdownCount=0;globalThis.auditCapabilityReads=0;
+    globalThis.auditPublishedEvents=[];
     globalThis.auditTrayCreated=0;globalThis.auditTrayDestroyed=0;globalThis.auditPrevented=0;
     app.on('browser-window-created',(_event,window)=>{
       window.webContents.on('will-prevent-unload',()=>globalThis.auditPrevented++);
@@ -146,6 +151,7 @@ test('a native quit veto preserves the live kernel, tray and renderer draft', {t
   }));
   assert.equal(state.shutdown, 0);
   assert.equal(state.destroyed, 0);
+  assert.deepEqual(await app.evaluate(() => globalThis.auditPublishedEvents), []);
   await app.evaluate(() => globalThis.auditHost.refreshTray());
   await expect.poll(() => app.evaluate(() => globalThis.auditCapabilityReads)).toBe(state.reads + 1);
 });
@@ -155,11 +161,13 @@ test('a cancelled explicit quit restores macOS close-to-hide while retaining the
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].close());
   await expect.poll(() => app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(false);
   assert.equal(await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length), 1);
+  assert.deepEqual(await app.evaluate(() => globalThis.auditPublishedEvents), []);
   await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].show());
   assert.equal(await page.getByLabel('Draft').inputValue(), 'unsaved draft');
 });
 
 test('an accepted native quit closes windows before shutdown and awaits exactly one kernel shutdown', {timeout: 15_000}, async () => {
+  const ownerId = await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.id);
   await app.evaluate(() => {
     globalThis.auditShutdownGate = new Promise(resolve => {globalThis.auditFinishShutdown = resolve;});
   });
@@ -170,6 +178,10 @@ test('an accepted native quit closes windows before shutdown and awaits exactly 
     assert.equal(await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length), 0);
     assert.equal(appProcess.exitCode, null);
     assert.equal(await app.evaluate(() => globalThis.auditTrayDestroyed), 1);
+    const events = await app.evaluate(() => globalThis.auditPublishedEvents);
+    assert.deepEqual(events.map(({type, source, payload}) => ({type, source, payload})),
+      [{type: 'terminal.owner.closed', source: '@roc/main', payload: ownerId}]);
+    assert.ok(Number.isFinite(Date.parse(events[0].createdAt)));
   } finally {
     if (appProcess.exitCode === null) {
       await app.evaluate(() => {
@@ -178,5 +190,6 @@ test('an accepted native quit closes windows before shutdown and awaits exactly 
     }
   }
   assert.deepEqual(await exited, [0, null]);
-  assert.deepEqual(readFileSync(logPath, 'utf8').trim().split('\n'), ['shutdown-start', 'shutdown-end']);
+  assert.deepEqual(readFileSync(logPath, 'utf8').trim().split('\n'),
+    ['terminal-owner-closed', 'shutdown-start', 'shutdown-end']);
 });
