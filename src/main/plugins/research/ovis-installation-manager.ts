@@ -3,7 +3,7 @@ import type {Stats} from 'node:fs';
 import {basename, isAbsolute, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {ovisModelIdentitySchema} from './ovis-document-adapter';
+import {ovisModelIdentitySchema} from '../../../shared/schemas/research-ovis';
 import {inspectOvisInstallation, type OvisInstallationInspection} from './ovis-model-store';
 import {prepareOvisInstallation, type OvisInstallationInput, type OvisInstallationProgress} from './ovis-installation';
 import {readResearchFile} from './research-files';

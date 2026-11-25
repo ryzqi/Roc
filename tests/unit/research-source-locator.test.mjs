@@ -23,7 +23,7 @@ function importedDocument(f) {
 }
 function parsedContent(document,blocks) {
   return {outputPath:'/tmp/synthetic-locator-output',files:{},content:{
-    contractVersion:5,engine:'paddleocr.js',engineVersion:'synthetic-locator-test',parserVersion:'roc-research-parser/2',
+    contractVersion: 6,engine:'paddleocr.js',engineVersion:'synthetic-locator-test',parserVersion:'roc-research-parser/2',
     parserFingerprint:hash('synthetic parser'),modelManifest:'',runtime:{node:'synthetic'},tier:'compact',
     parseMode:'native-text',device:'cpu',sourceHash:document.sourceHash,pageCount:4,
     content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],

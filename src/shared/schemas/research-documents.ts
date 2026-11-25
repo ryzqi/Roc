@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { researchCitationKeySchema } from './research-library';
-import { researchParsedDocumentSchema, researchParseTiers } from './research-production';
+import { researchParsedBlockSchema, researchPaddleParsedDocumentSchema, researchOvisParsedDocumentSchema, researchParseTiers } from './research-production';
 import {assertPaperTableBlock} from './research-paper-table';
 import {assertPaperEquationBlock} from './research-paper-equation';
 import {assertPaperVisualBlock, assertPaperVisualEvidence} from './research-paper-visual';
@@ -28,8 +28,10 @@ export const researchDocumentAssetSchema = z.object({
   id: z.string(), kind: z.enum(['page', 'figure', 'table']), page: z.number().int().positive().nullable(),
   sha256: hash, size: z.number().int().nonnegative()
 }).strict();
-export const researchDocumentContentSchema = researchParsedDocumentSchema.omit({ blocks: true, assets: true }).extend({
-  blocks: z.array(researchParsedDocumentSchema.shape.blocks.element.omit({ imagePath: true }).extend({ imageAssetId: z.string().nullable() }).strict())
+export const researchDocumentBlockSchema = researchParsedBlockSchema.omit({imagePath: true})
+  .extend({imageAssetId: z.string().nullable()}).strict();
+const storedFields = {
+  blocks: z.array(researchDocumentBlockSchema)
     .superRefine((blocks, context) => {
       for (const block of blocks) try {assertPaperTableBlock(block); assertPaperEquationBlock(block); assertPaperVisualBlock(block);}
       catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
@@ -37,7 +39,12 @@ export const researchDocumentContentSchema = researchParsedDocumentSchema.omit({
       catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
     }),
   assets: z.array(researchDocumentAssetSchema)
-}).strict();
+};
+export const researchDocumentContentSchema = z.discriminatedUnion('engine', [
+  researchPaddleParsedDocumentSchema.omit({blocks: true, assets: true}).extend(storedFields).strict(),
+  researchOvisParsedDocumentSchema.omit({blocks: true, assets: true}).extend(storedFields).strict()
+]).refine(value => value.engine !== 'ovisocr3-mlx' || value.modelManifest === value.modelIdentity.installationReceiptSha256,
+  'research_ovis_model_identity_mismatch');
 export const researchDocumentParseSchema = z.object({ run: researchDocumentRunSchema, content: researchDocumentContentSchema }).strict();
 export const researchDocumentParseRequestSchema = researchDocumentIdRequestSchema.extend({ parseId: z.string().min(1) }).strict();
 /**

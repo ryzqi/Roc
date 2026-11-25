@@ -1,6 +1,6 @@
 import {researchSourceLocatorSchema} from './research-source-locator';
 import {z} from 'zod';
-import {researchDocumentContentSchema} from './research-documents';
+import {researchDocumentBlockSchema} from './research-documents';
 import {researchInspectedEvidenceSchema} from './research-evidence-source';
 import {researchRelationReviewerSchema} from './research-evidence-relations';
 
@@ -14,7 +14,7 @@ export const researchSourceMigrationProposalSchema = z.object({
   parserFingerprint: digest,
   matchingRule: z.literal('exact_text_then_whitespace/1'),
   match: z.enum(['exact_text', 'normalized_text', 'ambiguous', 'no_match']),
-  targets: z.array(z.object({chunkId: id, block: researchDocumentContentSchema.shape.blocks.element, textSpan: researchSourceLocatorSchema.shape.textSpan}).strict()),
+  targets: z.array(z.object({chunkId: id, block: researchDocumentBlockSchema, textSpan: researchSourceLocatorSchema.shape.textSpan}).strict()),
   status: z.literal('needs_review'),
   createdAt: id
 }).strict().superRefine((value, context) => {

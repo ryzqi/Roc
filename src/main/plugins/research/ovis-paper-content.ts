@@ -1,14 +1,15 @@
+import {ovisModelIdentitySchema, type OvisModelIdentity} from '../../../shared/schemas/research-ovis';
 import {lstat, realpath} from 'node:fs/promises';
 import {isAbsolute} from 'node:path';
 import {z} from 'zod';
-import {researchDocumentLimits, researchParsedDocumentSchema} from '../../../shared/schemas/research-production';
+import {researchDocumentLimits, researchParsedBlocksSchema, researchParsedDocumentSchema} from '../../../shared/schemas/research-production';
 import {paperQualityVersion, paperParseQualitySchema, type PaperParseQuality} from '../../../shared/schemas/research-paper-quality';
 import {paperTableVersion} from '../../../shared/schemas/research-paper-table';
 import {paperEquationVersion, latexNormalizationVersion} from '../../../shared/schemas/research-paper-equation';
 import {paperVisualVersion, assertPaperVisualEvidence, type PaperVisual} from '../../../shared/schemas/research-paper-visual';
 import type {PaperStructure} from '../../../shared/schemas/research-paper-structure';
-import {researchDocumentCoordinateFrameSchema} from '../../../shared/schemas/research-document-coordinates';
-import {adaptOvisPage, ovisModelIdentitySchema, type OvisModelIdentity, type OvisAdaptedPage} from './ovis-document-adapter';
+import {researchDocumentCoordinateFrameSchema, type ResearchDocumentCoordinateFrame} from '../../../shared/schemas/research-document-coordinates';
+import {adaptOvisPage, type OvisAdaptedPage} from './ovis-document-adapter';
 import {readResearchFile, researchContentHash} from './research-files';
 import {attachPaperTables} from './pdf-table-extractor';
 import {attachPaperEquations} from './pdf-equation-extractor';
@@ -17,7 +18,7 @@ import {assessPdfQuality, type QualityPage} from './pdf-quality-assessor';
 import {boundsOfPoints} from './pdf-native-text';
 import {buildPaperStructure, paperStructureVersion} from './paper-structure';
 
-export const ovisPaperContentVersion = 'roc-ovis-paper-content/2';
+export const ovisPaperContentVersion = 'roc-ovis-paper-content/3';
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const box = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 const asset = z.object({path: z.string(), sha256: hash, bytes: z.number().int().positive()}).strict();
@@ -37,6 +38,8 @@ type Block = z.infer<typeof researchParsedDocumentSchema>['blocks'][number];
 export type OvisPaperContent = {
   version: typeof ovisPaperContentVersion; sourceHash: string; sourceManifestSha256: string; model: OvisModelIdentity;
   parserFingerprint: string; pageCount: number; selectedPages: number[];
+  frames: ResearchDocumentCoordinateFrame[];
+  assetIntegrity: Record<string, {sha256: string; size: number}>;
   sourceVerification: 'unverified'; content: string; blocks: Block[]; structure: PaperStructure; quality: PaperParseQuality;
   assets: z.infer<typeof researchParsedDocumentSchema>['assets']; warnings: string[];
 };
@@ -155,13 +158,16 @@ export async function readOvisPaperContent(input: {
   input.signal.throwIfAborted();
   const equations = attachPaperEquations(blocks, pages.map(page => ({regions: page.blocks.map(block => ({id: block.id,
     ...(block.kind === 'formula' ? {formula: block.rawContent} : {})}))})));
-  const enriched = researchParsedDocumentSchema.shape.blocks.parse(visualCandidates(equations, pages));
+  const enriched = researchParsedBlocksSchema.parse(visualCandidates(equations, pages));
   const qualityPages = assessPdfQuality({blocks: enriched, pages: qualityInputs}).pages.map(page => ({...page,
     status: 'review' as const, ocrCoverage: null, readingOrderWarnings: null,
     warnings: [...new Set([...page.warnings, 'research_ovis_content_unverified', 'quality_ocr_geometry_unverified',
       'quality_reading_observation_missing'])]}));
   return {version: ovisPaperContentVersion, sourceHash: input.sourceHash, sourceManifestSha256: input.manifestSha256,
     model, sourceVerification: 'unverified', pageCount: manifest.pageCount, selectedPages: manifest.selectedPages,
+    frames: pages.map(page => page.frame),
+    assetIntegrity: Object.fromEntries(manifest.pages.flatMap(page => [page.image, ...page.crops])
+      .map(asset => [asset.path, {sha256: asset.sha256, size: asset.bytes}])),
     parserFingerprint: researchContentHash(JSON.stringify({version: ovisPaperContentVersion, model,
       paperStructureVersion, paperTableVersion, paperEquationVersion, latexNormalizationVersion, paperVisualVersion,
       paperQualityVersion, selectedPages: manifest.selectedPages})),

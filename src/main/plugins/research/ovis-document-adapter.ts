@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
+import {ovisModelIdentitySchema, type OvisModelIdentity} from '../../../shared/schemas/research-ovis';
 import {researchDocumentCoordinateFrameSchema, type ResearchDocumentCoordinateFrame} from '../../../shared/schemas/research-document-coordinates';
 import {projectParsedRegionToPdf} from '../../../shared/research-document-coordinates';
 import {orderPdfBlocks} from './pdf-reading-order';
@@ -16,14 +17,6 @@ const categorySchema = z.enum([
 ]);
 const documentSchema = z.array(z.object({bbox: boxSchema, category: categorySchema, content: z.string()}).strict()).max(4096);
 
-/** Identity comes from a verified installation lease, never from model-generated text. */
-export const ovisModelIdentitySchema = z.object({
-  engine: z.literal('ovisocr3-mlx'), revision: z.literal('5b252386ba615bd464a5a26597560eaba87dae5c'),
-  quantization: z.literal('8bit'), groupSize: z.literal(64), visionPrecision: z.literal('bfloat16'),
-  device: z.literal('metal'), installationReceiptSha256: hash, inferenceSha256: hash,
-  promptSha256: z.literal('1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1')
-}).strict();
-export type OvisModelIdentity = z.infer<typeof ovisModelIdentitySchema>;
 const envelopeSchema = z.object({
   protocolVersion: z.literal(1), sourceHash: hash, inputImageSha256: hash,
   page: z.number().int().positive(), width: z.number().int().positive(), height: z.number().int().positive(),

@@ -1,10 +1,11 @@
+import {ovisModelIdentitySchema, type OvisModelIdentity} from '../../../shared/schemas/research-ovis';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash} from 'node:crypto';
 import {lstat, mkdtemp, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {basename, join} from 'node:path';
 import {z} from 'zod';
-import {adaptOvisPage, ovisModelIdentitySchema, type OvisAdaptedPage, type OvisModelIdentity, type OvisSourceBinding} from './ovis-document-adapter';
+import {adaptOvisPage, type OvisAdaptedPage, type OvisSourceBinding} from './ovis-document-adapter';
 import {runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult} from './process-runner';
 import {hashResearchFile} from './research-job';
 

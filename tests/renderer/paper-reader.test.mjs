@@ -256,7 +256,7 @@ function scene() {
       text: `${text}${index === 0 ? '' : ' repeated block'}`, locator, imageAssetId: null,
       locations: [{page: 1, bbox: [1, 2, 30, 40], coordinateOrigin: 'TOPLEFT'}]}));
     const data = {outputPath: 'synthetic-reader-output', files: {}, content: {
-      contractVersion: 5, engine: 'paddleocr.js', engineVersion: 'synthetic-reader', parserVersion: 'roc-research-parser/2',
+      contractVersion: 6, engine: 'paddleocr.js', engineVersion: 'synthetic-reader', parserVersion: 'roc-research-parser/2',
       parserFingerprint: hash('synthetic-reader-parser'), modelManifest: '', runtime: {node: 'synthetic'}, tier: 'compact',
       parseMode: 'native-text', device: 'cpu', sourceHash: document.sourceHash, pageCount: 1,
       content: blocks.map(block => block.text).join('\n\n'), blocks, assets: [],

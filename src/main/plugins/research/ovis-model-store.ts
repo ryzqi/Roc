@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {lstat, readFile, readdir, readlink, realpath} from 'node:fs/promises';
 import {isAbsolute, join, relative, sep} from 'node:path';
 import {z} from 'zod';
-import {ovisModelIdentitySchema} from './ovis-document-adapter';
+import {ovisModelIdentitySchema} from '../../../shared/schemas/research-ovis';
 import type {OvisWorkerInstallation} from './ovis-worker';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);

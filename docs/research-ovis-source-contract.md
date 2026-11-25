@@ -176,10 +176,10 @@ node scripts/research/verify-ovis-source-artifact.mjs \
 
 ## Page-only Paper IR contract
 
-Parse contract5 / derivation11 / Paper IR2.2 accept explicit page-only locations
+Parse contract6 / derivation12 / Paper IR2.2 accept explicit page-only locations
 in blocks, equations, tables, figures, and their evidence. Coordinates and origin
 are either both null or a finite positive-area rectangle and its origin. HTML
-also emits page-only locations. Contract4 and scientific object version1 are
+also emits page-only locations. Earlier parse contracts and scientific object version1 are
 rejected; there is no zero-box conversion or legacy reader.
 
 Object and relation locations must match their source object/block. A table with
@@ -249,3 +249,52 @@ and published/reread 14 IR objects (11 blocks, 2 figures, 5 candidate captions).
 Its source stayed unchanged, and Worker job/cache directories were removed.
 Evidence: `.artifacts/research-toolchain-p3/image-artifact/` and
 `.artifacts/research-toolchain-p3/paper-content-image/`. Full `pnpm build` passed.
+
+
+## Application result and storage boundary
+
+Contract6 discriminates `paddleocr.js` and `ovisocr3-mlx` explicitly. Ovis results
+require complete/ocr/Metal, the fixed 8-bit model identity, CPython/MLX/MLX-VLM
+versions, a source capture manifest hash, structure and quality. Installation
+receipt identity must equal `modelManifest`. Mixed engines, missing evidence and
+older contracts are rejected without conversion. `research-ovis.ts` owns the
+shared model identity; there is no former adapter export alias.
+
+`ovis-parsed-document.ts` reconstructs a result from the caller-pinned capture,
+then exclusively creates its three derived artifacts. Existing artifacts remain
+untouched. Cancellation/failure removes only the artifacts directory this call
+created. The original capture remains available. Parser fingerprints include the
+result contract, Ovis parser/runtime versions and the content derivation identity.
+
+Before collection, the original raw output, EOS, model, images, crops and page
+frames are rechecked and scientific objects rebuilt. The entire result, middle
+JSON, Markdown and structured JSON must match this reconstruction. Equal forged
+copies do not count as evidence. Collection also binds its own asset reads to the
+verified hashes and sizes, and its coordinate artifact to the verified structured
+hash. Stored results preserve model/capture identity while replacing image paths
+with asset IDs; the existing SQLite/Paper IR publication consumes this result.
+No Ovis production parser route is registered by this change.
+
+Real PDF and JPEG captures passed collection, SQLite publication/readback,
+coordinate binding and Paper IR publication/readback. The PDF contains30blocks,
+7equations and1table/27cells; the image contains11blocks and2figures. Original
+captures were unchanged. Evidence is retained in
+`.artifacts/research-toolchain-p3/document-storage-pdf/` and
+`.artifacts/research-toolchain-p3/document-storage-image/`. These are storage
+checks using prior actual 8-bit inference, not a new inference or quality claim.
+
+Reproduce from the repository root:
+
+```sh
+node --test tests/unit/research-ovis-parsed-document.test.mjs
+node scripts/research/verify-ovis-document-storage.mjs \
+  --capture .artifacts/research-toolchain-p3/pdf-artifact-formula \
+  --output /absolute/new-evidence-directory
+```
+
+For this contract change, `pnpm test:unit` passed2869 with1skip and0failures;
+`node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs
+tests/renderer/paper-reader.test.mjs` passed93. The focused Ovis result suite
+passed6, including cancellation after a derived file was written and preserving
+the previous successful parse after a later capture failed. Final `pnpm build`,
+`pnpm check:ipc` and `git diff --check` passed from the repository root.

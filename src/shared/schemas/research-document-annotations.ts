@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {researchPdfCoordinateFrameSchema, researchPdfRegionProjectionSchema} from './research-document-coordinates';
-import {researchDocumentContentSchema} from './research-documents';
+import {researchDocumentBlockSchema} from './research-documents';
 import {researchRelationReviewerSchema} from './research-evidence-relations';
 import {researchInspectedEvidenceSchema} from './research-evidence-source';
 
@@ -51,7 +51,7 @@ export const researchDocumentAnnotationSchema = z.object({
   id: identifier,
   request: researchDocumentAnnotationCreateRequestSchema,
   requestHash: digest,
-  block: researchDocumentContentSchema.shape.blocks.element.nullable(),
+  block: researchDocumentBlockSchema.nullable(),
   actor: researchRelationReviewerSchema,
   recordedAt: identifier
 }).strict().refine(value => (value.block === null) === (value.request.target.blockId === null) &&

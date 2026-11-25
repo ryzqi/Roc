@@ -26,7 +26,7 @@ async function scene({targets = [block('first', 1), block('second', 3)]} = {}) {
   f.publish = (parseId, blocks = targets) => {
     f.repository.documents.begin(f.document.id, parseId);
     f.repository.documents.complete(f.document.id, parseId, {outputPath: '/tmp/synthetic-decision-output', files: {}, content: {
-      contractVersion: 5, engine: 'paddleocr.js', engineVersion: 'synthetic-decision-test', parserVersion: 'roc-research-parser/2',
+      contractVersion: 6, engine: 'paddleocr.js', engineVersion: 'synthetic-decision-test', parserVersion: 'roc-research-parser/2',
       parserFingerprint: hash('synthetic parser'), modelManifest: '', runtime: {node: 'synthetic'}, tier: 'compact',
       parseMode: 'native-text', device: 'cpu', sourceHash: f.document.sourceHash, pageCount: 4,
       content: blocks.map(block => block.text).join('\n\n'), blocks, assets: [],

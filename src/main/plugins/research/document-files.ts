@@ -7,8 +7,9 @@ import {attachPaperTables} from './pdf-table-extractor';
 import {attachPaperEquations} from './pdf-equation-extractor';
 import {attachPaperVisuals} from './pdf-caption-linker';
 import {assessPdfQuality} from './pdf-quality-assessor';
+import {verifyOvisParsedDocument} from './ovis-parsed-document';
 import {paperParseQualitySchema} from '../../../shared/schemas/research-paper-quality';
-import { researchDocumentLimits, researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
+import { researchDocumentLimits, researchParsedBlocksSchema, researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
 import {storedDocumentContentSchema, type StoredDocumentContent} from './document-repository';
 import { readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 import {researchCoordinateFrameContractVersion, researchDocumentCoordinateFrameSchema, researchDocumentCoordinateSnapshotSchema,
@@ -35,6 +36,7 @@ export type CollectedDocumentContent = {data: StoredDocumentContent; coordinates
 
 export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>): Promise<CollectedDocumentContent> {
   const parsed = researchParsedDocumentSchema.parse(input);
+  const ovis = parsed.engine === 'ovisocr3-mlx' ? await verifyOvisParsedDocument(output, parsed) : null;
   const requiresTables = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 6;
   const requiresEquations = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 7;
   const requiresVisuals = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 8;
@@ -65,13 +67,17 @@ export async function collectDocumentContent(root: string, output: string, input
     const path = researchRelativePath(asset.path);
     if (idsByPath.has(path) || (asset.page !== null && asset.page > parsed.pageCount)) throw new Error('research_document_asset_invalid');
     const bytes = await readResearchFile(output, path, researchDocumentLimits.maxAssetBytes);
+    const sha256 = researchContentHash(bytes);
+    if (ovis !== null && (ovis.assetIntegrity[path]?.sha256 !== sha256 || ovis.assetIntegrity[path]?.size !== bytes.length)) {
+      throw new Error('research_ovis_artifact_changed');
+    }
     size += bytes.length;
     if (size > maximumDocumentBytes) throw new Error('research_document_assets_too_large');
     if (!bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) throw new Error('research_document_asset_format_invalid');
     const id = `asset_${assets.length}`;
     idsByPath.set(path, id);
     files[id] = path;
-    assets.push({ id, kind: asset.kind, page: asset.page, size: bytes.length, sha256: researchContentHash(bytes) });
+    assets.push({ id, kind: asset.kind, page: asset.page, size: bytes.length, sha256 });
   }
   const blocks = parsed.blocks.map(({ imagePath, ...block }) => {
     if (!block.locator.trim() || block.locations.some((location) => location.page > parsed.pageCount)) throw new Error('research_document_location_invalid');
@@ -87,16 +93,17 @@ export async function collectDocumentContent(root: string, output: string, input
   const data = storedDocumentContentSchema.parse({
     outputPath: researchRelativePath(relative(root, output)),
     files,
-    content: {
-      contractVersion: parsed.contractVersion, engine: parsed.engine, engineVersion: parsed.engineVersion,
-      parserVersion: parsed.parserVersion, parserFingerprint: parsed.parserFingerprint,
-      modelManifest: parsed.modelManifest, runtime: parsed.runtime, tier: parsed.tier,
-      parseMode: parsed.parseMode, device: parsed.device, artifacts: parsed.artifacts,
-      sourceHash: parsed.sourceHash, pageCount: parsed.pageCount, content: parsed.content, warnings: parsed.warnings, blocks, assets,
-      ...(parsed.structure ? {structure: parsed.structure} : {}),
-      ...(parsed.quality ? {quality: parsed.quality} : {})
-    }
+    content: {...parsed, blocks, assets}
   });
+  if (ovis !== null) {
+    if (researchContentHash(structured) !== ovis.structuredSha256) throw new Error('research_ovis_artifact_changed');
+    return {data, coordinates: researchDocumentCoordinateSnapshotSchema.parse({
+      contractVersion: researchCoordinateFrameContractVersion, sourceHash: parsed.sourceHash,
+      parseHash: researchContentHash(JSON.stringify(data.content)),
+      artifact: {path: parsed.artifacts.structuredContent, sha256: researchContentHash(structured), size: structured.length},
+      pages: ovis.frames.map(frame => ({page: frame.page, frame}))
+    })};
+  }
   const value: unknown = JSON.parse(structured.toString('utf8'));
   if (typeof value !== 'object' || value === null) throw new Error('research_document_coordinate_artifact_invalid');
   if (parsed.structure && (!('structure' in value) ||
@@ -109,7 +116,7 @@ export async function collectDocumentContent(root: string, output: string, input
   }
   const captured = z.object({
     coordinateFrameContractVersion: z.literal(researchCoordinateFrameContractVersion), parserFingerprint: z.string(),
-    content: z.string(), blocks: researchParsedDocumentSchema.shape.blocks,
+    content: z.string(), blocks: researchParsedBlocksSchema,
     pages: z.array(z.object({page: z.number().int().positive(), text: z.string(), regions: z.array(z.unknown()),
       coordinateFrame: researchDocumentCoordinateFrameSchema.nullable(),
       nativeTextItems: z.array(z.unknown()).optional(), fusion: z.unknown().optional()}).strict()).max(500)

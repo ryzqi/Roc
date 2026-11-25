@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {ovisModelIdentitySchema, ovisParserVersion, ovisRuntimeSchema} from './research-ovis';
 import { researchLatexDiagnosticSchema, researchTemplateCompileRequestSchema } from './research';
 import {researchBlockReadingSchema} from './research-document-reading';
 import {paperStructureSchema} from './research-paper-structure';
@@ -107,10 +108,10 @@ export const researchDocumentLimits = {
   maxArtifactBytes: 128 * 1024 * 1024
 } as const;
 
-export const researchParseContractVersion = 5;
+export const researchParseContractVersion = 6;
 /** Increment when text, locations or indexed scientific objects change; retain immutable prior parses. */
-export const researchDerivationGenerationVersion = 11;
-export const researchParserVersion = 'roc-research-parser/11' as const;
+export const researchDerivationGenerationVersion = 12;
+export const researchParserVersion = 'roc-research-parser/12' as const;
 
 /** Stable index identity tracks derivation semantics, not the artifact contract version. */
 export function researchParserIdentityPayload(modelManifest: string) {
@@ -131,8 +132,23 @@ export const researchParseOptionsSchema = z.object({
 export type ResearchParseOptions = z.infer<typeof researchParseOptionsSchema>;
 export type ResearchParseTier = (typeof researchParseTiers)[number];
 
+export const researchParsedBlockSchema = z.object({
+  id: z.string(), kind: z.enum(['heading', 'paragraph', 'table', 'figure', 'formula']), label: z.string(), text: z.string(),
+  locator: z.string(), imagePath: z.string().nullable(), reading: researchBlockReadingSchema.optional(),
+  table: paperTableSchema.optional(),
+  equation: paperEquationSchema.optional(),
+  visual: paperVisualSchema.optional(),
+  locations: z.array(researchPageLocationSchema)
+}).strict();
+export const researchParsedBlocksSchema = z.array(researchParsedBlockSchema).max(researchDocumentLimits.maxBlocks).superRefine((blocks, context) => {
+  for (const block of blocks) try {assertPaperTableBlock(block); assertPaperEquationBlock(block); assertPaperVisualBlock(block);}
+  catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
+  try {assertPaperVisualEvidence(blocks);}
+  catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
+});
+
 /** Native-text page-image availability is explicit in `assets`. */
-export const researchParsedDocumentSchema = z.object({
+export const researchPaddleParsedDocumentSchema = z.object({
   contractVersion: z.literal(researchParseContractVersion),
   engine: z.literal('paddleocr.js'),
   engineVersion: z.string(),
@@ -148,24 +164,24 @@ export const researchParsedDocumentSchema = z.object({
   content: z.string(),
   structure: paperStructureSchema.optional(),
   quality: paperParseQualitySchema.optional(),
-  blocks: z.array(z.object({
-    id: z.string(), kind: z.enum(['heading', 'paragraph', 'table', 'figure', 'formula']), label: z.string(), text: z.string(),
-    locator: z.string(), imagePath: z.string().nullable(), reading: researchBlockReadingSchema.optional(),
-    table: paperTableSchema.optional(),
-    equation: paperEquationSchema.optional(),
-    visual: paperVisualSchema.optional(),
-    locations: z.array(researchPageLocationSchema)
-  }).strict()).max(researchDocumentLimits.maxBlocks).superRefine((blocks, context) => {
-    for (const block of blocks) try {assertPaperTableBlock(block); assertPaperEquationBlock(block); assertPaperVisualBlock(block);}
-    catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
-    try {assertPaperVisualEvidence(blocks);}
-    catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}
-  }),
+  blocks: researchParsedBlocksSchema,
   assets: z.array(z.object({ path: z.string(), kind: z.enum(['page', 'figure', 'table']), page: z.number().int().positive().nullable() }).strict())
     .max(researchDocumentLimits.maxAssets),
   artifacts: z.object({ middleJson: z.string(), markdown: z.string(), structuredContent: z.string() }).strict(),
   warnings: z.array(z.string())
 }).strict();
+
+export const researchOvisParsedDocumentSchema = researchPaddleParsedDocumentSchema.extend({
+  engine: z.literal('ovisocr3-mlx'), engineVersion: ovisRuntimeSchema.shape['mlx-vlm'], parserVersion: z.literal(ovisParserVersion),
+  modelManifest: hash, modelIdentity: ovisModelIdentitySchema, runtime: ovisRuntimeSchema,
+  tier: z.literal('complete'), parseMode: z.literal('ocr'), device: z.literal('metal'),
+  sourceCapture: z.object({path: z.literal('manifest.json'), sha256: hash}).strict(),
+  structure: paperStructureSchema, quality: paperParseQualitySchema
+}).strict();
+export const researchParsedDocumentSchema = z.discriminatedUnion('engine', [
+  researchPaddleParsedDocumentSchema, researchOvisParsedDocumentSchema
+]).refine(value => value.engine !== 'ovisocr3-mlx' || value.modelManifest === value.modelIdentity.installationReceiptSha256,
+  'research_ovis_model_identity_mismatch');
 
 export const researchRenderedPdfSchema = z.object({
   path: z.string(), page: z.number().int().positive(), pageCount: z.number().int().positive(),

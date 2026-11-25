@@ -166,7 +166,7 @@ async function scene({long=false,managed=false,experiment=false,child=false}={})
     ])=>{
       f.repository.documents.begin(f.document.id,parseId);
       f.repository.documents.complete(f.document.id,parseId,{outputPath:'/tmp/synthetic-ui-parse',files:{},content:{
-        contractVersion:5,engine:'paddleocr.js',engineVersion:'synthetic-ui-test',parserVersion:'roc-research-parser/2',
+        contractVersion: 6,engine:'paddleocr.js',engineVersion:'synthetic-ui-test',parserVersion:'roc-research-parser/2',
         parserFingerprint:hash('synthetic ui parser'),modelManifest:'',runtime:{node:'synthetic'},tier:'compact',
         parseMode:'native-text',device:'cpu',sourceHash:f.document.sourceHash,pageCount:4,
         content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],
