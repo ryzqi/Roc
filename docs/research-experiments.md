@@ -4,6 +4,8 @@
 
 TypeScript 使用 `{ engine: "typescript", runtime: { kind: "bundled-node" } }`，源文件扩展名为 `.mts`，`sourceVersion` 为 `1`。Electron 内置 Node 直接剥离 TypeScript 类型，不运行额外转译器。模块必须导出 `async function run(context)`，并以 `undefined` 结束；需要保留的结果通过 `context.files` 写入输出目录。源文件及 `inputPaths` 会先复制到只读快照中。
 
+实验进程只授予 CSV 解析（`csv-parse`）、CSV 输出（`csv-stringify`）和统计（`simple-statistics`）三个实际使用的包目录。原先列入运行环境却从未加载的 `d3-dsv` 已移除；环境身份会按新包集合重新计算，既有实验记录不会被改写。
+
 `context` 提供冻结的 `parameters`、声明过的 `inputPaths`、取消信号 `signal`，以及以下文件和统计接口：
 
 - `files.readText(path)`、`files.readCsv(path, { delimiter? })`

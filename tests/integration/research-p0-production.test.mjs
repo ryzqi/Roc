@@ -545,7 +545,7 @@ async function runtimeDescription() {
   const runnerHash = hash(await readFile(runnerPath));
   const require = createRequire(import.meta.url);
   const packageEntries = {}, packageRoots = [], packages = [];
-  for (const name of ['csv-parse', 'csv-stringify', 'd3-dsv', 'simple-statistics']) {
+  for (const name of ['csv-parse', 'csv-stringify', 'simple-statistics']) {
     const entry = await realpath(require.resolve(name));
     let root = dirname(entry);
     while (!existsSync(join(root, 'package.json'))) {

@@ -83,7 +83,7 @@ function parseRequest(value: unknown): RunnerRequest {
     throw new Error('research_experiment_limits_invalid');
   }
   const packageEntries: Record<string, string> = {};
-  for (const name of ['csv-parse', 'csv-stringify', 'd3-dsv', 'simple-statistics']) {
+  for (const name of ['csv-parse', 'csv-stringify', 'simple-statistics']) {
     const entry = value.packageEntries[name];
     if (typeof entry !== 'string' || !isAbsolute(entry)) throw new Error('research_experiment_package_invalid');
     packageEntries[name] = entry;

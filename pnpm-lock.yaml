@@ -212,9 +212,6 @@ importers:
       csv-stringify:
         specifier: 6.9.0
         version: 6.9.0
-      d3-dsv:
-        specifier: 3.0.2
-        version: 3.0.2
       deepagents:
         specifier: 1.17.0
         version: 1.17.0(7b12721d6dea3b5df5d86760c27e42cb)

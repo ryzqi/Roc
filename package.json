@@ -86,7 +86,6 @@
     "croner": "11.0.1",
     "csv-parse": "7.0.3",
     "csv-stringify": "6.9.0",
-    "d3-dsv": "3.0.2",
     "deepagents": "1.17.0",
     "fast-xml-parser": "5.12.1",
     "htmlparser2": "12.0.0",

@@ -4,6 +4,8 @@
 
 文档解析使用 Electron 主进程中的 TypeScript 管线：PaddleOCR.js、ONNX Runtime 和 PDF.js，版本以项目锁文件为准。任务经 [`research-job-cli.ts`](../../src/main/plugins/research/research-job-cli.ts) 在隔离子进程执行；模型下载由用户主动触发，推理子进程没有网络权限。[生产默认解析选项](../../src/main/plugins/research/toolchain.ts)使用 CPU；主进程显式选择 CoreML 时，无法创建 CoreML 会话会回退到 CPU，结果记录实际设备。
 
+ONNX 原生绑定仅在确实启动 OCR 模型会话前加载；HTML 与可直接提取文本的 PDF 不再因解析模块导入而初始化 ONNX Runtime。扫描件和图片仍须有已校验模型，推理结果与来源回执合同不变。
+
 模型文件不随安装包分发，默认保存在应用数据根下的 `research-models/`，安装和加载前校验固定 revision、大小与 SHA-256。包内容、下载量和许可见[模型说明](../research-models/README.md)。
 
 解析契约为 v4，派生代次为 10，parser 为 `roc-research-parser/10`；权威版本见 [research-production.ts](../../src/shared/schemas/research-production.ts)。输入支持 PDF、HTML、PNG、JPEG、BMP、WebP 和 TIFF；HTML 与带文本层的 PDF 可以不下载模型，扫描件及图片需要模型。旧 Python 解析器与旧模型包已移除，不提供旧协议兼容路径。

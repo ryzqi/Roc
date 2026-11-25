@@ -12,8 +12,6 @@ import {attachPaperVisuals} from './pdf-caption-linker';
 import {paperVisualVersion} from '../../../shared/schemas/research-paper-visual';
 import {assessPdfQuality} from './pdf-quality-assessor';
 import {paperQualityVersion} from '../../../shared/schemas/research-paper-quality';
-import * as UTIF from 'utif';
-import * as ort from 'onnxruntime-node';
 import {
   createFormulaTokenizerVocabulary,
   getObjectDetectionPreset,
@@ -487,6 +485,12 @@ async function createStructureService(
   const layout = buffers.get('layout');
   const table = buffers.get('table');
   if (!ocrDet || !ocrRec || !dictionary || !layout || !table) throw new ResearchProcessError('research_model_asset_missing');
+  // Native-text PDFs and HTML never create OCR sessions. Load the native ONNX
+  // binding only for a validated OCR run, avoiding its initialization in the
+  // common model-free parsing path.
+  throwIfAborted(signal);
+  const ort = await import('onnxruntime-node');
+  throwIfAborted(signal);
   let usedCpuFallback = false;
   const modelStages = new Map<ArrayBuffer, ProcessingStage>();
   const modelBuffer = (buffer: Buffer, stage: ProcessingStage): ArrayBuffer => {
@@ -661,6 +665,8 @@ type RasterDocument = { pageCount: number; page(pageNumber: number): Promise<Ras
 export async function decodeRasterDocument(path: string): Promise<RasterDocument> {
   const extension = extname(path).toLowerCase();
   if (extension === '.tif' || extension === '.tiff') {
+    // TIFF decoding is not needed for PDF, HTML, PNG or JPEG parsing.
+    const UTIF = await import('utif');
     const buffer = toArrayBuffer(await readFile(path));
     const pages = UTIF.decode(buffer);
     if (pages.length === 0) researchJobError('research_image_decode_failed');
