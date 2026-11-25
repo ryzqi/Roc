@@ -232,11 +232,12 @@ def main() -> None:
     output.mkdir()
     predictions = output / "predictions"
     predictions.mkdir()
-    write_json(output / "started.json", {"configurationSha256": sha256(CONFIG_PATH),
+    source_identity = {"configurationSha256": sha256(CONFIG_PATH),
         "scriptSha256": sha256(Path(__file__)),
         "independentMetricsSha256": sha256(Path(__file__).with_name("quality_metrics.py")),
         "runtimeConfigurationSha256": sha256(Path(__file__).with_name("runtime.py")),
-        "environmentLockSha256": sha256(Path(__file__).with_name("environment.lock.json")),
+        "environmentLockSha256": sha256(Path(__file__).with_name("environment.lock.json"))}
+    write_json(output / "started.json", {**source_identity,
         "arm": args.arm, "network": "denied-by-seatbelt", "performanceQualification": False})
     baseline = args.arm == "gold-empty-baseline"
     inference = None
@@ -304,8 +305,7 @@ def main() -> None:
     write_json(output / "denominator-audit.json", audit)
     write_json(output / "report.json", {"schemaVersion": 1, "arm": args.arm,
         "status": "scored" if audit["validEvaluatorGold"] else "invalid-evaluator-or-denominator",
-        "configurationSha256": sha256(CONFIG_PATH), "scriptSha256": sha256(Path(__file__)),
-        "independentMetricsSha256": sha256(Path(__file__).with_name("quality_metrics.py")),
+        **source_identity,
         "inferenceReportSha256": sha256(args.inference / "report.json") if args.inference else None,
         "goldSha256": sha256(gold_path), "pages": len(rows), "text": totals,
         "officialCDM": metrics["display_formula"]["all"]["CDM"]["all"],

@@ -98,3 +98,18 @@ All 347 pages remain in independent reports; invalid model output is an empty pr
 ```
 
 Use `--arm 8bit` and its corresponding inference/output directory for the other arm. Gold coverage is audited per original index and position, expanding merged matches; upstream majority-category changes do not create a different gold identity. Pure prediction rows (`gt_idx=['']`) stay in upstream metrics and are counted separately, without becoming gold or requiring a gold render. Regression checks cover missing/duplicated gold, merged matches, extra predictions and renderer failures. The full gold baseline and model scores are separate runtime work. No score from this workflow automatically adopts the model or qualifies the skipped page classes.
+
+
+## Saved-result re-audit
+
+The initial empty-prediction baseline completed all 347 pages: 2,240 official text identities, 597 formula identities on 56 pages and 323 table identities on 227 pages. Every formula had nonempty gold glyph rendering. CDM and TEDS were both zero as expected for empty predictions. The current audit found no scorer errors, matcher timeout fallbacks or missing pages. These counts describe the upstream scorer's applicable rows; they are not a claim that every raw annotation becomes a scoring row. Independent text scoring retains its separately frozen broader text coverage.
+
+That long-running baseline had loaded an earlier runner before denominator-audit fixes. Its original end report read the then-current on-disk source hash, so it cannot identify the actual in-memory implementation. The original evidence remains unchanged. `reaudit.py` records every input file hash, the original start/end runner hashes and the current auditor hash in a new output directory. Future runs capture source identities once at startup and retain them at completion.
+
+```sh
+.runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/reaudit.py \
+  --source .artifacts/research-toolchain-p3/scoring-gold-baseline \
+  --output .artifacts/research-toolchain-p3/scoring-gold-baseline-audit
+```
+
+This actual re-audit passed with status `qualified-gold-denominator` and explicitly reports the runner-file change during the original run. Use `scoring-gold-baseline-audit` as `--baseline` for subsequent arms. The audit neither reruns nor patches the official evaluator and refuses to overwrite either output or original evidence. The complete evaluator regression suite now passes 16/16, including original-evidence preservation and source-drift reporting. Model scores, reading order and independent backend parity remain separate gates.
