@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "scope": "three-page independent official Transformers/PyTorch implementation parity; not a 347-page independent baseline",
+  "modelRevision": "5b252386ba615bd464a5a26597560eaba87dae5c",
+  "installationReceiptSha256": "7c7a694446845d7659f6d42997190f53250061c6a9e5b4012b1332a6d63be057",
+  "promptSha256": "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1",
+  "formattedPromptSha256": "ce378948dcf390d26edc26d089805f48147de6044525a69e24a2d48c1229e709",
+  "pages": [
+    {
+      "id": "science-formulas-table",
+      "image": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-39/output/pages/page-1.png",
+      "sha256": "4fd0daf27acd399b12399208f95819f247fda0102a65614a244cdee75d2ea1b3"
+    },
+    {
+      "id": "science-dense-tables",
+      "image": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-38/output/pages/page-1.png",
+      "sha256": "aed10e61cc4122e0315d38c09e9f96026f0c93af2a26c5cb15acf4fa596f75ba"
+    },
+    {
+      "id": "science-charts-captions",
+      "image": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-34/output/pages/page-1.png",
+      "sha256": "411e3d7d3ef8adb88b75ebbb2a2da4280ebea10f31c91cfbdcc47496f75e6433"
+    }
+  ],
+  "settings": {
+    "dtype": "bfloat16",
+    "device": "cpu",
+    "torchThreads": 1,
+    "attentionImplementation": "sdpa",
+    "seed": 0,
+    "doSample": false,
+    "maxNewTokens": 16384,
+    "enableThinking": false,
+    "minPixels": 200704,
+    "maxPixels": 8294400,
+    "eosTokenIds": [
+      248044,
+      248046
+    ]
+  },
+  "inputComparison": {
+    "inputIds": "exact",
+    "attentionMask": "exact",
+    "imageGrid": "exact",
+    "pixelValues": "report max absolute float32 error and effective bfloat16 bit equality; no implicit tolerance waiver"
+  },
+  "outputComparison": {
+    "termination": "official EOS required; no truncation",
+    "jsonParsing": "strict; no repair or cleanup",
+    "blockCount": "exact",
+    "category": "exact per ordered block",
+    "content": "exact UTF-8 bytes per ordered block, including LaTeX and HTML",
+    "bboxMaximumAbsoluteDifference": 1,
+    "bboxUnits": "integer 0..999, one coordinate unit equals 1/1000 input image dimension",
+    "failurePolicy": "retain all evidence and report; do not widen thresholds after observing results"
+  },
+  "performanceQualification": false
+}
