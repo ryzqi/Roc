@@ -121,3 +121,50 @@ inventory paths and lease cleanup. `pnpm typecheck` also passes. Evidence:
 ```sh
 node --test tests/unit/research-ovis-model-store.test.mjs
 ```
+
+## PDF source artifacts
+
+`ovis-pdf-artifact.ts` prepares PDF evidence for the future parser without
+registering a production route. It renders the selected actual PDF pages at
+scale2 through the existing bounded PDF.js6.5.438 path, records the measured
+rotation/CropBox/UserUnit frame and binds each PNG hash to the source PDF hash.
+One Worker processes the document's pages. Native text/items remain separate
+from generated content; neither matching words nor a plausible box implicitly
+verifies the generated region.
+
+The artifact retains exact raw output, token sequence, input image, model
+identity, candidate geometry and source page. Figure/table crops are copied from
+the captured page pixels, never from model-generated paths. The integer crop
+rectangle uses outward rounding and is recorded separately from the unchanged
+candidate box. Crops remain unverified and citations remain page-only. This does
+not reconstruct cross-page table cells or establish PDF quality against gold.
+
+An exclusively created directory and final atomic `manifest.json` marker keep
+existing output intact. Source changes, incomplete output and cancellation
+prevent publication and remove owned output. Unproven Worker termination retains
+the input rasters without a completion marker for recovery. A512MiB total budget
+includes rasters, crops and evidence; each page raster remains bounded by the
+existing renderer. Cancellation during a raster waits for that bounded render
+to settle before cleanup.
+
+The real frozen PDF slice completed with11regions and2source crops. Generation
+took30.910s, supervised hold38.862s, sampled peakRSS1,581,547,520B under mixed host
+load. Worker temporary job/cache directories were removed and the installation
+lease released. Evidence is retained in
+`.artifacts/research-toolchain-p3/pdf-artifact/`; this is one PDF plumbing check,
+not full application, quality or isolated performance qualification.
+
+From the repository root,27boundary/rendering tests and the full `pnpm build`
+(including typecheck and renderer chunk checks) passed:
+
+```sh
+node --test tests/unit/research-ovis-pdf-artifact.test.mjs \
+  tests/unit/research-ovis-worker.test.mjs \
+  tests/unit/research-ovis-document-adapter.test.mjs \
+  tests/unit/research-pdf-raster-lifetime.test.mjs \
+  tests/unit/research-pdf-native-text.test.mjs
+node scripts/research/verify-ovis-pdf-artifact.mjs \
+  --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  --source-relative ori_pdfs/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.pdf \
+  --output /absolute/new-evidence-directory
+```
