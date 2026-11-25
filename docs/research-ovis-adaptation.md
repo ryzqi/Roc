@@ -55,6 +55,14 @@ formula horizontal bias is 0.0151225660. These are recorded in
 question of permitting verified page-only citations while retaining unverified
 regions has been raised separately. No acceptance requirement has been waived.
 
+A [saved-output formula geometry diagnostic](research-ovis-formula-geometry.md)
+reproduces both biases and identifies a region-semantics mismatch in tagged
+equations: some gold regions include the right-side number, while Ovis emits the
+body and number separately. This does not change the existing failure or qualify
+an alternative region metric. The [new decoder candidate](../evaluation/ovis-decoder/README.md)
+has separate full-cohort and independent-backend checks; neither automatically
+enables the application parser.
+
 `scripts/research/probe-ovis-repetition.py` creates an explicitly labelled
 diagnostic copy of the frozen inference script. It changes only the repetition
 penalty, records the unchanged 20-token context window, preserves model/prompt/
