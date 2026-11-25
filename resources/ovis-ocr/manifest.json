@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "model": {
+    "repository": "ATH-MaaS/OvisOCR3",
+    "revision": "5b252386ba615bd464a5a26597560eaba87dae5c",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 11544,
+        "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a"
+      },
+      {
+        "path": "chat_template.jinja",
+        "size": 7755,
+        "sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+      },
+      {
+        "path": "config.json",
+        "size": 2908,
+        "sha256": "37674e15aefced4df9aa8123f6634b7201d72756685e2e1b591d8f7d8d3b69bc"
+      },
+      {
+        "path": "generation_config.json",
+        "size": 147,
+        "sha256": "c3ff3171724248f377efaf37197cce6f7bf1f4918a1ed3f31ef2ce53be91ecc1"
+      },
+      {
+        "path": "merges.txt",
+        "size": 3353259,
+        "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+      },
+      {
+        "path": "model.safetensors",
+        "size": 1706030528,
+        "sha256": "aa2311c6b22b07cf3afe9aac6e8bcb02a2b19dd8671b2a91d0b144071577e600"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 390,
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+      },
+      {
+        "path": "prompts/chart_parsing.txt",
+        "size": 853,
+        "sha256": "bb933216bdad5a81a3eca59e770bdb7d4b936ab85f97a2af6de5dd0890371f38"
+      },
+      {
+        "path": "prompts/crosspage_table.txt",
+        "size": 614,
+        "sha256": "b5f38187df651d83bb46b6756d1b9386d04120cb6b299cfd1e93f9e0dec564d1"
+      },
+      {
+        "path": "prompts/document_layout.txt",
+        "size": 615,
+        "sha256": "89bcc73c7340ff9fd83673c1aee2354c2cc735c6eded0ce2aa4501f28b914361"
+      },
+      {
+        "path": "prompts/document_markdown.txt",
+        "size": 512,
+        "sha256": "dbf31d5899a86047ce0cd4d0d12cdc5616df1bea5d9a600b823098442c32997c"
+      },
+      {
+        "path": "prompts/document_structured.txt",
+        "size": 1110,
+        "sha256": "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1"
+      },
+      {
+        "path": "prompts/figure_captioning.txt",
+        "size": 1298,
+        "sha256": "944bb410dbe17aa1cbe65f6acb14585053473e8a988b120f98c95d97a7e844de"
+      },
+      {
+        "path": "prompts/formula_recognition.txt",
+        "size": 898,
+        "sha256": "b07b4c70a7585ddc2b4db33a1fff19bcacb1faf57b6db8ae2ebdb1035eeeb5b4"
+      },
+      {
+        "path": "prompts/image_classification.txt",
+        "size": 263,
+        "sha256": "b6136303c28ef0b486dc6c7e2c5aafa3cb7192a00ae5d3d4c4a71e546a828307"
+      },
+      {
+        "path": "prompts/kie_fields.txt",
+        "size": 243,
+        "sha256": "14d6098b2c7a5d31a328676fd5706d1385228e3e6d4fc2f27cd0f4c8bb3ec6ad"
+      },
+      {
+        "path": "prompts/kie_open.txt",
+        "size": 200,
+        "sha256": "76276d075a455aa795a58c128b6c1640d424accb1bd18d9d7b1ffd7edf760dad"
+      },
+      {
+        "path": "prompts/kie_schema.txt",
+        "size": 177,
+        "sha256": "e4cef2aec8d0e0b4a91b1c2af46a7af5048279e70fe5b152d039cf9454c245e5"
+      },
+      {
+        "path": "prompts/plain_ocr.txt",
+        "size": 419,
+        "sha256": "e037cf0013a757e19eae6d4d701f3b90848449fbebe44d1f8fa7d8ca4a5af9a7"
+      },
+      {
+        "path": "prompts/position_aware_vqa.txt",
+        "size": 530,
+        "sha256": "33338234f4ce8ae14269302280f06a191c0526bc30eff9443c1e0acd5d8d3ac9"
+      },
+      {
+        "path": "prompts/reference_grounding.txt",
+        "size": 1333,
+        "sha256": "9e9304cbd800c997f612634811b43159bcb17bbec5bf93809c03cd716794662a"
+      },
+      {
+        "path": "prompts/region_ocr.txt",
+        "size": 625,
+        "sha256": "0b7d7f40b2dffc744e7e93007bea8f8bc5039da65b92c37465a11159a7c88dfc"
+      },
+      {
+        "path": "prompts/text_translation.txt",
+        "size": 628,
+        "sha256": "82d6fecdacebd20f864e43c4d5d024b4dba03801118a83b48c5943b1c8b38dd7"
+      },
+      {
+        "path": "prompts/visual_question_answering.txt",
+        "size": 82,
+        "sha256": "910753f062284aeb81a4b02e7233ba838dc34b427e245801713381cd3e60c2d9"
+      },
+      {
+        "path": "prompts/word_spotting.txt",
+        "size": 1007,
+        "sha256": "7fb246da0a3b37529562e71e2fc685ac43fcf0266d22a443855fac70cc768a77"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 12807982,
+        "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 16709,
+        "sha256": "49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c"
+      },
+      {
+        "path": "video_preprocessor_config.json",
+        "size": 385,
+        "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+      },
+      {
+        "path": "vocab.json",
+        "size": 6722759,
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      }
+    ]
+  },
+  "runtime": {
+    "implementation": "cpython",
+    "pythonVersion": "3.14.10",
+    "system": "Darwin",
+    "machine": "arm64",
+    "minimumMacOS": "14.0"
+  },
+  "uv": {
+    "version": "0.13.9",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.13.9/uv-aarch64-apple-darwin.tar.gz",
+    "size": 14554974,
+    "sha256": "5aeca67f2283f75235de40d0bd9c0a5bbc5fce23b6d48b3bf9fa1b2db08382ca",
+    "member": "uv-aarch64-apple-darwin/uv",
+    "binarySize": 28309040,
+    "binarySha256": "0e17c316d23b33b4e840669f516f5cb7f5c1faa816ebd3824052ab50082ecefb"
+  },
+  "conversion": {
+    "quantize": true,
+    "q_bits": 8,
+    "q_group_size": 64,
+    "q_mode": "affine",
+    "quant_method": "rtn",
+    "dtype": "bfloat16",
+    "trust_remote_code": false,
+    "visionPolicy": "unquantized-bfloat16"
+  }
+}

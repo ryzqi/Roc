@@ -1,0 +1,3 @@
+# Standalone OvisOCR3 conversion runtime: CPython 3.14.10, macOS arm64.
+mlx==0.32.5
+mlx-vlm==0.8.1
