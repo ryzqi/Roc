@@ -1,3 +1,4 @@
+import {writePythonProjectFiles, createPythonFixtureService, preparePythonFixture, waitPythonPreparation} from '../unit/fixtures/python-environment.mjs';
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -12,12 +13,12 @@ const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
 assert.match(python.version, /^3\.14\.\d+$/u);
 let api, root;
 const receipts = [];
-before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-selection-')); });
+before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-preparation-')); });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4c-selection');
+  const output = join(process.cwd(), '.artifacts/research-toolchain-p2/service-preparation');
   await mkdir(output, { recursive: true });
-  await writeFile(join(output, 'python-selection.json'), JSON.stringify({
-    python, actualIsolatedPython: true, nativePicker: 'fixture supplied path; no actual user product selection', receipts
+  await writeFile(join(output, 'python-preparation.json'), JSON.stringify({
+    python, actualIsolatedPython: true, preparation: 'fixture installer with real isolated Python inspection', receipts
   }, null, 2));
   await rm(root, { recursive: true, force: true }); api.dispose();
 });
@@ -28,104 +29,91 @@ async function fixture(options = {}) {
   for (const dir of [workspace, packagePath, join(venv, 'bin'), jobDir]) await mkdir(dir, { recursive: true });
   const executable = join(venv, 'bin/python3');
   await symlink(python.executable, executable);
-  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
-  const lock = { schemaVersion: 1, python: { implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64' }, distributions: [] };
-  await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify(lock));
+  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion_info = ${python.version}\nimplementation = CPython\nuv = 0.13.9\n`);
+  await writePythonProjectFiles(workspace, python.version);
   await writeFile(join(packagePath, 'sitecustomize.py'), 'raise RuntimeError("UNTRUSTED_HOOK_EXECUTED")\n');
   const f = createResearchFixture(api, 'experiment', workspace);
-  const counts = { picks: 0, dispatches: 0 };
-  const service = new api.ResearchPythonEnvironmentService(f.repository, async (owner, signal) => {
-    counts.picks++; assert.equal(owner, 'window:72');
-    return options.picker === undefined ? executable : options.picker(owner, signal);
-  }, async request => {
+  const counts = {dispatches: 0};
+  const service = createPythonFixtureService(api, f.repository, path, executable, {run: async request => {
     counts.dispatches++;
     const result = await api.runResearchProcess(request);
-    receipts.push({ scenario: options.scenario ?? 'selection', admission: request.admission, result });
+    receipts.push({scenario: options.scenario ?? 'preparation', admission: request.admission, result});
     return options.afterRun === undefined ? result : options.afterRun(result, f);
-  });
-  const request = { projectId: f.project.id, requestId: 'explicit-selection' };
+  }});
+  const request = { projectId: f.project.id, requestId: 'explicit-preparation' };
   const human = (action, projectId = f.project.id, windowId = 72) => api.withResearchHumanContext({
-    capability: 'research.pythonEnvironments.select', projectId, windowId
+    capability: 'research.pythonEnvironments.prepare', projectId, windowId
   }, action);
-  return { ...f, path, workspace, venv, packagePath, jobDir, executable, lock, counts, service, request, human,
+  return { ...f, path, workspace, venv, packagePath, jobDir, executable, counts, service, request, human,
     admission: { projectId: f.project.id, priority: 'user' },
-    select: input => human(() => service.select(input ?? request)),
-    reference: selection => ({ projectId: f.project.id, selectionId: selection.snapshot.id, expectedHash: selection.snapshotHash }),
+    prepare: input => human(() => service.prepare(input ?? request)),
+    ready: async input => {
+      const operation = await human(() => service.prepare(input ?? request));
+      const state = await waitPythonPreparation(service, f.project.id, operation.id);
+      assert.equal(state.operation.phase, 'ready', state.operation.errorCode); return state.environment;
+    },
+    reference: preparation => ({ projectId: f.project.id, environmentId: preparation.snapshot.id, expectedHash: preparation.snapshotHash }),
     async cleanup() { await service.shutdown(); f.close(); } };
 }
 
-test('missing or invalid Python lock explains the prerequisite before opening a picker or executing Python', async () => {
+test('missing or invalid project inputs fail observably without a receipt and can be retried', async () => {
   const f = await fixture();
   try {
-    const lockPath = join(f.workspace, 'roc-python.lock.json');
-    await rm(lockPath);
-    await assert.rejects(f.select(), error => {
-      assert.equal(error.code, 'research_python_lock_required');
-      assert.equal(error.category, 'validation');
-      assert.match(error.message, /roc-python\.lock\.json/u);
-      return true;
-    });
-    for (const contents of ['', '{}']) {
-      await writeFile(lockPath, contents);
-      await assert.rejects(f.select(), error => {
-        assert.equal(error.code, 'research_python_lock_invalid');
-        assert.equal(error.category, 'validation');
-        assert.match(error.message, /roc-python\.lock\.json/u);
-        return true;
-      });
+    await rm(join(f.workspace, '.python-version'));
+    for (const [requestId, contents] of [['missing', null], ['invalid', '3.12']]) {
+      if (contents !== null) await writeFile(join(f.workspace, '.python-version'), contents);
+      const operation = await f.prepare({...f.request, requestId});
+      const state = await waitPythonPreparation(f.service, f.project.id, operation.id);
+      assert.equal(state.operation.phase, 'failed'); assert.ok(state.operation.errorCode);
+      assert.equal(state.environment, null); assert.deepEqual(f.counts, {dispatches: 0});
     }
-    assert.deepEqual(f.counts, { picks: 0, dispatches: 0 });
-    assert.deepEqual(f.repository.pythonEnvironments.list({ projectId: f.project.id }), []);
-    await writeFile(lockPath, JSON.stringify(f.lock));
-    assert.ok(await f.select());
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
-  } finally { await f.cleanup(); }
+    await writePythonProjectFiles(f.workspace, python.version);
+    assert.ok(await f.ready({...f.request, requestId: 'repaired'}));
+  } finally {await f.cleanup();}
 });
 
-test('main user selection binds actual isolated CPython identity and exact project; replay is readonly and resolve rechecks bytes', async () => {
+test('human preparation binds isolated CPython and project; replay is pure and leased verification rechecks bytes', async () => {
   const f = await fixture();
   try {
-    const selected = await f.select();
+    const selected = await f.ready();
     assert.equal(selected.snapshot.selectedExecutable, f.executable);
     assert.equal(selected.snapshot.executable, python.executable);
     assert.equal(selected.snapshot.workspacePath, f.workspace);
     assert.deepEqual(selected.snapshot.actor, { kind: 'user', id: 'window:72' });
     assert.equal(selected.snapshot.version, python.version);
-    assert.equal(f.counts.picks, 1); assert.equal(f.counts.dispatches, 1);
+    assert.equal(f.counts.dispatches, 1);
     const changes = f.db.prepare('SELECT total_changes()').pluck().get();
-    assert.deepEqual(await f.select(), selected);
-    assert.equal(f.counts.picks, 1); assert.equal(f.counts.dispatches, 1);
+    assert.deepEqual(await f.ready(), selected);
+    assert.equal(f.counts.dispatches, 1);
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), changes);
     const observed = [];
-    const resolved = await f.service.resolve(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, receipt => observed.push(receipt));
-    assert.equal(resolved.metadataHash, selected.snapshot.metadataHash);
-    assert.equal(resolved.code.hash, selected.snapshot.codeHash);
+    const resolved = await f.service.acquireRuntime(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, receipt => observed.push(receipt));
+    assert.equal(resolved.environment.metadataHash, selected.snapshot.metadataHash);
+    assert.equal(resolved.environment.code.hash, selected.snapshot.codeHash);
     assert.equal(observed.length, 1); assert.equal(observed[0].outcome, 'returned'); assert.equal(observed[0].exitCode, 0);
+    resolved.release();
     const actual = receipts.at(-1).result;
     assert.deepEqual(observed[0].usage, actual.resourceUsage); assert.deepEqual(observed[0].admission, actual.admission);
   } finally { await f.cleanup(); }
 });
 
-test('unsupported direct dependency explains how to choose a compatible environment without saving a selection', async () => {
+test('installed direct dependencies fail preparation with a specific error and no receipt', async () => {
   const f = await fixture();
   try {
     const metadata = join(f.packagePath, 'local_pkg-1.0.dist-info');
     await mkdir(metadata);
     await writeFile(join(metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: local-pkg\nVersion: 1.0\n');
     await writeFile(join(metadata, 'direct_url.json'), '{"url":"file:///private/tmp/local-pkg"}');
-    await assert.rejects(f.select(), error => {
-      assert.equal(error.code, 'research_python_direct_dependency_unsupported');
-      assert.equal(error.category, 'validation');
-      assert.match(error.message, /direct_url\.json/u);
-      assert.match(error.userAction, /独立.*环境/u);
-      return true;
-    });
+    const operation = await f.prepare();
+    const state = await waitPythonPreparation(f.service, f.project.id, operation.id);
+    assert.equal(state.operation.phase, 'failed');
+    assert.match(state.operation.errorCode, /direct_url|direct_dependency/u);
     assert.deepEqual(f.repository.pythonEnvironments.list({ projectId: f.project.id }), []);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
+    assert.deepEqual(f.counts, {dispatches: 1 });
   } finally { await f.cleanup(); }
 });
 
-test('existing environment API rechecks selected Python identity and refuses incomplete computation contracts', async () => {
+test('existing environment API rechecks prepared Python identity and refuses incomplete computation contracts', async () => {
   const f = await fixture({ scenario: 'environment-api' });
   const environments = new api.ResearchExperimentEnvironmentService({
     typescriptRuntime: async () => assert.fail('Python preview must not resolve TypeScript')
@@ -134,8 +122,8 @@ test('existing environment API rechecks selected Python identity and refuses inc
     { error: (...args) => assert.fail(JSON.stringify(args)) },
     async () => assert.fail('environment preview must not dispatch a computation'));
   try {
-    const selected = await f.select();
-    const runtime = { kind: 'python', selectionId: selected.snapshot.id, expectedHash: selected.snapshotHash };
+    const selected = await f.ready();
+    const runtime = { kind: 'python', environmentId: selected.snapshot.id, expectedHash: selected.snapshotHash };
     const handlers = new Map();
     api.registerResearchExperimentCapabilities({ pluginId: '@roc/plugin-research', capabilities: {
       register(_plugin, descriptor, handler) { handlers.set(descriptor.name, input => handler(descriptor.inputSchema.parse(input))); }
@@ -153,7 +141,7 @@ test('existing environment API rechecks selected Python identity and refuses inc
     assert.equal(environment.version, python.version);
     assert.equal(environment.metadataHash, selected.snapshot.metadataHash);
     assert.deepEqual(environment.packages, []);
-    assert.deepEqual(environment.lockFiles, [selected.snapshot.lockFile]);
+    assert.deepEqual(environment.lockFiles, selected.snapshot.lockFiles);
     const { hash, ...identity } = environment;
     assert.equal(hash, createHash('sha256').update(JSON.stringify(identity)).digest('hex'));
     const changedSelection = await adapter.invoke('research.inspectExperimentEnvironment', [{
@@ -170,9 +158,9 @@ test('existing environment API rechecks selected Python identity and refuses inc
     }], 72);
     assert.equal(compute.ok, false);
     assert.deepEqual(f.repository.experiments.list(f.project.id, 100), []);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 3 });
+    assert.deepEqual(f.counts, {dispatches: 3 });
     await writeFile(join(f.packagePath, 'changed.py'), 'CHANGED = True\n');
-    await assert.rejects(experiments.inspect(f.project.id, runtime), /research_python_selection_environment_changed/u);
+    await assert.rejects(experiments.inspect(f.project.id, runtime), /research_python_environment_changed/u);
     assert.deepEqual(f.repository.pythonEnvironments.get(f.reference(selected)), selected);
     receipts.push({ scenario: 'environment-api-identity', environment });
   } finally { await experiments.shutdown(); await f.cleanup(); }
@@ -182,24 +170,24 @@ test('Python preparation rejects foreign or absent project admission before disp
   const f = await fixture({ scenario: 'environment-admission' });
   const dispatched = [];
   const resolver = {
-    async resolve(input, jobDir, signal, admission, onProbe) {
+    async acquireRuntime(input, jobDir, signal, admission, onProbe) {
       dispatched.push(admission);
-      return f.service.resolve(input, jobDir, signal, admission, onProbe);
+      return f.service.acquireRuntime(input, jobDir, signal, admission, onProbe);
     }
   };
   const environments = new api.ResearchExperimentEnvironmentService({
     typescriptRuntime: async () => assert.fail('Python must not use TypeScript')
   }, resolver);
   try {
-    const selected = await f.select();
+    const selected = await f.ready();
     const reference = f.reference(selected);
-    const runtime = { kind: 'python', selectionId: reference.selectionId, expectedHash: reference.expectedHash };
+    const runtime = { kind: 'python', environmentId: reference.environmentId, expectedHash: reference.expectedHash };
     const signal = new AbortController().signal;
     await assert.rejects(environments.inspect(runtime, f.jobDir, signal,
-      { projectId: null, priority: 'background' }, () => undefined), /research_python_selection_project_required/u);
+      { projectId: null, priority: 'background' }, () => undefined), /research_python_environment_project_required/u);
     assert.equal(dispatched.length, 0);
-    await assert.rejects(f.service.resolve(reference, f.jobDir, signal,
-      { projectId: 'foreign', priority: 'user' }, () => undefined), /research_python_selection_admission_mismatch/u);
+    await assert.rejects(f.service.acquireRuntime(reference, f.jobDir, signal,
+      { projectId: 'foreign', priority: 'user' }, () => undefined), /research_python_environment_admission_mismatch/u);
     assert.equal(f.counts.dispatches, 1);
     const probes = [], admission = { projectId: f.project.id, priority: 'background' };
     const prepared = await environments.inspect(runtime, f.jobDir, signal, admission, probe => probes.push(probe));
@@ -215,33 +203,33 @@ test('Python preparation rejects foreign or absent project admission before disp
     const foreignPath = join(f.path, 'foreign'); await mkdir(foreignPath);
     const foreign = f.repository.createProject({ title: 'Foreign', description: '', workspacePath: foreignPath });
     await assert.rejects(environments.inspect(runtime, f.jobDir, signal,
-      { projectId: foreign.id, priority: 'user' }, () => undefined), /research_python_selection_project_mismatch/u);
+      { projectId: foreign.id, priority: 'user' }, () => undefined), /research_python_environment_project_mismatch/u);
     f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
     await assert.rejects(environments.inspect(runtime, f.jobDir, signal, admission, () => undefined),
       /research_project_archived/u);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 2 });
+    assert.deepEqual(f.counts, {dispatches: 2 });
   } finally { await f.cleanup(); }
 });
 
-test('wire paths, actors, missing main authority, another project and another window cannot grant or replay selection', async () => {
+test('wire paths, actors, missing main authority, another project and another window cannot grant or replay preparation', async () => {
   const f = await fixture();
   try {
-    await assert.rejects(f.service.select(f.request), /research_human_required/u);
-    await assert.rejects(f.human(() => f.service.select(f.request), 'other-project'), /research_human_project_mismatch/u);
-    await assert.rejects(f.select({ ...f.request, selectedExecutable: f.executable }));
-    await assert.rejects(f.select({ ...f.request, actor: { kind: 'user', id: 'window:72' } }));
-    assert.deepEqual(f.counts, { picks: 0, dispatches: 0 });
-    const selected = await f.select();
-    await assert.rejects(f.human(() => f.service.select(f.request), f.project.id, 73), /research_python_selection_request_conflict/u);
+    assert.throws(() => f.service.prepare(f.request), /research_human_required/u);
+    assert.throws(() => f.human(() => f.service.prepare(f.request), 'other-project'), /research_human_project_mismatch/u);
+    await assert.rejects(f.prepare({ ...f.request, selectedExecutable: f.executable }));
+    await assert.rejects(f.prepare({ ...f.request, actor: { kind: 'user', id: 'window:72' } }));
+    assert.deepEqual(f.counts, {dispatches: 0});
+    const selected = await f.ready();
+    await assert.rejects(f.human(() => f.service.prepare(f.request), f.project.id, 73), /research_python_operation_request_conflict/u);
     const otherPath = join(f.path, 'other-project'); await mkdir(otherPath);
     const other = f.repository.createProject({ title: 'Other', description: '', workspacePath: otherPath });
-    assert.throws(() => f.repository.pythonEnvironments.get({ ...f.reference(selected), projectId: other.id }), /research_python_selection_project_mismatch/u);
-    assert.throws(() => f.repository.pythonEnvironments.get({ ...f.reference(selected), expectedHash: 'f'.repeat(64) }), /research_python_selection_hash_mismatch/u);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
+    assert.throws(() => f.repository.pythonEnvironments.get({ ...f.reference(selected), projectId: other.id }), /research_python_environment_project_mismatch/u);
+    assert.throws(() => f.repository.pythonEnvironments.get({ ...f.reference(selected), expectedHash: 'f'.repeat(64) }), /research_python_environment_hash_mismatch/u);
+    assert.deepEqual(f.counts, {dispatches: 1 });
   } finally { await f.cleanup(); }
 });
 
-test('generated selection API establishes actual main sender across native picker and probe awaits', async () => {
+test('generated prepare/status/cancel APIs bind main sender and expose immutable receipts', async () => {
   const f = await fixture();
   try {
     const handlers = new Map();
@@ -251,49 +239,58 @@ test('generated selection API establishes actual main sender across native picke
     const adapter = api.createPluginCapabilityAdapter({ invokeCapability(name, input) {
       assert.ok(handlers.has(name)); return handlers.get(name)(input);
     } });
-    assert.equal((await adapter.invoke('research.selectPythonEnvironment', [f.request])).ok, false);
-    assert.equal((await adapter.invoke('research.selectPythonEnvironment', [{ ...f.request, executable: f.executable }], 72)).ok, false);
-    assert.deepEqual(f.counts, { picks: 0, dispatches: 0 });
-    const result = await adapter.invoke('research.selectPythonEnvironment', [f.request], 72);
+    assert.equal((await adapter.invoke('research.preparePythonEnvironment', [f.request])).ok, false);
+    assert.equal((await adapter.invoke('research.preparePythonEnvironment', [{ ...f.request, executable: f.executable }], 72)).ok, false);
+    assert.deepEqual(f.counts, {dispatches: 0});
+    const result = await adapter.invoke('research.preparePythonEnvironment', [f.request], 72);
     assert.equal(result.ok, true, JSON.stringify(result));
-    const selected = result.data;
+    const state = await waitPythonPreparation(f.service, f.project.id, result.data.id);
+    const selected = state.environment;
     assert.deepEqual(selected.snapshot.actor, { kind: 'user', id: 'window:72' });
-    const read = await adapter.invoke('research.getPythonEnvironmentSelection', [f.reference(selected)], 72);
+    const read = await adapter.invoke('research.getPythonEnvironment', [f.reference(selected)], 72);
     assert.equal(read.ok, true); assert.deepEqual(read.data, selected);
-    const list = await adapter.invoke('research.listPythonEnvironmentSelections', [{ projectId: f.project.id }], 72);
+    const list = await adapter.invoke('research.listPythonEnvironments', [{ projectId: f.project.id }], 72);
     assert.equal(list.ok, true); assert.deepEqual(list.data, [selected]);
-    assert.equal((await adapter.invoke('research.selectPythonEnvironment', [f.request], 73)).ok, false);
+    const status = await adapter.invoke('research.getPythonEnvironmentStatus', [{projectId: f.project.id}], 72);
+    assert.equal(status.ok, true); assert.deepEqual(status.data, state);
+    const cancel = await adapter.invoke('research.cancelPythonEnvironmentPreparation', [{projectId: f.project.id, operationId: state.operation.id}], 72);
+    assert.equal(cancel.ok, true); assert.deepEqual(cancel.data, state.operation);
+    assert.equal((await adapter.invoke('research.cancelPythonEnvironmentPreparation', [{projectId: f.project.id, operationId: state.operation.id}])).ok, false);
+    assert.equal((await adapter.invoke('research.preparePythonEnvironment', [f.request], 73)).ok, false);
   } finally { await f.cleanup(); }
 });
 
-test('cancelled panel and archived project do not dispatch Python or store a selection', async () => {
-  const f = await fixture({ picker: async () => null });
-  try {
-    assert.equal(await f.select(), null); assert.equal(f.counts.dispatches, 0);
-    assert.deepEqual(f.repository.pythonEnvironments.list({ projectId: f.project.id }), []);
-    f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
-    await assert.rejects(f.select(), /research_project_archived/u);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 0 });
-  } finally { await f.cleanup(); }
-});
-
-test('environment changes require a fresh explicit selection; historical replay never authorizes changed execution', async () => {
+test('archived projects refuse preparation without a receipt or Python dispatch', async () => {
   const f = await fixture();
   try {
-    const selected = await f.select();
+    f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+    await assert.rejects(f.prepare(), /research_project_archived/u);
+    assert.deepEqual(f.counts, {dispatches: 0}); assert.deepEqual(f.service.list({projectId: f.project.id}), []);
+  } finally {await f.cleanup();}
+});
+
+test('changed installed code cannot be re-signed by prepare; historical replay never authorizes changed execution', async () => {
+  const f = await fixture();
+  try {
+    const selected = await f.ready();
     await writeFile(join(f.packagePath, 'changed-native.so'), 'changed declared code bytes');
-    await assert.rejects(f.service.resolve(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, () => undefined),
-      /research_python_selection_environment_changed/u);
-    assert.deepEqual(await f.select(), selected);
-    const fresh = await f.select({ ...f.request, requestId: 'explicit-new-selection' });
-    assert.notEqual(fresh.snapshot.metadataHash, selected.snapshot.metadataHash);
-    assert.notEqual(fresh.snapshotHash, selected.snapshotHash); assert.equal(f.counts.picks, 2);
+    await assert.rejects(f.service.acquireRuntime(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, () => undefined),
+      /research_python_environment_changed/u);
+    assert.deepEqual(await f.ready(), selected);
+    const changed = await f.prepare({...f.request, requestId: 'refuse-changed-code'});
+    const refused = await waitPythonPreparation(f.service, f.project.id, changed.id);
+    assert.equal(refused.operation.phase, 'failed'); assert.equal(refused.operation.errorCode, 'research_python_environment_changed');
+    assert.equal(f.service.list({projectId: f.project.id}).length, 1);
+    await rm(join(f.packagePath, 'changed-native.so'));
+    const fresh = await f.ready({...f.request, requestId: 'restored-code'});
+    assert.equal(fresh.snapshot.metadataHash, selected.snapshot.metadataHash);
+    assert.notEqual(fresh.snapshotHash, selected.snapshotHash);
     assert.equal(f.repository.pythonEnvironments.list({ projectId: f.project.id }).length, 2);
-    f.lock.python.version = '3.14.0';
-    await writeFile(join(f.workspace, 'roc-python.lock.json'), JSON.stringify(f.lock));
-    await assert.rejects(f.service.resolve(f.reference(fresh), f.jobDir, new AbortController().signal, f.admission, () => undefined),
+    await writeFile(join(f.workspace, '.python-version'), '3.14.0\n');
+    await assert.rejects(f.service.acquireRuntime(f.reference(fresh), f.jobDir, new AbortController().signal, f.admission, () => undefined),
       /research_python_runtime_version_mismatch/u);
-    await assert.rejects(f.select({ ...f.request, requestId: 'invalid-selection' }), /research_python_runtime_version_mismatch/u);
+    const invalid = await f.prepare({...f.request, requestId: 'invalid-preparation'});
+    assert.equal((await waitPythonPreparation(f.service, f.project.id, invalid.id)).operation.phase, 'failed');
     assert.equal(f.repository.pythonEnvironments.list({ projectId: f.project.id }).length, 2);
   } finally { await f.cleanup(); }
 });
@@ -306,17 +303,20 @@ test('project archive or workspace replacement while probe runs cannot persist o
       return result;
     } });
     try {
-      await assert.rejects(f.select(), scenario === 'archive' ? /research_project_archived/u : /research_python_selection_workspace_changed/u);
-      assert.equal(f.db.prepare('SELECT count(*) FROM research_python_environment_selections').pluck().get(), 0);
+      const operation = await f.prepare();
+      const state = await waitPythonPreparation(f.service, f.project.id, operation.id);
+      assert.equal(state.operation.phase, 'failed');
+      assert.match(state.operation.errorCode, scenario === 'archive' ? /research_project_archived/u : /research_python_environment_workspace_changed/u);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_python_environments').pluck().get(), 0);
     } finally { await f.cleanup(); }
   }
 });
 
-test('project release cancels actual held Python probe and shutdown refuses further native selection', async () => {
+test('project release cancels the actual held Python probe and shutdown refuses further preparation', async () => {
   const f = await fixture();
   let entered, startupFailed;
   const started = new Promise((resolve, reject) => { entered = resolve; startupFailed = reject; });
-  const service = new api.ResearchPythonEnvironmentService(f.repository, async () => f.executable, async request => {
+  const service = createPythonFixtureService(api, f.repository, f.path, f.executable, {run: async request => {
     const actual = api.runResearchProcess({ ...request, args: [...api.pythonExperimentFlags, '-c',
       'import time;open("python-ready","w").write("running");time.sleep(60)'] });
     const ready = (async () => {
@@ -337,53 +337,54 @@ test('project release cancels actual held Python probe and shutdown refuses furt
       return await actual;
     } catch (error) {
       startupFailed(error);
-      receipts.push({ scenario: 'cancel-held-selection', error: error.code, usage: error.resourceUsage, admission: error.admission });
+      receipts.push({ scenario: 'cancel-held-preparation', error: error.code, usage: error.resourceUsage, admission: error.admission });
       throw error;
     }
-  });
+  }});
   try {
-    const pending = f.human(() => service.select(f.request));
-    const rejected = assert.rejects(pending, /research_process_cancelled/u);
+    const pending = f.human(() => service.prepare(f.request));
+    const operation = await pending;
     await started;
     await service.releaseProject(f.project.id);
-    await rejected;
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_python_environment_selections').pluck().get(), 0);
+    const state = await waitPythonPreparation(service, f.project.id, operation.id);
+    assert.equal(state.operation.phase, 'cancelled');
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_python_environments').pluck().get(), 0);
     assert.ok(receipts.at(-1).admission.holdMs > 0);
     await service.shutdown();
-    await assert.rejects(f.human(() => service.select(f.request)), /research_python_selection_service_closed/u);
+    await assert.rejects(f.human(() => service.prepare(f.request)), /research_python_environment_service_closed/u);
   } finally { await service.shutdown(); await f.cleanup(); }
 });
 
-test('damaged stored JSON, column identity or missing selection fails without opening another panel', async () => {
+test('damaged stored JSON, column identity or missing environment fails without another Python dispatch', async () => {
   const f = await fixture();
   try {
-    const selected = await f.select();
-    const original = f.db.prepare('SELECT * FROM research_python_environment_selections WHERE id=?').get(selected.snapshot.id);
+    const selected = await f.ready();
+    const original = f.db.prepare('SELECT * FROM research_python_environments WHERE id=?').get(selected.snapshot.id);
     for (const mutate of [
-      () => f.db.prepare('UPDATE research_python_environment_selections SET snapshot_json=? WHERE id=?').run('{}', original.id),
-      () => f.db.prepare('UPDATE research_python_environment_selections SET snapshot_hash=? WHERE id=?').run('e'.repeat(64), original.id),
-      () => f.db.prepare('UPDATE research_python_environment_selections SET created_at=? WHERE id=?').run('2026-01-01T00:00:00.000Z', original.id)
+      () => f.db.prepare('UPDATE research_python_environments SET snapshot_json=? WHERE id=?').run('{}', original.id),
+      () => f.db.prepare('UPDATE research_python_environments SET snapshot_hash=? WHERE id=?').run('e'.repeat(64), original.id),
+      () => f.db.prepare('UPDATE research_python_environments SET created_at=? WHERE id=?').run('2026-01-01T00:00:00.000Z', original.id)
     ]) {
       mutate();
       assert.throws(() => f.repository.pythonEnvironments.get(f.reference(selected)));
       assert.throws(() => f.repository.pythonEnvironments.list({ projectId: f.project.id }));
-      await assert.rejects(f.select());
-      assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
-      f.db.prepare('UPDATE research_python_environment_selections SET snapshot_json=?,snapshot_hash=?,created_at=? WHERE id=?')
+      assert.throws(() => f.service.status({projectId: f.project.id}));
+      assert.deepEqual(f.counts, {dispatches: 1 });
+      f.db.prepare('UPDATE research_python_environments SET snapshot_json=?,snapshot_hash=?,created_at=? WHERE id=?')
         .run(original.snapshot_json, original.snapshot_hash, original.created_at, original.id);
     }
-    f.db.prepare('DELETE FROM research_python_environment_selections WHERE id=?').run(original.id);
-    await assert.rejects(f.service.resolve(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, () => undefined), /research_python_selection_not_found/u);
+    f.db.prepare('DELETE FROM research_python_environments WHERE id=?').run(original.id);
+    await assert.rejects(f.service.acquireRuntime(f.reference(selected), f.jobDir, new AbortController().signal, f.admission, () => undefined), /research_python_environment_not_found/u);
     assert.equal(f.counts.dispatches, 1);
   } finally { await f.cleanup(); }
 });
 
-test('disk reopen preserves existing project bytes and exact immutable selection without another probe', async () => {
+test('disk reopen preserves existing project bytes and exact immutable environment receipt without another probe', async () => {
   const f = await fixture();
   const dbPath = join(f.path, 'research.sqlite');
   let disk;
   try {
-    const selected = await f.select();
+    const selected = await f.ready();
     disk = new Database(dbPath); disk.pragma('foreign_keys=ON');
     api.applyResearchDatabaseSchema(disk);
     const row = f.db.prepare('SELECT * FROM research_projects WHERE id=?').get(f.project.id), keys = Object.keys(row);
@@ -399,7 +400,8 @@ test('disk reopen preserves existing project bytes and exact immutable selection
     assert.deepEqual(repository.pythonEnvironments.get(f.reference(selected)), selected);
     assert.deepEqual(repository.pythonEnvironments.findRequest(f.request), selected);
     assert.deepEqual(disk.prepare('SELECT * FROM research_projects').get(), row);
-    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
-    assert.equal((await readFile(join(f.workspace, 'roc-python.lock.json'), 'utf8')), JSON.stringify(f.lock));
+    assert.deepEqual(f.counts, {dispatches: 1 });
+    assert.equal(await readFile(join(f.workspace, '.python-version'), 'utf8'), `${python.version}\n`);
+    assert.throws(() => repository.pythonEnvironments.save(selected.snapshot), /request_conflict/u);
   } finally { disk?.close(); await f.cleanup(); }
 });

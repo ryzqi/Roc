@@ -164,7 +164,7 @@ async function validateArguments(request: PythonInstallerProcessRequest, command
   const operation = args[0];
   const common = ['--no-build', '--no-config', '--no-python-downloads'];
   const sync = ['--locked', '--no-install-project', '--no-install-workspace', '--no-default-groups'];
-  const { flags, options, positional } = parseOptions(args.slice(1), [...common, ...(operation === 'sync' ? [...sync, '--check'] : []), '--offline'],
+  const { flags, options, positional } = parseOptions(args.slice(1), [...common, ...(operation === 'sync' ? [...sync, '--check', '--reinstall'] : []), '--offline'],
     ['--python', '--project', '--cache-dir', '--default-index', '--keyring-provider', ...(operation === 'sync' ? ['--link-mode'] : [])]);
   requiredFlags(flags, [...common, ...(operation === 'sync' ? sync : [])]);
   if (positional.length !== 0 || python === undefined || options.get('--python') !== pin.python.key || options.get('--project') !== cwd
@@ -172,7 +172,8 @@ async function validateArguments(request: PythonInstallerProcessRequest, command
     || (options.has('--default-index') && options.get('--default-index') !== registry)
     || (options.has('--keyring-provider') && options.get('--keyring-provider') !== 'disabled')
     || (operation === 'sync' && options.get('--link-mode') !== 'copy')
-    || (flags.has('--offline') !== (request.network === 'none')) || (flags.has('--check') && !flags.has('--offline'))) {
+    || (flags.has('--offline') !== (request.network === 'none'))
+    || (flags.has('--check') && (!flags.has('--offline') || flags.has('--reinstall')))) {
     throw new Error('research_python_installer_arguments_invalid');
   }
   if (operation === 'lock' && !inside(join(dirname(managed), 'jobs'), cwd)) throw new Error('research_python_installer_lock_directory_invalid');
@@ -183,7 +184,7 @@ async function validateArguments(request: PythonInstallerProcessRequest, command
   return { operation, args };
 }
 
-async function installerProfile(command: string, python: string | undefined, readable: readonly string[], writable: readonly string[], network: 'registry' | 'none', operation: InstallerOperation): Promise<string> {
+async function installerProfile(command: string, python: string | undefined, readable: readonly string[], writable: readonly string[], network: 'registry' | 'none', operation: InstallerOperation, cwd: string): Promise<string> {
   const filter = async (path: string): Promise<string> => {
     if (!isAbsolute(path)) throw new Error('research_python_installer_absolute_path_required');
     const resolved = await realpath(path);
@@ -201,6 +202,7 @@ async function installerProfile(command: string, python: string | undefined, rea
       ? '(deny syscall-unix (syscall-number 82 147))' : '(deny syscall-unix (syscall-number 82 147 244))',
     `(allow process-exec ${executables.join(' ')})`, '(allow signal (target self) (target children))',
     '(allow mach-lookup)', '(allow sysctl-read)', '(allow file-read-metadata)',
+    `(allow file-read-data (literal ${JSON.stringify(cwd)}))`,
     `(allow file-read* ${[...reads, ...writes].join(' ')})`, `(allow file-map-executable ${reads.join(' ')})`,
     ...(writes.length === 0 ? [] : [`(allow file-write* ${writes.join(' ')})`]),
     '(deny file-write-create (subpath "/cores"))', '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
@@ -251,7 +253,7 @@ export async function runPythonInstallerProcess(request: PythonInstallerProcessR
         await verifyExecutable(command, command, operation === 'probe' ? pin.python.executable
           : { size: pin.uv.binarySize, sha256: pin.uv.binarySha256 });
         if (python !== undefined && python !== command) await verifyExecutable(python, expectedPython, pin.python.executable);
-        return await installerProfile(command, python, request.readablePaths, writable, request.network, operation);
+        return await installerProfile(command, python, request.readablePaths, writable, request.network, operation, cwd);
       },
       auditWrites: () => assertInstallerWriteLimits(writable, managed) });
   } catch (error) {

@@ -20,13 +20,13 @@ async function fixture() {
   await mkdir(join(environment, 'bin'), { recursive: true });
   await mkdir(join(environment, 'lib/python3.14/site-packages'), { recursive: true });
   await symlink(python.executable, join(environment, 'bin/python3'));
-  const config = `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`;
+  const config = `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nimplementation = CPython\nuv = 0.13.9\nversion_info = ${python.version}\n`;
   await writeFile(join(environment, 'pyvenv.cfg'), config);
   return { root, environment, executable: join(environment, 'bin/python3'), config,
     async dispose() { await rm(root, { recursive: true, force: true }); } };
 }
 
-test('real standalone and symlinked standard venv expose explicit canonical code paths without launching in discovery', async () => {
+test('real standalone and symlinked uv venv expose explicit canonical code paths without launching in discovery', async () => {
   const standalone = await discoverPythonEnvironmentControls(python.executable, signal());
   assert.equal(standalone.executable, python.executable);
   assert.equal(standalone.prefix, python.prefix); assert.equal(standalone.basePrefix, python.prefix);
@@ -79,7 +79,7 @@ test('venv controls refuse system packages, duplicate keys, missing home, wrong 
       [f.config + 'home = /private/tmp\n', /research_python_venv_config_invalid/u],
       [f.config.split('\n').slice(1).join('\n'), /research_python_venv_home_mismatch/u],
       [f.config.replace(dirname(python.executable), f.root), /research_python_venv_home_mismatch/u],
-      [f.config.replace(`version = ${python.version}`, 'version = 3.13.1'), /research_python_venv_version_unsupported/u],
+      [f.config.replace(`version_info = ${python.version}`, 'version_info = 3.13.1'), /research_python_venv_version_unsupported/u],
       [f.config + 'unknown-option = yes\n', /research_python_venv_config_invalid/u]
     ]) {
       await writeFile(join(f.environment, 'pyvenv.cfg'), config);

@@ -66,7 +66,8 @@ before(async () => {
         research: {
           getProject: async ({id}) => ok({id, title: id, status: 'active', workspacePath: '/workspace'}),
           listProjects: async () => ok([]),
-          listPythonEnvironmentSelections: async () => ok([]),
+          listPythonEnvironments: async () => ok([]),
+          getPythonEnvironmentStatus: async () => ok({operation: null, environment: null}),
           listTasks: async () => ok({tasks: window.overviewTasks ?? [task('task-a'), task('task-b')], nextTaskId: 'task-b', hasMore: false}),
           listArtifacts: async () => ok([]),
           listAcquisition: async () => ok({jobs: [], total: 0, nextOffset: null}),

@@ -42,7 +42,8 @@ before(async () => {
       return {api: {
         research: {
           getProject: async () => ok({id: 'project-a', title: '研究项目', status: 'active', workspacePath: '/project-a'}),
-          listPythonEnvironmentSelections: async () => ok([]),
+          listPythonEnvironments: async () => ok([]),
+          getPythonEnvironmentStatus: async () => ok({operation: null, environment: null}),
           listTasks: async () => ok({tasks: [], hasMore: false, nextTaskId: null}),
           onTaskUpdated: () => () => {}
         },

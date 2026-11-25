@@ -32,8 +32,8 @@ async function fixture() {
     siteLoaded: false, distributions: []
   };
   const metadataIdentity = {
-    inspectionContractVersion: 1, controls,
-    lockFile: { path: 'roc-python.lock.json', size: 100, sha256: 'a'.repeat(64) },
+    inspectionContractVersion: 2, controls,
+    lockFiles: ['pyproject.toml', 'uv.lock', '.python-version'].map(path => ({ path, size: 100, sha256: 'a'.repeat(64) })),
     code: code.hash, report, probe: 'b'.repeat(64)
   };
   return { code, metadataIdentity };
@@ -54,7 +54,7 @@ test('changed code, controls, lock, report and probe cannot retain the original 
   for (const mutate of [
     value => { value.code.entries.find(entry => entry.type === 'file').sha256 = 'e'.repeat(64); },
     value => { value.metadataIdentity.controls.controls = [{ path: join(root, 'pyvenv.cfg'), sha256: 'e'.repeat(64) }]; },
-    value => { value.metadataIdentity.lockFile.sha256 = 'e'.repeat(64); },
+    value => { value.metadataIdentity.lockFiles[0].sha256 = 'e'.repeat(64); },
     value => { value.metadataIdentity.report.version = '3.14.8'; },
     value => { value.metadataIdentity.probe = 'e'.repeat(64); }
   ]) {

@@ -30,7 +30,7 @@ export class VisualIndexService {
   }
   inspectModel(projectId: string, model: Omit<VisualModel, 'sha256'>, external: AbortSignal) {
     return this.work(projectId, external, async signal => {
-      const selection = {projectId, selectionId: model.selectionId, expectedHash: model.selectionHash};
+      const selection = {projectId, environmentId: model.environmentId, expectedHash: model.environmentHash};
       this.repository.pythonEnvironments.get(selection);
       const inspected = await inspectVisualModel(model.path, model.family, signal);
       this.requireProject(projectId); this.repository.pythonEnvironments.get(selection); inspected.assertCurrent();

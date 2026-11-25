@@ -297,6 +297,7 @@ function createDefaultMainKernelPlugins(input: {
       executionGrantBroker,
       roleExecutor: createResearchRoleExecutor(agentModelFactory, researchUsageLedger), toolchainRoot: input.researchToolchainRoot,
       modelsRoot: input.researchModelsRoot,
+      pythonRoot: join(input.paths.root, 'research-python'),
       libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
       exportRoot: join(input.paths.root, 'research-exports'), proseRoot: join(input.paths.root, 'research-prose') }),
     createMcpPlugin({ configService }),

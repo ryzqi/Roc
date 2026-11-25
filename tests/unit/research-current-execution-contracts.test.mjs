@@ -20,7 +20,7 @@ const removedEngine = (engine) => ({ ...fields, engine, arguments: [], sourcePat
 const { sourcePath: _typescriptPath, ...pythonFields } = fields;
 const python = { ...pythonFields, engine: 'python', source: { kind: 'file', path: 'analysis.py' }, sourceVersion: 1, seed: 42,
   arguments: [], expectedEnvironmentHash: 'b'.repeat(64),
-  runtime: { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) } };
+  runtime: { kind: 'python', environmentId: 'python_environment_selected', expectedHash: 'a'.repeat(64) } };
 
 test('current experiment creation and stored execution use identical strict request limits', () => {
   for (const request of [typescript, python]) {
@@ -82,16 +82,17 @@ test('removed R and Julia capability requests dispatch no environment inspection
   assert.equal(dispatches, 0);
 });
 
-test('Python inspection and starts require exact path-free selections, version, seed and preview identity', () => {
-  const runtime = { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) };
+test('Python inspection and starts require exact path-free environments, version, seed and preview identity', () => {
+  const runtime = { kind: 'python', environmentId: 'python_environment_selected', expectedHash: 'a'.repeat(64) };
   assert.deepEqual(experiments.researchExperimentEnvironmentRequestSchema.parse({ projectId: 'project', runtime }),
     { projectId: 'project', runtime });
   for (const changed of [
+    {kind: 'python', selectionId: runtime.environmentId, expectedHash: runtime.expectedHash},
     { ...runtime, selectedExecutable: '/usr/bin/python3' },
     { ...runtime, rootPath: '/runtime' },
     { ...runtime, actor: { kind: 'user', id: 'window:1' } },
     { ...runtime, expectedHash: 'wrong' },
-    { kind: 'python', selectionId: runtime.selectionId },
+    { kind: 'python', environmentId: runtime.environmentId },
     { kind: 'python', expectedHash: runtime.expectedHash }
   ]) assert.equal(experiments.researchExperimentRuntimeSchema.safeParse(changed).success, false);
   const { projectId: _projectId, ...owned } = python;

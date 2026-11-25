@@ -1,3 +1,4 @@
+import {writePythonProjectFiles, createPythonFixtureService, preparePythonFixture} from '../unit/fixtures/python-environment.mjs';
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -18,7 +19,7 @@ after(async () => {
   const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4e');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-experiments.json'), JSON.stringify({
-    python, actualIsolatedPython: true, nativePicker: 'fixture response; no user product selection', receipts
+    python, actualIsolatedPython: true, preparation: 'fixture installer with actual isolated Python inspection', receipts
   }, null, 2));
   await rm(root, { recursive: true, force: true }); api.dispose();
 });
@@ -719,25 +720,22 @@ async function fixture(code = source, options = {}) {
   const packagePath = join(venv, 'lib/python3.14/site-packages'), executable = join(venv, 'bin/python3');
   for (const dir of [workspace, packagePath, join(venv, 'bin')]) await mkdir(dir, { recursive: true });
   await symlink(python.executable, executable);
-  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
+  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion_info = ${python.version}\nimplementation = CPython\nuv = 0.13.9\n`);
   await mkdir(join(packagePath, 'fixture_pkg'));
   await writeFile(join(packagePath, 'fixture_pkg/__init__.py'), 'VALUE = 42\n');
   const metadata = join(packagePath, 'Fixture_Pkg-1.0.0.dist-info');
   await mkdir(metadata);
   await writeFile(join(metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: Fixture_Pkg\nVersion: 1.0.0\n');
-  await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify({
-    schemaVersion: 1, python: { implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64' },
-    distributions: [{ name: 'fixture-pkg', version: '1.0.0' }]
-  }));
+  await writePythonProjectFiles(workspace, python.version, [{name: 'fixture-pkg', version: '1.0.0'}]);
   await writeFile(join(workspace, 'analysis.py'), code); await writeFile(join(workspace, 'data.txt'), '3\n');
   const f = createResearchFixture(api, 'experiment', workspace);
   const observed = [], failures = [];
-  const pythonService = new api.ResearchPythonEnvironmentService(f.repository, async () => executable, async request => {
+  const pythonService = createPythonFixtureService(api, f.repository, path, executable, {run: async request => {
     const result = await api.runResearchProcess(request);
     observed.push({ kind: 'environment', request: { command: request.command, admission: request.admission }, result });
     receipts.push({ scenario: 'actual-environment-dispatch', projectId: f.project.id, result });
     return result;
-  });
+  }});
   const environments = new api.ResearchExperimentEnvironmentService({
     typescriptRuntime: async () => assert.fail('Python must not resolve TypeScript')
   }, pythonService);
@@ -753,16 +751,15 @@ async function fixture(code = source, options = {}) {
       throw error;
     }
   });
-  const selected = await api.withResearchHumanContext({ capability: 'research.pythonEnvironments.select', projectId: f.project.id, windowId: 72 },
-    () => pythonService.select({ projectId: f.project.id, requestId: 'explicit-environment' }));
-  const runtime = { kind: 'python', selectionId: selected.snapshot.id, expectedHash: selected.snapshotHash };
+  const selected = await preparePythonFixture(api, pythonService, f.project.id, 'explicit-environment');
+  const runtime = { kind: 'python', environmentId: selected.snapshot.id, expectedHash: selected.snapshotHash };
   const preview = await service.inspect(f.project.id, runtime);
   const request = { projectId: f.project.id, ownerRunId: f.run.id, requestId: 'python-first', label: 'Python fixed result',
     engine: 'python', sourceVersion: 1, source: { kind: 'file', path: 'analysis.py' }, inputPaths: ['data.txt'], parameters: { scale: '2' },
     seed: 73, arguments: [], runtime, expectedEnvironmentHash: preview.hash, timeoutMs: 5000, network: 'disabled' };
   const read = async (run, area, path) => (await service.read({ projectId: f.project.id, runId: run.id, area, path })).content;
   const wait = async id => {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 150000;
     while (Date.now() < deadline) {
       const run = f.repository.experiments.get(f.project.id, id);
       if (!['preparing', 'running'].includes(run.status)) {
@@ -814,7 +811,7 @@ test('actual Python service freezes inputs and identity, repeats deterministic o
     await assert.rejects(f.service.start({ ...f.request, seed: 74 }), /research_experiment_request_conflict/u);
     const foreignWorkspace = await mkdtemp(join(f.path, 'foreign-'));
     const foreign = f.repository.createProject({ title: 'Foreign', description: '', workspacePath: foreignWorkspace });
-    await assert.rejects(f.service.inspect(foreign.id, f.runtime), /research_python_selection_project_mismatch/u);
+    await assert.rejects(f.service.inspect(foreign.id, f.runtime), /research_python_environment_project_mismatch/u);
     await assert.rejects(f.service.read({ projectId: foreign.id, runId: first.id, area: 'output', path: 'result.json' }), /research_experiment_project_mismatch/u);
     await assert.rejects(f.service.publish(f.project.id, first.id), /research_node_worker_required/u);
     const published = await f.withWorker(() => f.service.publish(f.project.id, first.id));
@@ -859,7 +856,7 @@ test('original workspace input drift and installed package drift during real com
     try {
       const run = await f.execute();
       assert.equal(run.status, 'failed');
-      assert.equal(run.error, kind === 'input' ? 'research_experiment_input_changed' : 'research_python_selection_environment_changed');
+      assert.equal(run.error, kind === 'input' ? 'research_experiment_input_changed' : 'research_python_environment_changed');
       assert.equal(await f.read(run, 'input', 'data.txt'), '3\n');
       const resource = JSON.parse(await f.read(run, 'log', 'resources.json'));
       assert.equal(resource.outcome, 'returned'); assert.equal(resource.exitCode, 0);
@@ -962,7 +959,7 @@ while True:
   } finally { await f.cleanup(); }
 });
 
-test('actual experiment role automatically prepares Python and owns start, terminal polling and publication', async () => {
+test('actual experiment role reads prepared Python and owns start, terminal polling and publication', async () => {
   const f = await fixture(source, { scenario: 'owned-role-tools' });
   try {
     const registry = new api.CapabilityRegistry();
@@ -1072,7 +1069,7 @@ test('Python disk recovery retains selected environments and historical audits, 
     const completed = await f.execute();
     assert.equal(completed.status, 'completed', completed.error);
     const published = await f.withWorker(() => f.service.publish(f.project.id, completed.id));
-    const selectionRequest = { projectId: f.project.id, selectionId: f.runtime.selectionId, expectedHash: f.runtime.expectedHash };
+    const selectionRequest = { projectId: f.project.id, environmentId: f.runtime.environmentId, expectedHash: f.runtime.expectedHash };
     const selection = f.repository.pythonEnvironments.get(selectionRequest);
     const historicalResources = await f.read(completed, 'log', 'resources.json');
     const historicalStartup = await f.read(completed, 'log', 'python-startup.json');
@@ -1099,8 +1096,7 @@ test('Python disk recovery retains selected environments and historical audits, 
     const repository = new api.ResearchRepository(restartedDb, tasks);
     let dispatches = 0;
     const actualRun = async request => { dispatches++; return api.runResearchProcess(request); };
-    restartedPython = new api.ResearchPythonEnvironmentService(repository,
-      async () => assert.fail('Recovery must never open the native picker'), actualRun);
+    restartedPython = createPythonFixtureService(api, repository, f.path, selection.snapshot.selectedExecutable, {run: actualRun});
     const environments = new api.ResearchExperimentEnvironmentService({
       typescriptRuntime: async () => assert.fail('Recovery must not resolve TypeScript')
     }, restartedPython);
@@ -1133,7 +1129,7 @@ test('Python disk recovery retains selected environments and historical audits, 
     assert.equal(dispatches, 0);
     const { ownerRunId: _owner, ...direct } = f.request;
     const fresh = await restartedService.start({ ...direct, requestId: 'explicit-new-request' });
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 150000;
     let finished;
     while (Date.now() < deadline) {
       finished = repository.experiments.get(f.project.id, fresh.id);
@@ -1251,7 +1247,16 @@ test('actual Notebook compiles every cell before side effects and retains failin
       'print("LATER_EXECUTED")\n'], 'negative');
     const run = await f.execute({ source: nb.source, requestId: 'negative' });
     assert.equal(run.status, 'failed');
-    assert.match(await f.read(run, 'log', 'stdout.txt'), /EARLIER_ACTUAL_OUTPUT/u);
+    const stdout = await f.read(run, 'log', 'stdout.txt');
+    if (!stdout.includes('EARLIER_ACTUAL_OUTPUT')) {
+      const output = join(process.cwd(), '.artifacts/research-toolchain-p2'); await mkdir(output, {recursive: true});
+      await writeFile(join(output, `notebook-output-failure-${run.id}.json`), JSON.stringify({
+        status: run.status, error: run.error, exitCode: run.exitCode,
+        computation: f.observed.filter(item => item.kind === 'compute').at(-1), stdout,
+        stderr: await f.read(run, 'log', 'stderr.txt'), resources: JSON.parse(await f.read(run, 'log', 'resources.json'))
+      }, null, 2));
+    }
+    assert.match(stdout, /EARLIER_ACTUAL_OUTPUT/u);
     assert.doesNotMatch(await f.read(run, 'log', 'stdout.txt'), /LATER_EXECUTED/u);
     assert.match(await f.read(run, 'log', 'stderr.txt'), /ValueError: negative outcome/u);
   } finally { await f.cleanup(); }

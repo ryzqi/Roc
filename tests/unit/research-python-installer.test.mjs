@@ -80,12 +80,12 @@ test('sandbox confines executable paths and reserves posix_spawn for trusted uv 
   const command = join(managed, 'uv'), python = join(managed, 'python');
   await writeFile(command, 'uv'); await writeFile(python, 'python');
   for (const operation of ['version', 'install', 'probe', 'venv', 'lock', 'sync']) {
-    const profile = await api.installerProfile(command, python, [managed], [writable], 'none', operation);
+    const profile = await api.installerProfile(command, python, [managed], [writable], 'none', operation, writable);
     assert.match(profile, /\(deny default\)/);
     assert.match(profile, /\(allow process-exec \(literal /);
     assert.doesNotMatch(profile, /allow network|iokit-open-user-client/);
     assert.equal(profile.includes('(syscall-number 82 147 244)'), ['version', 'install', 'probe'].includes(operation));
     assert.equal(profile.includes('(syscall-number 82 147)'), ['venv', 'lock', 'sync'].includes(operation));
   }
-  assert.match(await api.installerProfile(command, python, [managed], [writable], 'registry', 'sync'), /\(allow network-outbound\)/);
+  assert.match(await api.installerProfile(command, python, [managed], [writable], 'registry', 'sync', writable), /\(allow network-outbound\)/);
 }));

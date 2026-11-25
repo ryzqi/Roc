@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {z} from 'zod';
-import type {ResearchPythonEnvironmentService} from './python-environment-service';
+import type {ResearchPythonEnvironmentService, PythonRuntimeLease} from './python-environment-service';
 import {assertPythonCodeReceipt} from './experiment-python-code-schema';
 import {pythonExperimentFlags} from './experiment-python-probe';
 import {readResearchFile} from './research-files';
@@ -61,7 +61,7 @@ const rowsSchema = z.array(z.strictObject({tokens: z.number().int().min(1).max(4
   dimensions: z.number().int().min(1).max(512)})).min(1).max(32);
 
 export class PythonVisualRetrievalAdapter implements VisualRetrievalAdapter {
-  constructor(private readonly environments: Pick<ResearchPythonEnvironmentService, 'resolve'>,
+  constructor(private readonly environments: Pick<ResearchPythonEnvironmentService, 'acquireRuntime'>,
     private readonly run: typeof runResearchProcess = runResearchProcess) {}
   async encode(input: Parameters<VisualRetrievalAdapter['encode']>[0], signal: AbortSignal): Promise<{matrices: VisualMatrix[]; assertCurrent: () => void}> {
     signal.throwIfAborted();
@@ -71,11 +71,13 @@ export class PythonVisualRetrievalAdapter implements VisualRetrievalAdapter {
     if (input.images.reduce((n, b) => n + b.length, 0) > 128 * 1024 ** 2) throw new Error('research_visual_input_budget_exceeded');
     const job = await realpath(await mkdtemp(join(tmpdir(), 'roc-visual-')));
     const admission = {projectId: input.projectId, priority: 'background' as const, resourceClass: 'compute' as const};
+    let lease: PythonRuntimeLease | undefined;
     try {
       const model = await inspectVisualModel(input.model.path, input.model.family, signal);
       if (model.sha256 !== input.model.sha256) throw new Error('research_visual_model_changed');
-      const selection = {projectId: input.projectId, selectionId: input.model.selectionId, expectedHash: input.model.selectionHash};
-      const python = await this.environments.resolve(selection, job, signal, admission, () => undefined);
+      const environmentRef = {projectId: input.projectId, environmentId: input.model.environmentId, expectedHash: input.model.environmentHash};
+      lease = await this.environments.acquireRuntime(environmentRef, job, signal, admission, () => undefined);
+      const python = lease.environment;
       const receipt = assertPythonCodeReceipt(python.codeReceipt, python.metadataHash);
       if (python.report.distributions.find(d => d.name === 'sentence-transformers')?.version !== '6.0.1') {
         throw new Error('research_visual_engine_version_unsupported');
@@ -107,9 +109,10 @@ export class PythonVisualRetrievalAdapter implements VisualRetrievalAdapter {
       if (rows.length !== (input.query === null ? input.images.length : 1)) throw new Error('research_visual_matrix_count_invalid');
       const matrices: VisualMatrix[] = [];
       for (const [i, shape] of rows.entries()) matrices.push(decodeVisualMatrix(await readResearchFile(outputDir, `${i}.f32`, 8 * 1024 ** 2), shape));
-      await this.environments.resolve(selection, job, signal, admission, () => undefined);
+      await lease.verify(() => undefined);
       model.assertCurrent(); return {matrices, assertCurrent: model.assertCurrent};
     } finally {
+      lease?.release();
       // runResearchProcess settles its process tree and shared resource lease before returning/rejecting.
       await rm(job, {recursive: true, force: true});
     }

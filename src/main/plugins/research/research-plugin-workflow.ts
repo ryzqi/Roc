@@ -60,7 +60,7 @@ export async function registerResearchWorkflow(
     productionJob, notifyWorkspacePathStructureChanged } = production;
   const workspaceFiles = new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged);
   const effects = new ResearchProductionEffectService(researchRepository, workspaceFiles,
-    researchExperiments, researchFigures, researchTemplates, researchExports);
+    researchExperiments, researchFigures, researchTemplates, researchExports, researchPythonEnvironments);
   const resultDerivation = new ResearchResultDerivationService(researchRepository, researchResults);
   registerResearchResultDerivationCapabilities(context, resultDerivation, new ResearchResultFigureSourceService(resultDerivation, workspaceFiles));
   registerResearchImpactCapabilities(context, researchRepository.impact, researchRepository.repairs);
@@ -111,7 +111,15 @@ export async function registerResearchWorkflow(
     const {workspacePath} = researchRepository.getProject(projectId);
     if (workspacePath !== null) notifyWorkspacePathStructureChanged(workspacePath, 'research_file_saved');
   });
-  registerResearchIdeaCapabilities(context, researchRepository.ideas);
+  const preparePython = (projectId: string) => {
+    if (researchRepository.getProject(projectId).workspacePath === null) return;
+    void researchPythonEnvironments.prepareAutomatic(projectId).catch(error => {
+      context.logger.error('Research Python automatic preparation could not start.', {
+        projectId, error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  };
+  registerResearchIdeaCapabilities(context, researchRepository.ideas, preparePython);
   registerResearchIdeaPlanCapabilities(context, researchRepository.ideaPlans);
   registerResearchProposalCapabilities(context, new ResearchProposalService(researchRepository, researchExperiments,
     researchResults, researchFigures, new ResearchJournalComplianceService(researchRepository, researchFigures)));
@@ -132,15 +140,22 @@ export async function registerResearchWorkflow(
   context.capabilities.register(pluginId, workbenchCapabilities.createProject, async (input) => {
     const project = researchRepository.createProject(researchProjectCreateRequestSchema.parse(input));
     researchIndexer.projectChanged(project.id);
+    preparePython(project.id);
     return project;
   });
   context.capabilities.register(pluginId, workbenchCapabilities.updateProject, async (input) => {
-    const project = researchRepository.updateProject(researchProjectUpdateRequestSchema.parse(input));
+    const request = researchProjectUpdateRequestSchema.parse(input);
+    const before = researchRepository.getProject(request.id);
+    const project = researchRepository.updateProject(request);
     researchIndexer.projectChanged(project.id);
     researchExperiments.projectChanged(project.id);
     researchFigures.projectChanged(project.id);
     researchExports.projectChanged(project.id);
     zenodoPublication.projectChanged(project.id);
+    if (project.workspacePath !== before.workspacePath) {
+      await researchPythonEnvironments.releaseProject(project.id);
+      if (project.status !== 'archived') preparePython(project.id);
+    }
     if (project.status === 'archived') {
       await researchIndexer.releaseProject(project.id);
       await reviewSearches.releaseProject(project.id);

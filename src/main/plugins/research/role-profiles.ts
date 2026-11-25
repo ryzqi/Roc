@@ -23,6 +23,9 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.review.readReport': 'read_review_report',
   'research.workspace.readFile': 'read_workspace_file',
   'research.workspace.saveFile': 'save_workspace_file',
+  'research.pythonEnvironments.prepareOwned': 'prepare_python_environment',
+  'research.pythonEnvironments.status': 'get_python_environment_status',
+  'research.pythonEnvironments.cancelOwned': 'cancel_python_environment',
   'research.pythonEnvironments.list': 'list_python_environments',
   'research.experiment.environment': 'inspect_experiment_environment',
   'research.experiment.startOwned': 'start_experiment',
@@ -46,7 +49,8 @@ const readCapabilities = ['research.knowledge.search', 'research.knowledge.scien
 const evidenceCapabilities = [...readCapabilities, 'research.evidence.capture'];
 const productionInputs = ['research.artifacts.inspectProduction', 'research.artifacts.readProductionFile'];
 const workspaceFiles = ['research.workspace.readFile', 'research.workspace.saveFile'];
-const experimentEffects = [...workspaceFiles, 'research.pythonEnvironments.list', 'research.experiment.environment',
+const experimentEffects = [...workspaceFiles, 'research.pythonEnvironments.prepareOwned', 'research.pythonEnvironments.status',
+  'research.pythonEnvironments.cancelOwned', 'research.pythonEnvironments.list', 'research.experiment.environment',
   'research.experiment.startOwned', 'research.experiment.getOwned', 'research.experiment.publishOwned'];
 const figureEffects = [...workspaceFiles, 'research.figure.environment', 'research.figure.startOwned', 'research.figure.getOwned', 'research.figure.publishOwned'];
 const exportEffects = ['research.template.readOwned', 'research.template.saveOwned', 'research.template.compileOwned',

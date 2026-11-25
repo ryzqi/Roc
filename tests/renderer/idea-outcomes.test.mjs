@@ -1,3 +1,4 @@
+import {writePythonProjectFiles, createPythonFixtureService, preparePythonFixture} from '../unit/fixtures/python-environment.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -38,10 +39,8 @@ before(async () => {
   assert.match(python.version, /^3\.14\.\d+$/u);
   const executable = join(venv, 'bin/python3');
   await symlink(python.executable, executable);
-  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
-  await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify({
-    schemaVersion: 1, python: {implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64'}, distributions: []
-  }));
+  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion_info = ${python.version}\nimplementation = CPython\nuv = 0.13.9\n`);
+  await writePythonProjectFiles(workspace, python.version);
   await writeFile(join(workspace, 'analysis.py'), `import json, os, statistics
 import roc_experiment as roc
 with open(os.path.join(roc.input_dir, "data.txt")) as data:
@@ -54,13 +53,12 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
 `);
   await writeFile(join(workspace, 'data.txt'), '-3 -2 -1\n');
   f = createResearchFixture(api, 'experiment', workspace);
-  const pythonService = new api.ResearchPythonEnvironmentService(f.repository, async () => executable);
-  const selection = await api.withResearchHumanContext({capability: 'research.pythonEnvironments.select', projectId: f.project.id, windowId: 72},
-    () => pythonService.select({projectId: f.project.id, requestId: 'environment'}));
+  const pythonService = createPythonFixtureService(api, f.repository, root, executable);
+  const selection = await preparePythonFixture(api, pythonService, f.project.id);
   service = new api.ResearchExperimentService(f.repository, new api.ResearchExperimentEnvironmentService({
     typescriptRuntime: async () => assert.fail('no TypeScript')
   }, pythonService), root, {error: (...args) => errors.push(JSON.stringify(args))});
-  const runtime = {kind: 'python', selectionId: selection.snapshot.id, expectedHash: selection.snapshotHash};
+  const runtime = {kind: 'python', environmentId: selection.snapshot.id, expectedHash: selection.snapshotHash};
   const environment = await service.inspect(f.project.id, runtime);
   run = await f.withWorker(() => service.start({projectId: f.project.id, ownerRunId: f.run.id, requestId: 'actual-run', label: 'Actual negative mean',
     engine: 'python', sourceVersion: 1, source: {kind: 'file', path: 'analysis.py'}, inputPaths: ['data.txt'], parameters: {},

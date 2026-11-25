@@ -56,7 +56,7 @@ export { runPythonExperimentProcess, pythonExperimentBootstrap, pythonExperiment
 export { pythonExecutionReportSchema } from '../../../src/main/plugins/research/experiment-python-process';
 export {
   assertPythonCodeReceipt, pythonCodeReceiptSchema, pythonCodeReportSchema,
-  pythonEnvironmentControlsSchema, pythonEnvironmentLockSchema
+  pythonEnvironmentControlsSchema
 } from '../../../src/main/plugins/research/experiment-python-code-schema';
 export { ResearchPythonEnvironmentService } from '../../../src/main/plugins/research/python-environment-service';
 export { registerResearchPythonEnvironmentCapabilities } from '../../../src/main/plugins/research/python-environment-capabilities';

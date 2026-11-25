@@ -1,26 +1,28 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchExperimentEnvironment } from '../../../shared/schemas/research-experiments';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
-import { RocDomainError } from '../../services/errors';
 import { captureNativeCode } from './experiment-native-code';
 import type { NativeCodeSnapshot } from './experiment-native-code-schema';
 import { discoverPythonEnvironmentControls } from './experiment-python-controls';
 import {
-  assertPythonCodeReceipt, pythonEnvironmentLockSchema, pythonEnvironmentReportSchema,
+  assertPythonCodeReceipt, pythonEnvironmentReportSchema,
   type PythonCodeReceipt, type PythonEnvironmentControls
 } from './experiment-python-code-schema';
 import { runEnvironmentProbe } from './experiment-probe-resources';
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
-import { readResearchFile, researchContentHash } from './research-files';
+import { researchContentHash } from './research-files';
+import { pythonProjectValidation, readPythonProjectFiles } from './python-project-declarations';
 import type { ResearchProcessScope } from './toolchain';
 
 export const pythonExperimentFlags = ['-I', '-S', '-B', '-X', 'utf8'] as const;
 /** Inspect explicit installed metadata without adding site-packages to sys.path or importing entry points. */
-export const pythonEnvironmentProbe = String.raw`import sys, os, json, re
+export const pythonEnvironmentProbe = pythonProjectValidation + String.raw`
+import sys, os, json, re
 from importlib.metadata import distributions
 package_path = sys.argv[1]
+locked_packages = project_declarations(sys.argv[2], sys.argv[3])
 for name in os.listdir(package_path):
     if name.lower().endswith((".pth", ".egg-link", ".egg", ".egg-info")):
         raise RuntimeError("research_python_package_layout_unsupported")
@@ -34,7 +36,10 @@ for item in distributions(path=[package_path]):
     versions = item.metadata.get_all("Version", [])
     if len(names) != 1 or len(versions) != 1:
         raise RuntimeError("research_python_distribution_metadata_invalid")
-    packages.append({"name": re.sub(r"[-_.]+", "-", names[0]).lower(), "version": versions[0]})
+    name = re.sub(r"[-_.]+", "-", names[0]).lower()
+    if versions[0] not in locked_packages.get(name, []):
+        raise RuntimeError("research_python_installed_distributions_mismatch")
+    packages.append({"name": name, "version": versions[0]})
 print(json.dumps({
     "implementation": sys.implementation.name, "version": sys.version.split()[0],
     "platform": sys.platform, "architecture": os.uname().machine,
@@ -55,54 +60,29 @@ type PythonEnvironmentInspectionInput = {
   signal: AbortSignal;
   admission: ResearchProcessScope;
   onProbe: (receipt: ResearchEnvironmentProbeResource) => void;
-  initializeLock?: boolean;
 };
 export type InspectedPythonEnvironment = {
   controls: PythonEnvironmentControls;
-  lockFile: ResearchExperimentEnvironment['lockFiles'][number];
+  lockFiles: ResearchExperimentEnvironment['lockFiles'];
   report: z.infer<typeof pythonEnvironmentReportSchema>;
   code: NativeCodeSnapshot;
   codeReceipt: PythonCodeReceipt;
   metadataHash: string;
 };
 
-export async function readPythonEnvironmentLock(workspace: string): Promise<{
-  bytes: Buffer; lock: z.infer<typeof pythonEnvironmentLockSchema>;
-}> {
-  let bytes: Buffer;
-  try { bytes = await readResearchFile(workspace, 'roc-python.lock.json', 4 * 1024 ** 2); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    throw new RocDomainError({
-      code: 'research_python_lock_required', category: 'validation', retryable: false,
-      message: '项目缺少 roc-python.lock.json，请重新准备项目 Python 环境以自动生成锁文件。'
-    });
-  }
-  try { return { bytes, lock: pythonEnvironmentLockSchema.parse(JSON.parse(bytes.toString('utf8'))) }; }
-  catch (error) {
-    if (!(error instanceof SyntaxError) && !(error instanceof Error && error.name === 'ZodError')) throw error;
-    throw new RocDomainError({
-      code: 'research_python_lock_invalid', category: 'validation', retryable: false,
-      message: 'roc-python.lock.json 格式无效。请检查 schemaVersion、Python 版本与平台信息，以及完整的已安装依赖名称和版本后重试。'
-    });
-  }
-}
-
 /** Environment inspection does not grant permission to select or execute this runtime. */
 export async function inspectPythonExperimentEnvironment({
-  workspace, selectedExecutable, jobDir, run, signal, admission, onProbe, initializeLock = false
+  workspace, selectedExecutable, jobDir, run, signal, admission, onProbe
 }: PythonEnvironmentInspectionInput): Promise<InspectedPythonEnvironment> {
   const controls = await discoverPythonEnvironmentControls(selectedExecutable, signal);
-  let locked = await readPythonEnvironmentLock(workspace).catch(error => {
-    if (initializeLock && error instanceof RocDomainError && error.code === 'research_python_lock_required') return null;
-    throw error;
-  });
+  const project = await readPythonProjectFiles(workspace);
   const code = await captureNativeCode(controls.codeRoots, signal);
   const probe = await mkdtemp(join(jobDir, 'python-probe-'));
+  let safeToClean = true;
   try {
     const request: ResearchProcessRequest = {
-      command: controls.selectedExecutable, args: [...pythonExperimentFlags, '-c', pythonEnvironmentProbe, controls.packagePath],
-      cwd: probe, readablePaths: [...controls.codeRoots, ...controls.controls.map(file => file.path)],
+      command: controls.selectedExecutable, args: [...pythonExperimentFlags, '-c', pythonEnvironmentProbe, controls.packagePath, join(workspace, 'pyproject.toml'), join(workspace, 'uv.lock')],
+      cwd: probe, readablePaths: [...controls.codeRoots, ...controls.controls.map(file => file.path), ...project.files.map(file => join(workspace, file.path))],
       writablePaths: [probe], environment: { PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', TMPDIR: probe },
       writeLimits: [{ path: probe, maxFileBytes: 4 * 1024 ** 2, maxTotalBytes: 16 * 1024 ** 2, maxFiles: 100, maxEntries: 200 }],
       timeoutMs: 60000, maxOutputBytes: 4 * 1024 ** 2,
@@ -115,7 +95,19 @@ export async function inspectPythonExperimentEnvironment({
       error.admission = result.admission;
       throw error;
     };
-    if (result.exitCode !== 0) fail('research_python_environment_probe_failed');
+    if (result.exitCode !== 0) {
+      const knownRefusals = new Set([
+        'research_python_project_metadata_required', 'research_python_project_configuration_unsupported',
+        'research_python_dependency_invalid', 'research_python_direct_dependency_unsupported',
+        'research_python_project_requires_python_invalid', 'research_python_lock_invalid',
+        'research_python_lock_source_unsupported', 'research_python_wheel_required',
+        'research_python_lock_asset_invalid', 'research_python_lock_project_invalid',
+        'research_python_package_layout_unsupported', 'research_python_distribution_limit',
+        'research_python_distribution_metadata_invalid', 'research_python_installed_distributions_mismatch'
+      ]);
+      const refusal = /^RuntimeError: (research_python_[a-z_]+)\s*$/mu.exec(result.stderr)?.[1];
+      fail(refusal !== undefined && knownRefusals.has(refusal) ? refusal : 'research_python_environment_probe_failed');
+    }
     let report: z.infer<typeof pythonEnvironmentReportSchema>;
     try { report = pythonEnvironmentReportSchema.parse(JSON.parse(result.stdout)); }
     catch { return fail('research_python_environment_report_invalid'); }
@@ -126,32 +118,20 @@ export async function inspectPythonExperimentEnvironment({
     }
     if ((await captureNativeCode(controls.codeRoots, signal)).hash !== code.hash) fail('research_python_native_code_changed');
     signal.throwIfAborted();
-    if (locked === null) {
-      const initial = pythonEnvironmentLockSchema.parse({ schemaVersion: 1,
-        python: { implementation: report.implementation, version: report.version,
-          platform: report.platform, architecture: report.architecture }, distributions: report.distributions });
-      // An existing lock is a project contract, even when another caller created it during the probe.
-      try { await writeFile(join(workspace, 'roc-python.lock.json'), `${JSON.stringify(initial, null, 2)}\n`, { flag: 'wx' }); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
-      locked = await readPythonEnvironmentLock(workspace);
-    }
-    const { bytes: lockBytes, lock } = locked;
-    if (report.version !== lock.python.version) fail('research_python_runtime_version_mismatch');
-    const expected = [...lock.distributions].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
-    if (JSON.stringify(report.distributions) !== JSON.stringify(expected)) fail('research_python_installed_distributions_mismatch');
-    const lockFile: PythonCodeReceipt['metadataIdentity']['lockFile'] = {
-      path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes)
-    };
-    if (researchContentHash(await readResearchFile(workspace, lockFile.path, 4 * 1024 ** 2)) !== lockFile.sha256) {
-      fail('research_python_lock_changed');
-    }
+    if (report.version !== project.version) fail('research_python_runtime_version_mismatch');
+    if (JSON.stringify(await readPythonProjectFiles(workspace)) !== JSON.stringify(project)) fail('research_python_lock_changed');
+    const lockFiles = project.files;
     const metadataIdentity: PythonCodeReceipt['metadataIdentity'] = {
-      inspectionContractVersion: 1, controls, lockFile, code: code.hash, report, probe: researchContentHash(pythonEnvironmentProbe)
+      inspectionContractVersion: 2, controls, lockFiles, code: code.hash, report, probe: researchContentHash(pythonEnvironmentProbe)
     };
     const metadataHash = researchContentHash(JSON.stringify(metadataIdentity));
     const codeReceipt = assertPythonCodeReceipt({ code, metadataIdentity }, metadataHash);
-    return { controls, lockFile, report, code, codeReceipt, metadataHash };
+    return { controls, lockFiles, report, code, codeReceipt, metadataHash };
+  } catch (error) {
+    if (error instanceof ResearchProcessError && ['research_process_kill_failed',
+      'research_process_supervision_failed', 'research_process_completion_failed'].includes(error.code)) safeToClean = false;
+    throw error;
   } finally {
-    await rm(probe, { recursive: true, force: true });
+    if (safeToClean) await rm(probe, { recursive: true, force: true });
   }
 }

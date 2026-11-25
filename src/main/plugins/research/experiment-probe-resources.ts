@@ -2,7 +2,7 @@ import { researchEnvironmentProbeResourceSchema, type ResearchEnvironmentProbeRe
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { researchContentHash } from './research-files';
 
-/** Observe the actual runner request, after the R launcher has added its bridge and temporary scope. */
+/** Record the dispatched probe policy and its actual resource receipt. */
 export async function runEnvironmentProbe(kind: ResearchEnvironmentProbeResource['kind'], request: ResearchProcessRequest,
   run: (request: ResearchProcessRequest) => Promise<ResearchProcessResult>,
   observe: (receipt: ResearchEnvironmentProbeResource) => void): Promise<ResearchProcessResult> {

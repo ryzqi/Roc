@@ -89,7 +89,8 @@ before(async () => {
           chatListeners.add(listener); return () => chatListeners.delete(listener);
         }}, research: {
           getProject: request => record('project', request, {ok: true, data: {id: request.id, status: 'active', workspacePath: '/workspace'}}),
-          listPythonEnvironmentSelections: request => record('python-selections', request, {ok: true, data: []}),
+          listPythonEnvironments: request => record('python-environments', request, {ok: true, data: []}),
+          getPythonEnvironmentStatus: request => record('python-status', request, {ok: true, data: {operation: null, environment: null}}),
           getTaskForChat: request => record('chat', request, window.response),
           getTaskDiagnostics: request => record('diagnostics', request, window.response),
           getTaskExecutionDiagnostics: request => {
@@ -891,7 +892,7 @@ test('management tasks load without project model budget controls and retain tas
   const usage = await page.getByTestId('task-usage').innerText();
   for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(usage.includes(expected));
   assert.deepEqual(await page.evaluate(() => [...new Set(calls.map(call => call.method))].sort()),
-    ['diagnostics', 'events', 'facts', 'list', 'project', 'python-selections']);
+    ['diagnostics', 'events', 'facts', 'list', 'project', 'python-environments', 'python-status']);
   await page.evaluate(() => clear());
   assert.equal(await page.evaluate(() => listeners.size + chatListeners.size), 0);
 });

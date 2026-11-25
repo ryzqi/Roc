@@ -33,7 +33,7 @@ test('pinned uv installs exact private Python and reuses a fully verified receip
   assert.match(runtime.pythonKey, /3\.14\.10/);
   assert.equal(await realpath(runtime.executable), runtime.executable);
   assert.deepEqual(await readdir(runtime.jobs), []);
-  const offline = new ResearchPythonRuntimeStore(runtime.root, undefined, async () => { throw new Error('unexpected_download'); });
+  const offline = new ResearchPythonRuntimeStore(join(root, 'managed'), undefined, async () => { throw new Error('unexpected_download'); });
   assert.deepEqual(await offline.prepare('3.14.10', 'runtime-store-test', new AbortController().signal), runtime);
 });
 

@@ -7,7 +7,8 @@ import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import Database from 'better-sqlite3';
 import {importTypeScriptModule} from '../lib/bundle-ts.mjs';
-import {convertHistorical, validateHistorical, verifyPair, sha256, manifest} from './research-migration-lib.mjs';
+import {assertNoExternalHistoryReferences, convertHistorical, removedHistoryIds, validateHistorical,
+  inspectHistoricalMigration, verifyPair, sha256, manifest} from './research-migration-lib.mjs';
 
 export function hashFile(path) {
   const fd = openSync(path, 'r'), hash = createHash('sha256'), block = Buffer.alloc(1024 * 1024);
@@ -25,6 +26,52 @@ export function assertOffline(path) {
   const handles = spawnSync('/usr/sbin/lsof', ['-F', 'p', '--', path], {encoding: 'utf8', timeout: 15000});
   assert.ok(handles.status === 1 && handles.stdout === '' && handles.stderr === '',
     handles.status === 0 ? 'migration_database_in_use' : 'migration_open_handle_check_failed');
+}
+
+function agentSourcePath(root) {return join(root, 'plugin-data/data/plugins/@roc/plugin-agent.db');}
+function assertAgentAbsent(path) {
+  assert.equal(existsSync(path), false, 'migration_agent_source_changed');
+  for (const suffix of ['-wal', '-shm', '-journal'])
+    assert.equal(existsSync(path + suffix), false, 'migration_agent_sidecars_present');
+}
+
+function snapshotAgentReferences(root, directory, verification) {
+  const ids = removedHistoryIds(verification);
+  if (ids.length === 0) return null;
+  const sourcePath = agentSourcePath(root);
+  if (!existsSync(sourcePath)) {assertAgentAbsent(sourcePath); return {sourcePath, sourceHash: null};}
+  assertOffline(sourcePath);
+  const sourceHash = hashFile(sourcePath), snapshot = join(directory, 'agent-reference-snapshot.db');
+  copyFileSync(sourcePath, snapshot, constants.COPYFILE_EXCL);
+  assert.equal(hashFile(snapshot), sourceHash, 'migration_agent_source_changed');
+  const db = new Database(snapshot, {readonly: true, fileMustExist: true});
+  try {assertNoExternalHistoryReferences(db, ids);} finally {db.close();}
+  const receipt = {sourcePath, sourceHash};
+  assertAgentReferencesUnchanged(root, receipt);
+  return receipt;
+}
+
+export function assertAgentReferencesUnchanged(root, receipt) {
+  if (receipt === null) return;
+  assert.equal(receipt.sourcePath, agentSourcePath(root), 'migration_wrong_agent_source_path');
+  if (receipt.sourceHash === null) {
+    assertAgentAbsent(receipt.sourcePath);
+  } else {
+    assertOffline(receipt.sourcePath);
+    assert.equal(hashFile(receipt.sourcePath), receipt.sourceHash, 'migration_agent_source_changed');
+  }
+}
+
+export function verifyAgentReferenceSnapshot(directory, receipt) {
+  const ids = removedHistoryIds(receipt.verification), reference = receipt.agentReferences;
+  if (ids.length === 0) {assert.equal(reference, null, 'migration_unexpected_agent_reference'); return;}
+  assert.ok(reference && Object.keys(reference).sort().join(',') === 'sourceHash,sourcePath', 'migration_agent_reference_missing');
+  assert.equal(reference.sourcePath, agentSourcePath(receipt.dataRoot), 'migration_wrong_agent_source_path');
+  const snapshot = join(directory, 'agent-reference-snapshot.db');
+  if (reference.sourceHash === null) {assert.equal(existsSync(snapshot), false, 'migration_unexpected_agent_snapshot'); return;}
+  assert.equal(hashFile(snapshot), reference.sourceHash, 'migration_agent_snapshot_changed');
+  const db = new Database(snapshot, {readonly: true, fileMustExist: true});
+  try {assertNoExternalHistoryReferences(db, ids);} finally {db.close();}
 }
 
 export async function prepareResearchMigration({dataRoot, output}) {
@@ -51,6 +98,8 @@ export async function prepareResearchMigration({dataRoot, output}) {
     await source.backup(backupPath);
     source.close(); source = null;
     source = new Database(backupPath, {readonly: true, fileMustExist: true});
+    const plan = inspectHistoricalMigration(source);
+    const agentReferences = snapshotAgentReferences(root, directory, plan);
     const candidatePath = join(directory, 'candidate.db');
     assert.ok(!existsSync(candidatePath));
     target = new Database(candidatePath);
@@ -62,11 +111,13 @@ export async function prepareResearchMigration({dataRoot, output}) {
     const finalStat = lstatSync(sourcePath);
     assert.equal(finalStat.ino, sourceStat.ino); assert.equal(finalStat.mtimeMs, sourceStat.mtimeMs);
     assert.equal(hashFile(sourcePath), sourceHash, 'migration_source_changed');
+    assertAgentReferencesUnchanged(root, agentReferences);
     const receipt = {schemaVersion: 1, status: 'prepared', dataRoot: root, sourcePath, sourceHash,
       fromVersion: historical.version, toVersion: verification.toVersion,
-      backupHash: hashFile(backupPath), candidateHash: hashFile(candidatePath), verification,
+      backupHash: hashFile(backupPath), candidateHash: hashFile(candidatePath), verification, agentReferences,
       frozenManifestHash: sha256(JSON.stringify(manifest)), preparedAt: new Date().toISOString()};
-    for (const path of [snapshotPath, backupPath, candidatePath]) {
+    for (const path of [snapshotPath, backupPath, candidatePath,
+      ...(agentReferences?.sourceHash ? [join(directory, 'agent-reference-snapshot.db')] : [])]) {
       const fd = openSync(path, 'r'); try {fsyncSync(fd);} finally {closeSync(fd);}
     }
     writeFileSync(join(directory, 'prepared.json'), JSON.stringify(receipt, null, 2) + '\n', {flag: 'wx', mode: 0o600});

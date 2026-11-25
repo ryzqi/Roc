@@ -38,7 +38,7 @@ JS仍负责取消、超时、采样与限额，归还槽前确认计算/监督�
 
 ## 原生环境身份
 
-Python 环境检查使用合同1及代码清单合同1：冻结声明解释器和包代码树的完整文件字节、成员、权限及链接拓扑，并在探针前后各核对一次。元数据不变但包代码变化仍改变环境hash；观测到漂移返回 `research_python_native_code_changed`。解释器、前缀、完整包集合和锁文件须匹配已绑定的项目环境，见[Python环境](research-python-environment.md)。
+Python 环境检查使用合同2及代码清单合同1：冻结声明解释器和包代码树的完整文件字节、成员、权限及链接拓扑，并在探针前后各核对一次。元数据不变但包代码变化仍改变环境hash；观测到漂移返回 `research_python_native_code_changed`。解释器、前缀、完整包集合和锁文件须匹配已绑定的项目环境，见[Python环境](research-python-environment.md)。
 
 代码扫描流式读取，单文件512MiB、总4GiB、100000项、清单64MiB。核对描述符和路径的inode/大小/权限/纳秒时间，拒绝特殊文件与未声明链接目标。两次扫描是观测，不证明期间从未发生瞬态修改，也不等于全系统共享库快照。
 
@@ -49,7 +49,7 @@ Python 环境检查使用合同1及代码清单合同1：冻结声明解释器�
 | 文件 | 当前合同与含义 |
 | --- | --- |
 | log/resources.json | schema3/backend2：运行/项目/输入/环境、限额、实际退出、CPU/RSS、准入、探针序列、hostCrashCleanup与processGuardHash |
-| log/environment-code.json | Python环境完整代码清单及原始metadata校验材料；回执、环境和代码清单均为合同1 |
+| log/environment-code.json | Python环境完整代码清单及原始metadata校验材料；环境检查身份为合同2，代码清单为合同1 |
 | log/python-startup.json | Python真实启动路径、旗标、模块、版本和seed，见Python专题 |
 
 资源 outcome为returned/rejected/not_dispatched；准备失败不补计算观测，返回0后环境复核失败仍保存真实计算事实并将实验标为失败。probes分别保存preparation/verification的请求hash、命令、预算、状态及观测；Python在准备和复核阶段各保存一次environment，TypeScript无环境探针。不存原始环境变量，探针消耗不混入计算。
@@ -61,3 +61,5 @@ Python 环境检查使用合同1及代码清单合同1：冻结声明解释器�
 资源边界的专项入口是 `pnpm test:research-resources`，需要 macOS Seatbelt 与原生监督资源。测试使用有界 C 探针和自建临时目录，检查 CPU/RSS、目录、日志、取消/超时、离组拒绝、网络/GPU/路径及宿主 SIGKILL 清理；完整开发要求见[开发指南](development.md)。
 
 原生边界探针不证明任意 Python 环境、科学正确性或硬资源隔离。正常关闭和磁盘快照恢复不能替代真实宿主崩溃清理检查。
+
+Python 环境准备使用独立安装入口，只有固定 uv/Python 与固定命令集合可获得准备所需网络和目录权限；普通 runner 的网络合同仍为 none。准备按工作目录 realpath 取得写租约，实验与视觉检索持有读租约，取消等待监督的进程树退出及任务暂存清理。操作状态持久化在 research_python_environment_operations，重启转 interrupted；ready 与成功回执原子提交。

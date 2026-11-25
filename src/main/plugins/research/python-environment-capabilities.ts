@@ -1,16 +1,18 @@
 import type { z } from 'zod';
 import {
-  researchPythonEnvironmentSelectSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
-  researchPythonEnvironmentSelectionSchema
+  researchPythonEnvironmentPrepareSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
+  researchPythonEnvironmentReceiptSchema, researchPythonEnvironmentStatusSchema, researchPythonEnvironmentOperationSchema, researchPythonEnvironmentCancelSchema
 } from '../../../shared/schemas/research-python-environments';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchPythonEnvironmentRepository } from './python-environment-repository';
 import type { ResearchPythonEnvironmentService } from './python-environment-service';
 
 const capabilities = {
-  select: descriptor('research.pythonEnvironments.select', researchPythonEnvironmentSelectSchema, researchPythonEnvironmentSelectionSchema.nullable()),
-  get: descriptor('research.pythonEnvironments.get', researchPythonEnvironmentGetSchema, researchPythonEnvironmentSelectionSchema),
-  list: descriptor('research.pythonEnvironments.list', researchPythonEnvironmentListSchema, researchPythonEnvironmentSelectionSchema.array())
+  prepare: descriptor('research.pythonEnvironments.prepare', researchPythonEnvironmentPrepareSchema, researchPythonEnvironmentOperationSchema),
+  status: descriptor('research.pythonEnvironments.status', researchPythonEnvironmentListSchema, researchPythonEnvironmentStatusSchema),
+  cancel: descriptor('research.pythonEnvironments.cancel', researchPythonEnvironmentCancelSchema, researchPythonEnvironmentOperationSchema),
+  get: descriptor('research.pythonEnvironments.get', researchPythonEnvironmentGetSchema, researchPythonEnvironmentReceiptSchema),
+  list: descriptor('research.pythonEnvironments.list', researchPythonEnvironmentListSchema, researchPythonEnvironmentReceiptSchema.array())
 };
 export const researchPythonEnvironmentCapabilities = Object.values(capabilities);
 
@@ -19,7 +21,9 @@ export function registerResearchPythonEnvironmentCapabilities(context: RocPlugin
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, action: (input: TInput) => TOutput | Promise<TOutput>): void {
     context.capabilities.register(context.pluginId, capability, async input => action(input));
   }
-  register(capabilities.select, request => service.select(request));
+  register(capabilities.prepare, request => service.prepare(request));
+  register(capabilities.status, request => service.status(request));
+  register(capabilities.cancel, request => service.cancel(request));
   register(capabilities.get, request => repository.get(request));
   register(capabilities.list, request => service.list(request));
 }

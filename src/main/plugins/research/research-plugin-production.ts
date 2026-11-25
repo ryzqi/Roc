@@ -141,7 +141,11 @@ export function registerResearchProduction(
     context.logger, options.indexWatch, undefined, createPaperSemanticGenerator(options.modelFactory), options.scholarlyParser);
   lifecycle.own('indexer', researchIndexer);
   registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);
-  const researchPythonEnvironments = new ResearchPythonEnvironmentService(researchRepository);
+  const researchPythonEnvironments = new ResearchPythonEnvironmentService(researchRepository, options.pythonRoot, {onError: error => {
+    context.logger.error('Research Python preparation could not persist its final state.', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }});
   lifecycle.own('pythonEnvironments', researchPythonEnvironments);
   registerResearchPythonEnvironmentCapabilities(context, researchRepository.pythonEnvironments, researchPythonEnvironments);
   const visual = new VisualIndexService(researchRepository,

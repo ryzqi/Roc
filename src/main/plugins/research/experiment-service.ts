@@ -57,7 +57,7 @@ export class ResearchExperimentService {
     this.logger.error('Research experiment could not persist its final state.', { runId, error: errorCode(error) });
   });
 
-  constructor(private readonly repository: ResearchRepository, private readonly environments: Pick<ResearchExperimentEnvironmentService, 'inspect'>,
+  constructor(private readonly repository: ResearchRepository, private readonly environments: Pick<ResearchExperimentEnvironmentService, 'inspect' | 'acquire'>,
     private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
     private readonly run: (input: ResearchProcessRequest) => Promise<ResearchProcessResult> = runResearchProcess) {}
 
@@ -235,6 +235,7 @@ export class ResearchExperimentService {
     let output: Pick<ResearchProcessResult, 'exitCode' | 'stdout' | 'stderr'> = { exitCode: 1, stdout: '', stderr: '' };
     let failure: unknown;
     let prepared: PreparedExperimentEnvironment | null = null;
+    let environmentLease: Awaited<ReturnType<ResearchExperimentEnvironmentService['acquire']>> | undefined;
     let resources: ResearchExperimentResourceReport | null = null;
     const probes: ResearchExperimentResourceReport['probes'] = [];
     try {
@@ -253,8 +254,9 @@ export class ResearchExperimentService {
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.environments.inspect(request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
+      environmentLease = await this.environments.acquire(request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'preparation' }));
+      prepared = environmentLease.prepared;
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal, this.notebookInputs(request));
       files = snapshot.files;
@@ -293,8 +295,7 @@ export class ResearchExperimentService {
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
       if (request.engine === 'python') await this.verifyWorkspaceInputs(workspace, { ...initial, files: snapshot.files }, signal);
-      const current = await this.environments.inspect(request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
-        receipt => probes.push({ ...receipt, phase: 'verification' }));
+      const current = await environmentLease.verify(receipt => probes.push({ ...receipt, phase: 'verification' }));
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
       failure = error;
@@ -353,6 +354,7 @@ export class ResearchExperimentService {
       this.repository.experiments.finish(initial.projectId, initial.id, { status: signal.aborted ? cancelledExecutionStatus(this.session.isClosed) : 'failed',
         files, exitCode: output.exitCode, error: signal.aborted ? cancelledExecutionError(this.session.isClosed) : errorCode(error) });
     } finally {
+      environmentLease?.release();
       await rm(join(root, 'scratch'), { recursive: true, force: true });
     }
   }

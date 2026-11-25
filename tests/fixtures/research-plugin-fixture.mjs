@@ -112,6 +112,7 @@ export async function createResearchPluginFixture(api, { root, observe = false, 
   } }) : db;
   const plugin = api.createResearchPlugin({
     resourceRoot: join(directory, 'resources'), diagnosticsRoot: join(directory, 'diagnostics'),
+    pythonRoot: join(directory, 'research-python'),
     executionGrantBroker: new api.ExecutionGrantBroker(agentDb), tasks,
     usageLedger: new api.RunUsageLedger(agentDb),
     roleExecutor: { prepare() { throw new Error('fixture_model_call_not_expected'); } },

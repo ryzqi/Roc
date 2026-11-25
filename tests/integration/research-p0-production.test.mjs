@@ -605,7 +605,7 @@ test('explicit resource association binds a real TypeScript execution and surviv
   const errors = [];
   const description = await runtimeDescription();
   const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
-    {resolve: async () => assert.fail('TypeScript fixture must not resolve Python')});
+    {acquireRuntime: async () => assert.fail('TypeScript fixture must not acquire Python')});
   const experiments = new api.ResearchExperimentService(f.repository, environments, root, {error: (...args) => errors.push(args)});
   const resources = new api.ResearchResourceRepository(f.db, f.repository);
   const transport = new api.LiteratureSearchService(async () => Response.json({data: {
@@ -678,7 +678,7 @@ test('actual TypeScript cancellation stops its process and retains an unpublishe
   const f = createResearchFixture(api, 'experiment', workspace), errors = [];
   const description = await runtimeDescription();
   const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
-    {resolve: async () => assert.fail('TypeScript fixture must not resolve Python')});
+    {acquireRuntime: async () => assert.fail('TypeScript fixture must not acquire Python')});
   const experiments = new api.ResearchExperimentService(f.repository, environments, root, {error: (...args) => errors.push(args)});
   try {
     const started = await experiments.start({projectId: f.project.id, ownerRunId: null, requestId: 'typescript-cancel',
@@ -718,7 +718,7 @@ test('native experiment rerun updates a rendered figure, reviewed manuscript and
   const description = await runtimeDescription();
   const tools = new api.ResearchToolchain(await realpath(process.env.ROC_TEST_RESEARCH_TOOLCHAIN ?? '.runtime/research-toolchain/darwin-arm64'));
   const environment = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
-    {resolve: async () => assert.fail('The TypeScript run must use the bundled runtime.')});
+    {acquireRuntime: async () => assert.fail('The TypeScript run must use the bundled runtime.')});
   const errors = [], logger = {error: (...args) => errors.push(args), warn: (...args) => errors.push(args)};
   const experiments = new api.ResearchExperimentService(repository, environment, root, logger);
   const results = new api.ResearchExperimentResultService(repository, experiments);
@@ -985,7 +985,8 @@ export async function run(context) {
     api.applyResearchDatabaseSchema(disk);
     reopened = new api.ResearchRepository(disk, tasks);
     restoredExperiments = new api.ResearchExperimentService(reopened,
-      {inspect: async () => assert.fail('Reading a frozen result must not prepare another execution.')}, root, logger);
+      {inspect: async () => assert.fail('Reading a frozen result must not inspect an environment.'),
+        acquire: async () => assert.fail('Reading a frozen result must not acquire an environment.')}, root, logger);
     const history = new api.ResearchExperimentResultService(reopened, restoredExperiments);
     assert.deepEqual(await history.get({projectId, ...reference(prior.receipt)}), prior.receipt);
     assert.deepEqual(await history.get({projectId, ...reference(next.receipt)}), next.receipt);
@@ -1029,7 +1030,7 @@ export async function run(context) {
   const logger = {error: (...args) => persistenceErrors.push(args), warn: (...args) => persistenceErrors.push(args)};
   const description = await runtimeDescription();
   const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
-    {resolve: async () => assert.fail('TypeScript production fixture must not resolve Python')});
+    {acquireRuntime: async () => assert.fail('TypeScript production fixture must not acquire Python')});
   const processReceipts = [];
   const experiments = new api.ResearchExperimentService(f.repository, environments, root, logger, async request => {
     try {
@@ -1098,7 +1099,8 @@ ${source.replace('  const rows =', `
   const templates = new api.ResearchTemplateService(f.repository, tools);
   const exports = new api.ResearchExportService(f.repository,
     new api.ResearchExportSourceService(f.repository, figures, experiments, templates), tools, root, logger);
-  const effects = new api.ResearchProductionEffectService(f.repository, files, experiments, figures, templates, exports);
+  const effects = new api.ResearchProductionEffectService(f.repository, files, experiments, figures, templates, exports,
+    {status: () => ({operation: null, environment: null})});
   const productionInputs = new api.ResearchProductionInputService(f.repository, experiments, figures, exports);
   const documents = new api.ResearchDocumentService(f.repository, tools, root);
   const library = new api.ResearchLibraryService(f.repository.library, tools, root);

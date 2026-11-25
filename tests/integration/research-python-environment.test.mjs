@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, realpath, mkdir, symlink, writeFile, readFile, rm, cp, stat, utimes } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { loadResearchTestApi } from '../unit/fixtures/research-test-kit.mjs';
+import { writePythonProjectFiles } from '../unit/fixtures/python-environment.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
   'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":".".join(map(str,sys.version_info[:3]))}))'],
@@ -16,7 +17,7 @@ before(async () => {
   root = await realpath(await mkdtemp('/private/tmp/roc-python-environment-'));
 });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a2');
+  const output = join(process.cwd(), '.artifacts/research-toolchain-p2');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-environment.json'), JSON.stringify({
     backend: 'macos-seatbelt', python, actualPythonTested: true, userSelectionGranted: false, receipts
@@ -34,9 +35,8 @@ async function fixture() {
   const selectedExecutable = join(venv, 'bin/python3');
   await symlink(python.executable, selectedExecutable);
   const config = join(venv, 'pyvenv.cfg');
-  await writeFile(config, `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
-  const lock = { schemaVersion: 1, python: { implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64' },
-    distributions: [{ name: 'fixture-pkg', version: '1.0.0' }] };
+  await writeFile(config, `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nimplementation = CPython\nuv = 0.13.9\nversion_info = ${python.version}\n`);
+  const locked = [{ name: 'fixture-pkg', version: '1.0.0' }];
   const packagePath = join(venv, 'lib/python3.14/site-packages');
   const metadata = join(packagePath, 'Fixture_Pkg-1.0.0.dist-info');
   const packageCode = join(packagePath, 'fixture_pkg');
@@ -44,14 +44,14 @@ async function fixture() {
   await writeFile(join(metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: Fixture_Pkg\nVersion: 1.0.0\n');
   await writeFile(join(packageCode, '__init__.py'), `raise RuntimeError("PACKAGE_CODE_WAS_IMPORTED")\n`);
   await writeFile(join(packagePath, 'sitecustomize.py'), `raise RuntimeError("STARTUP_HOOK_WAS_IMPORTED")\n`);
-  await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify(lock));
+  await writePythonProjectFiles(workspace, python.version, locked);
   await writeFile(join(workspace, 'undeclared.txt'), 'synthetic private project data');
   const input = {
     workspace, selectedExecutable, jobDir, signal: new AbortController().signal,
     admission: { projectId: 'python-environment-matrix', priority: 'user' },
     onProbe: receipt => receipts.push({ scenario: 'environment', probe: receipt }), run: api.runResearchProcess
   };
-  return { path, venv, workspace, config, packagePath, packageCode, metadata, lock, input };
+  return { path, venv, workspace, config, packagePath, packageCode, metadata, locked, input };
 }
 async function inspect(f, scenario, run = api.runResearchProcess) {
   return api.inspectPythonExperimentEnvironment({
@@ -69,14 +69,14 @@ async function inspect(f, scenario, run = api.runResearchProcess) {
   });
 }
 
-test('actual CPython venv probe verifies exact lock, ignores site hooks and never imports installed package code', async () => {
+test('actual CPython venv probe verifies locked installed identities, ignores site hooks and never imports installed package code', async () => {
   const f = await fixture();
   const first = await inspect(f, 'unchanged-first');
   const second = await inspect(f, 'unchanged-second');
   assert.equal(first.report.executable, f.input.selectedExecutable);
   assert.equal(first.report.prefix, f.venv);
   assert.equal(first.report.siteLoaded, false);
-  assert.deepEqual(first.report.distributions, f.lock.distributions);
+  assert.deepEqual(first.report.distributions, f.locked);
   assert.equal(first.metadataHash, second.metadataHash);
   assert.equal(first.code.hash, second.code.hash);
   assert.deepEqual(api.assertPythonCodeReceipt(first.codeReceipt, first.metadataHash), first.codeReceipt);
@@ -92,6 +92,25 @@ test('actual CPython venv probe verifies exact lock, ignores site hooks and neve
   const actual = receipts.find(item => item.scenario === 'unchanged-first' && item.actual).actual;
   assert.deepEqual(observed.usage, actual.resourceUsage); assert.deepEqual(observed.admission, actual.admission);
   assert.ok(observed.admission.holdMs > 0);
+});
+
+test('probe preserves its working files when process cleanup is unproven and cleans ordinary failures', async () => {
+  for (const code of ['research_process_kill_failed', 'research_process_supervision_failed',
+    'research_process_completion_failed', 'research_process_cancelled']) {
+    const f = await fixture();
+    let probe;
+    await assert.rejects(inspect(f, `probe-cleanup-${code}`, async request => {
+      probe = request.cwd;
+      await writeFile(join(probe, 'in-use.txt'), 'process evidence');
+      throw new api.ResearchProcessError(code, '', '');
+    }), error => error.code === code);
+    assert.ok(probe);
+    if (code === 'research_process_cancelled') {
+      await assert.rejects(stat(probe), { code: 'ENOENT' });
+    } else {
+      assert.equal(await readFile(join(probe, 'in-use.txt'), 'utf8'), 'process evidence');
+    }
+  }
 });
 
 test('actual Python probe policy denies undeclared data, runtime writes, network and inherited credentials', async () => {
@@ -134,48 +153,60 @@ print(json.dumps(observed))
   } finally { delete process.env.ROC_SYNTHETIC_PARENT_SECRET; }
 });
 
-test('lock version and complete distribution set must exactly match actual installed metadata', async () => {
-  for (const [change, error] of [
-    [lock => { lock.python.version = '3.14.0'; }, /research_python_runtime_version_mismatch/u],
-    [lock => { lock.distributions[0].version = '1.0.1'; }, /research_python_installed_distributions_mismatch/u],
-    [lock => { lock.distributions = []; }, /research_python_installed_distributions_mismatch/u],
-    [lock => { lock.distributions.push({ name: 'missing-package', version: '1.0.0' }); }, /research_python_installed_distributions_mismatch/u]
-  ]) {
-    const f = await fixture(); change(f.lock);
-    await writeFile(join(f.workspace, 'roc-python.lock.json'), JSON.stringify(f.lock));
-    await assert.rejects(inspect(f, 'lock-mismatch'), error);
+test('runtime pin and installed versions must match project declarations', async () => {
+  const version = await fixture();
+  await writeFile(join(version.workspace, '.python-version'), '3.14.0\n');
+  await assert.rejects(inspect(version, 'pin-mismatch'), /research_python_runtime_version_mismatch/u);
+  for (const distributions of [[{name: 'fixture-pkg', version: '1.0.1'}], []]) {
+    const f = await fixture();
+    await writePythonProjectFiles(f.workspace, python.version, distributions);
+    await assert.rejects(inspect(f, 'installed-mismatch'), error =>
+      error.code === 'research_python_installed_distributions_mismatch' && /research_python_installed_distributions_mismatch/u.test(error.stderr));
   }
 });
 
-test('invalid lock contracts and host path overrides refuse before any interpreter dispatch', async () => {
+test('removed installed package changes receipt identity even when the universal lock is unchanged', async () => {
+  const f = await fixture(), before = await inspect(f, 'installed-before');
+  await rm(f.metadata, {recursive: true}); await rm(f.packageCode, {recursive: true});
+  const after = await inspect(f, 'installed-after');
+  assert.deepEqual(before.lockFiles, after.lockFiles);
+  assert.deepEqual(after.report.distributions, []);
+  assert.notEqual(before.metadataHash, after.metadataHash);
+  // uv sync --locked --check establishes the marker-aware complete set during preparation;
+  // execution compares this measured state to that prepared receipt without invoking uv.
+});
+
+test('unsafe project file paths and host startup overrides refuse before interpreter dispatch', async () => {
   for (const [scenario, prepare] of [
-    ['unknown-lock-contract', async f => { f.lock.schemaVersion = 2; }],
-    ['duplicate-lock', async f => { f.lock.distributions.push(f.lock.distributions[0]); }],
-    ['unnormalized-lock-name', async f => { f.lock.distributions[0].name = 'Fixture_Pkg'; }],
-    ['unexpected-lock-field', async f => { f.lock.install = true; }],
     ['startup-override', async f => { await writeFile(join(f.venv, 'bin/python3._pth'), 'import site\n'); }],
-    ['external-code-link', async f => { await symlink(f.workspace, join(f.packageCode, 'external'), 'dir'); }]
+    ['external-code-link', async f => { await symlink(f.workspace, join(f.packageCode, 'external'), 'dir'); }],
+    ['missing-lock', async f => { await rm(join(f.workspace, 'uv.lock')); }],
+    ['empty-lock', async f => { await writeFile(join(f.workspace, 'uv.lock'), ''); }],
+    ['invalid-version', async f => { await writeFile(join(f.workspace, '.python-version'), '3.13.1\n'); }],
+    ['linked-lock', async f => {
+      const path = join(f.workspace, 'uv.lock'), external = join(f.path, 'external.lock');
+      await writeFile(external, await readFile(path)); await rm(path); await symlink(external, path);
+    }]
   ]) {
     const f = await fixture(); await prepare(f);
-    await writeFile(join(f.workspace, 'roc-python.lock.json'), JSON.stringify(f.lock));
-    let dispatches = 0;
-    await assert.rejects(inspect(f, scenario, async request => {
-      dispatches++; return api.runResearchProcess(request);
-    }));
-    assert.equal(dispatches, 0);
-    assert.equal(receipts.some(item => item.scenario === scenario && item.probe), false);
-  }
-  for (const scenario of ['missing-lock', 'malformed-lock', 'linked-lock']) {
-    const f = await fixture(), path = join(f.workspace, 'roc-python.lock.json');
-    await rm(path);
-    if (scenario === 'malformed-lock') await writeFile(path, '{broken');
-    if (scenario === 'linked-lock') {
-      const external = join(f.path, 'external-lock.json');
-      await writeFile(external, JSON.stringify(f.lock)); await symlink(external, path);
-    }
     let dispatches = 0;
     await assert.rejects(inspect(f, scenario, async request => { dispatches++; return api.runResearchProcess(request); }));
     assert.equal(dispatches, 0);
+    assert.equal(receipts.some(item => item.scenario === scenario && item.probe), false);
+  }
+});
+
+test('TOML source and schema errors fail inside the data-only isolated probe', async () => {
+  for (const [scenario, mutate] of [
+    ['malformed-lock', text => '{broken'],
+    ['lock-version', text => text.replace('version = 1', 'version = 99')],
+    ['direct-lock', text => text.replace('registry = "https://pypi.org/simple"', 'editable = "../source"')],
+    ['wheel-url', text => text.replace('files.pythonhosted.org', 'example.invalid')]
+  ]) {
+    const f = await fixture(), path = join(f.workspace, 'uv.lock');
+    await writeFile(path, mutate(await readFile(path, 'utf8')));
+    await assert.rejects(inspect(f, scenario), error => scenario === 'malformed-lock'
+      ? error.code === 'research_python_environment_probe_failed' : /^research_python_lock_/u.test(error.code));
   }
 });
 
@@ -189,7 +220,7 @@ test('unsupported direct/editable dependency and startup-path semantics fail wit
     const f = await fixture();
     await writeFile(join(filename === 'direct_url.json' ? f.metadata : f.packagePath, filename), content);
     await assert.rejects(inspect(f, filename), error => {
-      assert.equal(error.code, 'research_python_environment_probe_failed');
+      assert.match(error.code, /research_python_(direct_dependency|package_layout)_unsupported/u);
       assert.match(error.stderr, /research_python_(direct_dependency|package_layout)_unsupported/u);
       const actual = receipts.filter(item => item.scenario === filename && item.actual).at(-1).actual;
       assert.deepEqual(error.resourceUsage, actual.resourceUsage); assert.deepEqual(error.admission, actual.admission);
@@ -210,7 +241,7 @@ test('duplicate installed identities and malformed metadata are rejected rather 
   await rm(duplicate, { recursive: true });
   await writeFile(join(f.metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: Fixture_Pkg\nName: forged\nVersion: 1.0.0\n');
   await assert.rejects(inspect(f, 'malformed-installed'), error =>
-    error.code === 'research_python_environment_probe_failed' && /research_python_distribution_metadata_invalid/u.test(error.stderr));
+    error.code === 'research_python_distribution_metadata_invalid' && /research_python_distribution_metadata_invalid/u.test(error.stderr));
 });
 
 test('full native package bytes affect environment identity even with restored timestamps and unchanged lock metadata', async () => {
@@ -224,16 +255,16 @@ test('full native package bytes affect environment identity even with restored t
   await writeFile(native, bytes); await utimes(native, before.atime, before.mtime);
   const second = await inspect(f, 'native-after');
   assert.deepEqual(first.report.distributions, second.report.distributions);
-  assert.deepEqual(first.lockFile, second.lockFile);
+  assert.deepEqual(first.lockFiles, second.lockFiles);
   assert.notEqual(first.code.hash, second.code.hash);
   assert.notEqual(first.metadataHash, second.metadataHash);
 });
 
 test('post-dispatch lock, control and package-code drift each reject the actual otherwise successful probe', async () => {
   for (const [scenario, mutate, error] of [
-    ['lock-drift', async f => writeFile(join(f.workspace, 'roc-python.lock.json'), JSON.stringify({ ...f.lock, schemaVersion: 2 })),
+    ['lock-drift', async f => writeFile(join(f.workspace, 'uv.lock'), (await readFile(join(f.workspace, 'uv.lock'), 'utf8')) + '# changed\n'),
       /research_python_lock_changed/u],
-    ['control-drift', async f => writeFile(f.config, (await readFile(f.config, 'utf8')) + 'prompt = changed\n'),
+    ['control-drift', async f => writeFile(f.config, (await readFile(f.config, 'utf8')) + '\n'),
       /research_python_environment_controls_changed/u],
     ['code-drift', async f => writeFile(join(f.packageCode, '__init__.py'), 'raise RuntimeError("changed code")\n'),
       /research_python_native_code_changed/u]

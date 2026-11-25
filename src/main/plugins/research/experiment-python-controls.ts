@@ -42,8 +42,11 @@ export async function discoverPythonEnvironmentControls(selectedPath: string, si
     if (home === undefined || !isAbsolute(home) || await realpath(home) !== dirname(executable)) {
       throw new Error('research_python_venv_home_mismatch');
     }
-    const version = fields.get('version');
+    const version = fields.get('version_info');
     if (version === undefined || !/^3\.14\.\d+$/u.test(version)) throw new Error('research_python_venv_version_unsupported');
+    if (fields.get('implementation') !== 'CPython' || fields.get('uv') !== '0.13.9') {
+      throw new Error('research_python_venv_manager_unsupported');
+    }
     controls.push({ path: configPath, sha256: researchContentHash(config) });
   }
   const standardLibrary = await researchPath(basePrefix, 'lib/python3.14');
@@ -84,7 +87,7 @@ function parseVenvConfig(text: string): Map<string, string> {
   for (const line of text.split(/\r?\n/u)) {
     if (line.trim() === '') continue;
     const separator = line.indexOf('='), name = line.slice(0, separator).trim(), value = line.slice(separator + 1).trim();
-    if (separator < 1 || !['home', 'include-system-site-packages', 'version', 'executable', 'command', 'prompt'].includes(name)
+    if (separator < 1 || !['home', 'include-system-site-packages', 'version_info', 'implementation', 'uv'].includes(name)
       || value === '' || fields.has(name)) throw new Error('research_python_venv_config_invalid');
     fields.set(name, value);
   }

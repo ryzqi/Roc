@@ -18,7 +18,7 @@ before(async () => {
 after(() => api?.dispose());
 const matrix = rows => ({tokens:rows.length,dimensions:rows[0].length,values:new Float32Array(rows.flat())});
 const signal = () => new AbortController().signal;
-const model = {family:'colpali',path:'/controlled-fixture/no-model',sha256:'a'.repeat(64),selectionId:'fixture',selectionHash:'b'.repeat(64)};
+const model = {family:'colpali',path:'/controlled-fixture/no-model',sha256:'a'.repeat(64),environmentId:'fixture',environmentHash:'b'.repeat(64)};
 async function fixture(options = {}) {
   const f = await scientificSearchFixture(api, {image:true,embedded:false,...options});
   const configs = new Map(), config = {get:key=>configs.get(key)??null,set:(key,value)=>configs.set(key,value)};

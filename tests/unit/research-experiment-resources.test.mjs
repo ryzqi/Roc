@@ -26,7 +26,8 @@ async function fixture(processRun, inspectionError = null) {
     readablePaths: [], environment: { PATH: '/usr/bin:/bin' }, python: null,
     typescriptRuntime: { executable: '/usr/bin/true', runnerPath: '/fixture-runner.mts', packageRoots: [], packageEntries: {} }
   };
-  const environments = { async inspect() { if (inspectionError !== null) throw inspectionError; return prepared; } };
+  const inspect = async () => { if (inspectionError !== null) throw inspectionError; return prepared; };
+  const environments = { inspect, async acquire() { return {prepared: await inspect(), verify: inspect, release() {}}; } };
   const service = new api.ResearchExperimentService(f.repository, environments, root,
     { error: (...args) => persistenceErrors.push(args) }, processRun);
   const request = { projectId: f.project.id, ownerRunId: null, engine: 'typescript', runtime: { kind: 'bundled-node' },

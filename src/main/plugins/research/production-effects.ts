@@ -1,3 +1,5 @@
+import type {ResearchPythonEnvironmentService} from './python-environment-service';
+import {pythonEnvironmentActivePhases} from '../../../shared/schemas/research-python-environments';
 import type { ResearchExperimentExecution, ResearchExperimentStart, ResearchWorkspaceFileContent, ResearchWorkspaceFileSaveRequest } from '../../../shared/schemas/research-experiments';
 import type { ResearchFigureRun } from '../../../shared/schemas/research-figures';
 import type { ResearchExportExecution, ResearchExportPrepare } from '../../../shared/schemas/research-exports';
@@ -24,8 +26,27 @@ export class ResearchProductionEffectService {
     private readonly experiments: ResearchExperimentService,
     private readonly figures: ResearchFigureService,
     private readonly templates: ResearchTemplateService,
-    private readonly exports: ResearchExportService
+    private readonly exports: ResearchExportService,
+    private readonly pythonEnvironments: ResearchPythonEnvironmentService
   ) {}
+
+  async preparePythonEnvironment(ownerRunId: string, projectId: string, requestId: string, signal: AbortSignal) {
+    this.requireOwner(ownerRunId, projectId); signal.throwIfAborted();
+    const started = await this.pythonEnvironments.prepareOwned({projectId, requestId}, ownerRunId, signal);
+    try { this.requireOwner(ownerRunId, projectId); signal.throwIfAborted(); return started; }
+    catch (error) {
+      if (started.ownerRunId === ownerRunId && pythonEnvironmentActivePhases.has(started.phase))
+        await this.pythonEnvironments.cancelOwned({projectId, operationId: started.id}, ownerRunId);
+      throw error;
+    }
+  }
+
+  async cancelPythonEnvironment(ownerRunId: string, projectId: string, operationId: string) {
+    this.requireOwner(ownerRunId, projectId);
+    const result = await this.pythonEnvironments.cancelOwned({projectId, operationId}, ownerRunId);
+    this.requireOwner(ownerRunId, projectId);
+    return result;
+  }
 
   async readWorkspaceFile(ownerRunId: string, projectId: string, path: string): Promise<ResearchWorkspaceFileContent> {
     this.requireOwner(ownerRunId, projectId);
@@ -178,7 +199,10 @@ export class ResearchProductionEffectService {
     for (const run of figures) this.figures.abort(run.id);
     for (const record of exports) this.exports.abort(record.id);
     this.templates.abortOwned(ownerRunId);
+    const python = this.pythonEnvironments.status({projectId}).operation;
     await Promise.all([
+      ...(python?.ownerRunId === ownerRunId && pythonEnvironmentActivePhases.has(python.phase)
+        ? [this.pythonEnvironments.cancelOwned({projectId, operationId: python.id}, ownerRunId)] : []),
       ...experiments.map((run) => this.experiments.cancel(projectId, run.id)),
       ...figures.map((run) => this.figures.cancel(projectId, run.id)),
       ...exports.map((record) => this.exports.cancel(projectId, record.id))

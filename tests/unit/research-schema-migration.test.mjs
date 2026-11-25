@@ -1,15 +1,16 @@
 import {seedHistoricalResearch as seed, seedHistoricalPaperAssets} from '../fixtures/research-historical-database.mjs';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import Database from 'better-sqlite3';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {convertHistorical, validateHistorical, verifyPair, fingerprintTable, targetSchema}
   from '../../scripts/database/research-migration-lib.mjs';
-import {prepareResearchMigration, assertOffline, hashFile} from '../../scripts/database/migrate-research-schema.mjs';
+import {prepareResearchMigration, assertAgentReferencesUnchanged, assertOffline, hashFile} from '../../scripts/database/migrate-research-schema.mjs';
 import {verifyResearchMigration} from '../../scripts/database/verify-research-migration.mjs';
+import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 const {acquireDatabaseMaintenanceLease} = await importTypeScriptModule('src/main/infrastructure/database-maintenance-lease.ts',
   {platform: 'node'});
@@ -18,16 +19,131 @@ const [{ScientificIndexRepository},{buildPaperIR},{assessPdfQuality}]=await Prom
   importTypeScriptModule('src/main/plugins/research/paper-ir-builder.ts',{platform:'node'}),
   importTypeScriptModule('src/main/plugins/research/pdf-quality-assessor.ts',{platform:'node'})
 ]);
+const taskApi = await loadResearchTestApi();
+after(() => taskApi.dispose());
+function seedAgent(path, executionId) {
+  const db = new Database(path); taskApi.applyAgentDatabaseSchema(db);
+  new taskApi.ResearchTaskRepository(db).linkOwned({kind: 'experiment', executionId, projectId: 'p',
+    ownerRunId: null, goal: 'Retained Agent history', snapshot: {executionId}});
+  db.close();
+}
+
+function seedExecution(db, id, engine) {
+  db.prepare(`INSERT INTO research_experiment_runs
+    (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
+    VALUES(?,'p',?,'[]','{}','{}','completed','[]','old','old')`).run(id, engine);
+  db.prepare(`INSERT INTO research_experiment_executions
+    (run_id,project_id,request_id,status,snapshot_json,root_path,created_at) VALUES(?,'p',?,'completed',?,'/historical','old')`)
+    .run(id, id, JSON.stringify({id, request: {engine}, artifactId: null}));
+  db.prepare(`INSERT INTO research_experiment_results(id,project_id,run_id,request_id,snapshot_json,snapshot_hash,created_at)
+    VALUES(?,'p',?,?,'{}','historical-result-hash','old')`).run(`${id}-result`, id, `${id}-result`);
+}
+
+test('v75 migration removes authorized isolated R/Julia history and fingerprints every retained result', () => {
+  const source = seed(':memory:', 75), target = new Database(':memory:');
+  try {
+    for (const engine of ['r', 'julia', 'typescript']) seedExecution(source, `${engine}-execution`, engine);
+    const before = source.serialize(), result = convertHistorical(source, target);
+    assert.deepEqual(source.serialize(), before);
+    assert.deepEqual(target.prepare('SELECT id FROM research_experiment_runs').pluck().all(), ['typescript-execution']);
+    assert.deepEqual(target.prepare('SELECT id FROM research_experiment_results').pluck().all(), ['typescript-execution-result']);
+    for (const name of ['research_experiment_runs', 'research_experiment_executions', 'research_experiment_results']) {
+      assert.equal(result.removedRows[name].count, 2);
+      assert.equal(result.removedRows[name].reason, 'authorized_removed_r_julia_history');
+      assert.equal(result.tables[name].count, 1);
+    }
+    assert.equal(target.prepare('SELECT count(*) FROM research_python_environments').pluck().get(), 0);
+    assert.equal(target.prepare('SELECT count(*) FROM research_python_environment_operations').pluck().get(), 0);
+    assert.deepEqual(target.pragma('foreign_key_check'), []);
+  } finally {source.close(); target.close();}
+});
+
+test('old Python receipts and executions refuse before initializing a candidate', () => {
+  for (const kind of ['receipt', 'execution']) {
+    const source = seed(':memory:', 75), target = new Database(':memory:');
+    try {
+      if (kind === 'receipt') source.prepare(`INSERT INTO research_python_environment_selections
+        (id,project_id,request_id,snapshot_json,snapshot_hash,created_at) VALUES('old-python','p','old','{}','old','old')`).run();
+      else seedExecution(source, 'old-python-execution', 'python');
+      const original = source.serialize();
+      assert.throws(() => convertHistorical(source, target), kind === 'receipt'
+        ? /migration_python_receipts_require_archive/u : /migration_python_history_requires_archive/u);
+      assert.deepEqual(source.serialize(), original);
+      assert.equal(target.prepare('SELECT count(*) FROM sqlite_master').pluck().get(), 0);
+    } finally {source.close(); target.close();}
+  }
+});
+
+test('referenced R/Julia history refuses before candidate creation and leaves all source data intact', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'roc-migration-linked-history-')));
+  try {
+    const parent = join(root, 'plugin-data/data/plugins/@roc'); mkdirSync(parent, {recursive: true});
+    const path = join(parent, 'plugin-research.db'), source = seed(path, 75);
+    seedExecution(source, 'r-linked-execution', 'r');
+    source.prepare(`INSERT INTO research_provenance
+      (id,project_id,artifact_id,subject_type,subject_id,source_type,source_id,created_at)
+      VALUES('linked-provenance','p','a','experiment','r-linked-execution','experiment','r-linked-execution','old')`).run();
+    source.close(); const before = hashFile(path), directory = join(root, 'migration');
+    await assert.rejects(prepareResearchMigration({dataRoot: root, output: directory}),
+      /migration_unsupported_history_referenced:research_provenance/u);
+    assert.equal(existsSync(join(directory, 'candidate.db')), false);
+    assert.equal(hashFile(path), before);
+    assert.equal(existsSync(join(directory, 'backup.db')), true);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
+test('actual Agent task links reject R/Julia removal before candidate creation without modifying either database', async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'roc-migration-agent-reference-')));
+  try {
+    const parent = join(root, 'plugin-data/data/plugins/@roc'); mkdirSync(parent, {recursive: true});
+    const path = join(parent, 'plugin-research.db'), agentPath = join(parent, 'plugin-agent.db');
+    const source = seed(path, 75); seedExecution(source, 'r-agent-linked', 'r'); source.close();
+    seedAgent(agentPath, 'r-agent-linked');
+    const before = [hashFile(path), hashFile(agentPath)], directory = join(root, 'migration');
+    await assert.rejects(prepareResearchMigration({dataRoot: root, output: directory}),
+      /migration_unsupported_history_referenced:agent:research_task/u);
+    assert.equal(existsSync(join(directory, 'candidate.db')), false);
+    assert.deepEqual([hashFile(path), hashFile(agentPath)], before);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
+test('R/Julia removal binds the offline Agent snapshot or its absence and detects later history drift', async () => {
+  for (const exists of [false, true]) {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'roc-migration-agent-fence-')));
+    try {
+      const parent = join(root, 'plugin-data/data/plugins/@roc'); mkdirSync(parent, {recursive: true});
+      const path = join(parent, 'plugin-research.db'), agentPath = join(parent, 'plugin-agent.db');
+      const source = seed(path, 75); seedExecution(source, 'r-isolated', 'r'); source.close();
+      if (exists) seedAgent(agentPath, 'retained-typescript');
+      const before = hashFile(path), directory = join(root, 'migration');
+      const receipt = await prepareResearchMigration({dataRoot: root, output: directory});
+      assert.deepEqual(receipt.agentReferences, {sourcePath: agentPath, sourceHash: exists ? hashFile(agentPath) : null});
+      assert.deepEqual(verifyResearchMigration(directory), receipt);
+      assertAgentReferencesUnchanged(root, receipt.agentReferences);
+      seedAgent(agentPath, 'r-isolated');
+      assert.throws(() => assertAgentReferencesUnchanged(root, receipt.agentReferences), /migration_agent_source_changed/u);
+      assert.equal(hashFile(path), before);
+      if (exists) {
+        writeFileSync(join(directory, 'agent-reference-snapshot.db'), 'changed');
+        assert.throws(() => verifyResearchMigration(directory), /migration_agent_snapshot_changed/u);
+      }
+    } finally {rmSync(root, {recursive: true, force: true});}
+  }
+});
 
 
-for (const version of [71, 72, 73, 74]) test(`v${version} conversion preserves every business row, locator, revision and binary vector`, () => {
+for (const version of [71, 72, 73, 74, 75]) test(`v${version} conversion preserves every business row, locator, revision and binary vector`, () => {
   const source = seed(':memory:', version), target = new Database(':memory:');
   try {
     const before = source.serialize(), result = convertHistorical(source, target);
     assert.deepEqual(source.serialize(), before);
     assert.equal(target.prepare('SELECT current_version FROM schema_metadata').pluck().get(), targetSchema.version);
     assert.ok(Object.keys(result.tables).length > 70);
-    assert.ok(result.addedTables.includes('research_proposals'));
+    if (version < 75) assert.ok(result.addedTables.includes('research_proposals'));
+    assert.ok(result.addedTables.includes('research_python_environments'));
+    assert.ok(result.addedTables.includes('research_python_environment_operations'));
+    assert.deepEqual(result.removedRows, {});
+    assert.equal(result.removedTables[0].name, 'research_python_environment_selections');
     assert.equal(target.prepare('SELECT count(*) FROM research_wiki_pages').pluck().get(),
       source.prepare('SELECT count(*) FROM research_wiki_pages').pluck().get(), 'copy must not replay evidence-insert effects');
     for (const name of ['research_knowledge_chunks_fts','research_knowledge_documents_fts','research_knowledge_keywords','research_wiki_fts']) {
@@ -38,7 +154,7 @@ for (const version of [71, 72, 73, 74]) test(`v${version} conversion preserves e
   } finally {source.close(); target.close();}
 });
 
-for (const version of [71,72,73,74]) test(`v${version} converted database rebuilds scientific generations from retained source objects`, () => {
+for (const version of [71,72,73,74,75]) test(`v${version} converted database rebuilds scientific generations from retained source objects`, () => {
   const source=seed(':memory:',version), target=new Database(':memory:');
   try {
     convertHistorical(source,target);

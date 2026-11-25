@@ -266,7 +266,7 @@ test('typed frozen Notebook source displays the explicit import identity and sav
   const {sourcePath:_path,...fields}=request;
   f.input.source.execution.request={...fields,engine:'python',source:{kind:'notebook',notebookId:'frozen-notebook-identity',
     expectedHash:'a'.repeat(64),subsetVersion:1},seed:73,arguments:[],expectedEnvironmentHash:'b'.repeat(64),
-    runtime:{kind:'python',selectionId:'selected-python',expectedHash:'c'.repeat(64)}};
+    runtime:{kind:'python',environmentId:'selected-python',expectedHash:'c'.repeat(64)}};
   api.researchProductionInputSchema.parse(f.input);
   active=f;calls.length=0;
   await page.evaluate(request=>mount(request,false),f.request);

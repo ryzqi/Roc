@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {verifyPair, manifest, sha256} from './research-migration-lib.mjs';
-import {hashFile, readFlags} from './migrate-research-schema.mjs';
+import {hashFile, readFlags, verifyAgentReferenceSnapshot} from './migrate-research-schema.mjs';
 
 export function verifyResearchMigration(directory) {
   const root = resolve(directory), receipt = JSON.parse(readFileSync(join(root, 'prepared.json'), 'utf8'));
@@ -17,6 +17,7 @@ export function verifyResearchMigration(directory) {
   // Independently compare the original offline snapshot with the native backup.
   const snapshotVerification = verifyPair(join(root, 'source-snapshot.db'), join(root, 'candidate.db'));
   assert.deepEqual(snapshotVerification, verification, 'migration_native_backup_changed');
+  verifyAgentReferenceSnapshot(root, receipt);
   return receipt;
 }
 

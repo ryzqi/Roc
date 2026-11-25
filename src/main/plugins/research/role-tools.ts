@@ -20,7 +20,7 @@ import { requireConfirmedSearchStrategy } from './search-strategy';
 import {relationClaimHash, relationSourceDigest} from './evidence-relation-repository';
 import {knowledgeSearchView} from './knowledge-consumption';
 import {createScientificTools} from '../agent/scientific-tools';
-import { researchPythonEnvironmentSelectionSchema } from '../../../shared/schemas/research-python-environments';
+import { researchPythonEnvironmentReceiptSchema, researchPythonEnvironmentStatusSchema } from '../../../shared/schemas/research-python-environments';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -274,17 +274,31 @@ export function createResearchRoleTools(input: {
       return after({ path: file.path, sha256: file.sha256, size: file.size, revision: file.revision });
     }, { name: 'save_workspace_file', description: '按 expectedHash 写入当前项目脚本或数据。新建传 null；冲突或取消后的迟到写入会被拒绝。',
       schema: z.object({ path: z.string().min(1), content: z.string().max(1024 * 1024), expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
+    prepare_python_environment: () => tool(async ({requestId}) => {
+      return after(await effects().preparePythonEnvironment(input.run.id, input.run.projectId, requestId, input.signal));
+    }, {name: 'prepare_python_environment', description: '准备当前项目 Python 3.14 与 uv 环境，可能下载运行时和依赖。返回操作状态；同一 requestId 不重复执行。随后读取 get_python_environment_status，只有 ready 的 environmentRef 可用于实验。项目和运行身份由服务绑定。',
+      schema: z.strictObject({requestId: z.string().trim().min(1).max(300)})}),
+    get_python_environment_status: () => tool(async () => {
+      assertActive();
+      const status = researchPythonEnvironmentStatusSchema.parse(await input.capabilities.invoke(
+        'research.pythonEnvironments.status', {projectId: input.run.projectId}));
+      return after(status);
+    }, {name: 'get_python_environment_status', description: '只读获取当前项目 Python 准备阶段、错误和成功回执。活动操作需等待；ready 后使用 operation.environmentRef，不采用失败操作之前的历史回执。', schema: z.strictObject({})}),
+    cancel_python_environment: () => tool(async ({operationId}) => {
+      return after(await effects().cancelPythonEnvironment(input.run.id, input.run.projectId, operationId));
+    }, {name: 'cancel_python_environment', description: '取消当前运行自己发起的 Python 环境准备并等待子进程退出。不能取消其他运行、人工或系统创建的操作。',
+      schema: z.strictObject({operationId: z.string().trim().min(1).max(300)})}),
     list_python_environments: () => tool(async ({ offset, limit }) => {
       assertActive();
-      const selections = researchPythonEnvironmentSelectionSchema.array().parse(await input.capabilities.invoke(
+      const environments = researchPythonEnvironmentReceiptSchema.array().parse(await input.capabilities.invoke(
         'research.pythonEnvironments.list', { projectId: input.run.projectId })).reverse();
       assertActive();
-      return { total: selections.length, items: selections.slice(offset, offset + limit).map(({ snapshot, snapshotHash }) => ({
-        runtime: { kind: 'python', selectionId: snapshot.id, expectedHash: snapshotHash },
+      return { total: environments.length, items: environments.slice(offset, offset + limit).map(({ snapshot, snapshotHash }) => ({
+        runtime: { kind: 'python', environmentId: snapshot.id, expectedHash: snapshotHash },
         version: snapshot.version, platform: snapshot.platform, architecture: snapshot.architecture,
-        recordedAt: snapshot.recordedAt, codeHash: snapshot.codeHash, lockFile: snapshot.lockFile
+        recordedAt: snapshot.recordedAt, codeHash: snapshot.codeHash, lockFiles: snapshot.lockFiles
       })) };
-    }, { name: 'list_python_environments', description: '自动检测并核验项目 Python 环境，首次使用自动生成缺失的锁文件，返回最新环境优先的分页身份。无需用户选择解释器；启动前用 inspect_experiment_environment 取得当前环境哈希。',
+    }, { name: 'list_python_environments', description: '只读列出项目已保存的 Python 环境回执，不安装、不探测、不写文件。先 prepare_python_environment 并读取 get_python_environment_status 确认 ready，再用该 environmentRef 预览实验环境。',
       schema: z.strictObject({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(10) }) }),
     inspect_experiment_environment: () => tool(async ({ runtime, offset, limit }) => {
       assertActive();
@@ -296,13 +310,13 @@ export function createResearchRoleTools(input: {
       return { runtime: environment.runtime, expectedEnvironmentHash: environment.hash, version: environment.version,
         platform: environment.platform, architecture: environment.architecture,
         ...page(JSON.stringify(environment), offset, limit) };
-    }, { name: 'inspect_experiment_environment', description: '在本项目重新核验实验环境，返回 start_experiment 的 expectedEnvironmentHash 和分页环境报告。Python runtime 必须使用 list_python_environments 返回的选择身份；探针不安装依赖或创建实验。失败需解决环境后重新预览。',
+    }, { name: 'inspect_experiment_environment', description: '在本项目重新核验实验环境，返回 start_experiment 的 expectedEnvironmentHash 和分页环境报告。Python runtime 必须使用 list_python_environments 返回的环境身份；探针不安装依赖或创建实验。失败需解决环境后重新预览。',
       schema: z.strictObject({ runtime: researchExperimentEnvironmentRequestSchema.shape.runtime,
         offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }) }),
     start_experiment: () => tool(async (request) => {
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先自动准备并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有结果，requestId 变化不重复执行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先 prepare_python_environment，等状态 ready 后预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有结果，requestId 变化不重复执行。',
       schema: researchOwnedExperimentStartSchema }),
     inspect_figure_environment: () => tool(async () => {
       assertActive();

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, stat, chmod } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { loadResearchTestApi } from '../unit/fixtures/research-test-kit.mjs';
+import { writePythonProjectFiles } from '../unit/fixtures/python-environment.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
   'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version.split()[0]}))'], { encoding: 'utf8' }));
@@ -12,7 +13,7 @@ let api, root;
 const receipts = [];
 before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-process-')); });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4b2');
+  const output = join(process.cwd(), '.artifacts/research-toolchain-p2');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-process.json'), JSON.stringify({
     python, actualIsolatedPython: true, userSelectionGranted: false, bootstrapHash: api.pythonExperimentBootstrapHash(), receipts
@@ -27,16 +28,13 @@ async function fixture(code) {
   const packagePath = join(venv, 'lib/python3.14/site-packages'), jobDir = join(path, 'jobs');
   for (const dir of [workspace, inputDir, outputDir, scratchDir, packagePath, jobDir, join(venv, 'bin')]) await mkdir(dir, { recursive: true });
   const executable = join(venv, 'bin/python3'); await symlink(python.executable, executable);
-  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
+  await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nimplementation = CPython\nuv = 0.13.9\nversion_info = ${python.version}\n`);
   const metadata = join(packagePath, 'Fixture_Pkg-1.0.0.dist-info'), packageCode = join(packagePath, 'fixture_pkg');
   await mkdir(metadata); await mkdir(packageCode);
   await writeFile(join(metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: Fixture_Pkg\nVersion: 1.0.0\n');
   await writeFile(join(packageCode, '__init__.py'), 'VALUE = 42\n');
   await writeFile(join(packagePath, 'sitecustomize.py'), 'raise RuntimeError("UNTRUSTED_HOOK_EXECUTED")\n');
-  await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify({
-    schemaVersion: 1, python: { implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64' },
-    distributions: [{ name: 'fixture-pkg', version: '1.0.0' }]
-  }));
+  await writePythonProjectFiles(workspace, python.version, [{ name: 'fixture-pkg', version: '1.0.0' }]);
   const inspected = await api.inspectPythonExperimentEnvironment({
     workspace, selectedExecutable: executable, jobDir, signal: new AbortController().signal, run: api.runResearchProcess,
     admission: { projectId: 'python-process', priority: 'user' }, onProbe: receipt => receipts.push({ scenario: 'preflight', receipt })

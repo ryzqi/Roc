@@ -20,14 +20,18 @@ const capabilities = {
 
 export const researchIdeaCapabilities = Object.values(capabilities);
 
-export function registerResearchIdeaCapabilities(context: RocPluginContext, repository: ResearchIdeaRepository): void {
+export function registerResearchIdeaCapabilities(context: RocPluginContext, repository: ResearchIdeaRepository, afterPromote: (projectId: string) => void): void {
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
     context.capabilities.register(context.pluginId, capability, async (input) => run(input));
   }
   register(capabilities.save, (request) => repository.save(request));
   register(capabilities.get, (request) => repository.get(request.artifactId));
   register(capabilities.history, (request) => repository.history(request.artifactId));
-  register(capabilities.promote, (request) => repository.promote(request));
+  register(capabilities.promote, (request) => {
+    const result = repository.promote(request);
+    afterPromote(result.project.id);
+    return result;
+  });
 }
 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {

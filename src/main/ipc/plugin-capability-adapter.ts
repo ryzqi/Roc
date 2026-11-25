@@ -25,7 +25,7 @@ import {researchExternalExperimentCreateSchema,researchExternalExperimentBindSch
 import {pickSubmissionDestination,type SubmissionDestinationPicker} from './submission-destination';
 import { withLiteratureContext } from '../services/literature-context';
 import {literatureSearchProgressSchema, type LiteratureSearchProgress} from '../../shared/schemas/literature-import';
-import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
+import { researchPythonEnvironmentPrepareSchema, researchPythonEnvironmentCancelSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
 import { researchExperimentResultReviewSchema,researchExperimentResultEvidenceCaptureSchema } from '../../shared/schemas/research-experiment-results';
 import {withResearchHumanContext} from '../services/research-human-context';
@@ -281,8 +281,9 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
           return withResearchHumanContext({ capability: target.capabilityName, projectId: request.projectId, windowId },
             () => invoker.invokeCapability(target.capabilityName, request));
         }
-        if (target.capabilityName === 'research.pythonEnvironments.select') {
-          const request = researchPythonEnvironmentSelectSchema.parse(input);
+        if (target.capabilityName === 'research.pythonEnvironments.prepare' || target.capabilityName === 'research.pythonEnvironments.cancel') {
+          const request = target.capabilityName === 'research.pythonEnvironments.prepare'
+            ? researchPythonEnvironmentPrepareSchema.parse(input) : researchPythonEnvironmentCancelSchema.parse(input);
           return withResearchHumanContext({ capability: target.capabilityName, projectId: request.projectId, windowId },
             () => invoker.invokeCapability(target.capabilityName, request));
         }

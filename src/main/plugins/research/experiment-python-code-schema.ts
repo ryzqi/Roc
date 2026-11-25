@@ -13,14 +13,6 @@ const distributions = z.array(z.strictObject({
     context.addIssue({ code: 'custom', message: 'research_python_distribution_duplicate' });
   }
 });
-export const pythonEnvironmentLockSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  python: z.strictObject({
-    implementation: z.literal('cpython'), version: z.string().regex(/^3\.14\.\d+$/u),
-    platform: z.literal('darwin'), architecture: z.literal('arm64')
-  }),
-  distributions
-});
 export const pythonEnvironmentReportSchema = z.strictObject({
   implementation: z.literal('cpython'), version: z.string().regex(/^3\.14\.\d+$/u),
   platform: z.literal('darwin'), architecture: z.literal('arm64'),
@@ -38,14 +30,15 @@ export const pythonEnvironmentControlsSchema = z.strictObject({
   controls: z.array(z.strictObject({ path, sha256: hash })).max(1)
 });
 export const pythonEnvironmentLockFileSchema = z.strictObject({
-  path: z.literal('roc-python.lock.json'), size: z.number().int().positive().max(4 * 1024 ** 2), sha256: hash
+  path: z.enum(['pyproject.toml', 'uv.lock', '.python-version']), size: z.number().int().positive().max(4 * 1024 ** 2), sha256: hash
 });
 export const pythonCodeReceiptSchema = z.strictObject({
   code: nativeCodeSnapshotSchema,
   metadataIdentity: z.strictObject({
-    inspectionContractVersion: z.literal(1),
+    inspectionContractVersion: z.literal(2),
     controls: pythonEnvironmentControlsSchema,
-    lockFile: pythonEnvironmentLockFileSchema,
+    lockFiles: z.array(pythonEnvironmentLockFileSchema).length(3).refine(files =>
+      files.map(file => file.path).join(',') === 'pyproject.toml,uv.lock,.python-version'),
     code: hash,
     report: pythonEnvironmentReportSchema,
     probe: hash

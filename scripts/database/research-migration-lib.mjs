@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import {importTypeScriptModule} from '../lib/bundle-ts.mjs';
 
 const bundleOptions = {platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime/database-migration')};
-const [{researchSchema}, {initializeDatabaseSchema}] = await Promise.all([
+const [{researchSchema, agentSchema}, {initializeDatabaseSchema}] = await Promise.all([
   importTypeScriptModule('src/main/infrastructure/database-schemas.ts', bundleOptions),
   importTypeScriptModule('src/main/infrastructure/database-schema.ts', bundleOptions)
 ]);
@@ -60,26 +60,106 @@ const valuesQuery = (db, table) => `SELECT rowid,${columns(db, table).map(quote)
 const encode = row => JSON.stringify(row.map(value => Buffer.isBuffer(value) ? ['blob', value.toString('hex')]
   : typeof value === 'bigint' ? ['integer', value.toString()] : [typeof value, value]));
 
-export function fingerprintTable(db, table) {
+export function fingerprintTable(db, table, include = () => true) {
   const hash = createHash('sha256'); let count = 0;
   const names = columns(db, table); hash.update(JSON.stringify(['rowid', ...names]) + '\n');
   for (const row of db.prepare(valuesQuery(db, table)).raw().safeIntegers().iterate()) {
+    if (!include(row)) continue;
     hash.update(encode(row) + '\n'); count++;
   }
   return {count, sha256: hash.digest('hex'), columns: names};
 }
 
+/** The only authorized data removal is isolated R/Julia execution history. */
+export function inspectHistoricalMigration(source) {
+  const oldPythonTable = 'research_python_environment_selections';
+  const original = businessTables(source), removedTables = [], excluded = new Map(), removedRows = {};
+  if (original.includes(oldPythonTable)) {
+    const fingerprint = fingerprintTable(source, oldPythonTable);
+    assert.equal(fingerprint.count, 0, `migration_python_receipts_require_archive:${fingerprint.count}`);
+    removedTables.push({name: oldPythonTable, ...fingerprint, reason: 'replaced_empty_python_receipt_contract'});
+  }
+  const runIds = new Set();
+  for (const row of source.prepare('SELECT run_id,snapshot_json FROM research_experiment_executions').iterate()) {
+    const snapshot = JSON.parse(row.snapshot_json);
+    assert.notEqual(snapshot.request?.engine, 'python', `migration_python_history_requires_archive:${row.run_id}`);
+    if (!['r', 'julia'].includes(snapshot.request?.engine)) continue;
+    assert.equal(snapshot.artifactId ?? null, null, `migration_unsupported_history_referenced:artifact:${row.run_id}`);
+    runIds.add(row.run_id);
+  }
+  // Unmanaged historical records have no execution snapshot. Only explicit
+  // structured engine identity is sufficient to authorize their removal.
+  for (const row of source.prepare(`SELECT r.id,r.environment_json,r.command FROM research_experiment_runs r
+    LEFT JOIN research_experiment_executions e ON e.run_id=r.id WHERE e.run_id IS NULL`).iterate()) {
+    const environment = JSON.parse(row.environment_json);
+    let command; try {command = JSON.parse(row.command);} catch {command = null;}
+    if (['r', 'julia'].includes(environment.runtime?.kind ?? environment.engine)
+      || Array.isArray(command) && ['r-v1', 'julia-v1'].includes(command[0])) runIds.add(row.id);
+  }
+  const removedIds = new Set(runIds);
+  for (const [table, key] of [['research_experiment_runs', 'id'], ['research_experiment_executions', 'run_id'],
+    ['research_experiment_results', 'run_id']]) {
+    const rows = source.prepare(`SELECT rowid,* FROM ${quote(table)} ORDER BY rowid`).safeIntegers().all()
+      .filter(row => runIds.has(row[key]));
+    if (rows.length === 0) continue;
+    const rowids = new Set(rows.map(row => String(row.rowid)));
+    for (const row of rows) if (typeof row.id === 'string') removedIds.add(row.id);
+    excluded.set(table, rowids);
+    removedRows[table] = {reason: 'authorized_removed_r_julia_history',
+      ids: rows.map(row => row[key]), recordIds: rows.map(row => row.id ?? row.run_id), rowids: [...rowids],
+      ...fingerprintTable(source, table, row => rowids.has(String(row[0])))};
+  }
+  if (removedIds.size > 0) {
+    for (const table of original) {
+      if (table === oldPythonTable) continue;
+      for (const row of source.prepare(`SELECT rowid,* FROM ${quote(table)}`).safeIntegers().iterate()) {
+        if (excluded.get(table)?.has(String(row.rowid))) continue;
+        for (const [column, value] of Object.entries(row)) {
+          if (typeof value === 'string' && [...removedIds].some(id => value.includes(id))) {
+            throw new Error(`migration_unsupported_history_referenced:${table}:${column}`);
+          }
+        }
+      }
+    }
+  }
+  return {excluded, removedRows, removedTables};
+}
+
+export function removedHistoryIds(verification) {
+  return [...new Set(Object.values(verification.removedRows).flatMap(row => [...row.ids, ...row.recordIds]))];
+}
+
+export function assertNoExternalHistoryReferences(db, ids) {
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name='schema_metadata'").get(), 'migration_agent_identity_missing');
+  initializeDatabaseSchema(db, {dbName: 'agent', schema: agentSchema});
+  checkIntegrity(db);
+  for (const table of businessTables(db)) {
+    for (const row of db.prepare(`SELECT * FROM ${quote(table)}`).iterate()) {
+      for (const [column, value] of Object.entries(row)) {
+        const text = typeof value === 'string' ? value : Buffer.isBuffer(value) ? value.toString('utf8') : null;
+        if (text !== null && ids.some(id => text.includes(id)))
+          throw new Error(`migration_unsupported_history_referenced:agent:${table}:${column}`);
+      }
+    }
+  }
+}
+
 export function compareBusiness(source, target) {
+  const plan = inspectHistoricalMigration(source);
   const original = businessTables(source), current = businessTables(target), tables = {};
   for (const name of original) {
+    if (plan.removedTables.some(table => table.name === name)) {
+      assert.ok(!current.includes(name), `migration_removed_table_present:${name}`); continue;
+    }
     assert.ok(current.includes(name), `migration_table_missing:${name}`);
-    const before = fingerprintTable(source, name), after = fingerprintTable(target, name);
+    const before = fingerprintTable(source, name, row => !plan.excluded.get(name)?.has(String(row[0])));
+    const after = fingerprintTable(target, name);
     assert.deepEqual(after, before, `migration_content_changed:${name}`);
     tables[name] = before;
   }
   const addedTables = current.filter(name => !original.includes(name));
   for (const name of addedTables) assert.equal(fingerprintTable(target, name).count, 0, `migration_new_table_populated:${name}`);
-  return {tables, addedTables};
+  return {tables, addedTables, removedTables: plan.removedTables, removedRows: plan.removedRows};
 }
 
 const externalFts = ['research_knowledge_chunks_fts', 'research_knowledge_documents_fts', 'research_wiki_fts'];
@@ -98,6 +178,7 @@ export function rebuildFts(db) {
 
 export function convertHistorical(source, target) {
   validateHistorical(source);
+  const plan = inspectHistoricalMigration(source);
   initializeTarget(target);
   target.pragma('foreign_keys=OFF');
   target.transaction(() => {
@@ -106,11 +187,14 @@ export function convertHistorical(source, target) {
     // Insert explicit columns and rowid, preserving locator strings, immutable
     // snapshots, job status, vectors and the FTS external-content join keys.
     for (const table of [...businessTables(source), 'research_knowledge_keywords']) {
+      if (plan.removedTables.some(removed => removed.name === table)) continue;
       const names = columns(source, table);
       assert.deepEqual(columns(target, table), names, `migration_columns_changed:${table}`);
       const insert = target.prepare(`INSERT INTO ${quote(table)}(rowid,${names.map(quote).join(',')}) ` +
         `VALUES(${Array(names.length + 1).fill('?').join(',')})`);
-      for (const row of source.prepare(valuesQuery(source, table)).raw().safeIntegers().iterate()) insert.run(...row);
+      for (const row of source.prepare(valuesQuery(source, table)).raw().safeIntegers().iterate()) {
+        if (!plan.excluded.get(table)?.has(String(row[0]))) insert.run(...row);
+      }
     }
     rebuildFts(target);
     for (const {sql} of triggers) target.exec(sql);

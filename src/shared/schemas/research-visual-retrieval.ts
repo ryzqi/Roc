@@ -8,8 +8,8 @@ export const visualRetrievalVersion = 'roc-visual-retrieval/1';
 export const visualModelSchema = z.strictObject({
   family: z.enum(['colpali', 'colqwen2']),
   path: z.string().startsWith('/').max(4096).regex(/^[^\u0000-\u001f]+$/u),
-  // selectionHash is PythonEnvironmentSelection.snapshotHash, not the probed metadataHash.
-  sha256: hash, selectionId: id, selectionHash: hash
+  // environmentHash is PythonEnvironmentReceipt.snapshotHash, not the probed metadataHash.
+  sha256: hash, environmentId: id, environmentHash: hash
 });
 export const visualConfigSchema = z.strictObject({
   enabled: z.boolean().default(false), model: visualModelSchema.nullable().default(null)

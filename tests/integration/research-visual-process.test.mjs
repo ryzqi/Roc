@@ -1,3 +1,4 @@
+import {writePythonProjectFiles} from '../unit/fixtures/python-environment.mjs';
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
@@ -21,7 +22,7 @@ before(async()=>{
   const venv=join(root,'venv'), packages=join(venv,'lib/python3.14/site-packages'), workspace=join(root,'workspace'), jobs=join(root,'jobs');
   for(const path of [packages,workspace,jobs,join(venv,'bin'),join(root,'model')]) await mkdir(path,{recursive:true});
   const executable=join(venv,'bin/python3'); await symlink(python.executable,executable);
-  await writeFile(join(venv,'pyvenv.cfg'),`home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
+  await writeFile(join(venv,'pyvenv.cfg'),`home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion_info = ${python.version}\nimplementation = CPython\nuv = 0.13.9\n`);
   const dist=join(packages,'sentence_transformers-6.0.1.dist-info'); await mkdir(dist);
   await writeFile(join(dist,'METADATA'),'Metadata-Version: 2.4\nName: sentence-transformers\nVersion: 6.0.1\n');
   await writeFile(join(packages,'sitecustomize.py'),'raise RuntimeError("unexpected site execution")\n');
@@ -72,21 +73,23 @@ class MultiVectorEncoder:
         assert kwargs == {"batch_size": 1, "convert_to_numpy": True, "normalize_embeddings": True, "show_progress_bar": False}
         return ["controlled matrix"]
 `);
-  await writeFile(join(workspace,'roc-python.lock.json'),JSON.stringify({schemaVersion:1,
-    python:{implementation:'cpython',version:python.version,platform:'darwin',architecture:'arm64'},
-    distributions:[{name:'sentence-transformers',version:'6.0.1'}]}));
+  await writePythonProjectFiles(workspace, python.version, [{name: 'sentence-transformers', version: '6.0.1'}]);
   const inspect=async(jobDir,signal,admission)=>api.inspectPythonExperimentEnvironment({workspace,selectedExecutable:executable,
     jobDir,signal,admission,onProbe(){},run:api.runResearchProcess});
   inspected=await inspect(jobs,new AbortController().signal,{projectId:'visual-fixture',priority:'background'});
-  environment={resolve:async(_selection,jobDir,signal,admission)=>{
+  environment={acquireRuntime:async(_environment,jobDir,signal,admission)=>{
     assert.equal(admission.priority,'background');
-    const current=await inspect(jobDir,signal,admission); assert.equal(current.metadataHash,inspected.metadataHash);return current;
+    const verify=async()=>{
+      const current=await inspect(jobDir,signal,admission);
+      assert.equal(current.metadataHash,inspected.metadataHash);return current;
+    };
+    return {environment:await verify(),verify,release:()=>{}};
   }};
   const modelPath=join(root,'model');
   await writeFile(join(modelPath,'config.json'),JSON.stringify({architectures:['ColPaliForRetrieval']}));
   await writeFile(join(modelPath,'model.safetensors'),'controlled fixture only');
   model={family:'colpali',path:modelPath,sha256:(await files.inspectVisualModel(modelPath,'colpali',new AbortController().signal)).sha256,
-    selectionId:'fixture',selectionHash:'e'.repeat(64)};
+    environmentId:'fixture',environmentHash:'e'.repeat(64)};
   executions=[];
 });
 after(async()=>{if(root)await rm(root,{recursive:true,force:true});api?.dispose();});

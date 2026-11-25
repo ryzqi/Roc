@@ -15,7 +15,9 @@ after(() => api.dispose());
 function probe(stage, reply) {
   const {manifest, pin} = new registryApi.ResearchSkillRegistry(bundle).load(stage);
   const names = {'research.knowledge.search': 'search_knowledge', 'research.evidence.list': 'list_evidence',
-    'research.evidence.inspect': 'inspect_evidence_source', 'research.artifacts.get': 'read_artifact'};
+    'research.evidence.inspect': 'inspect_evidence_source', 'research.artifacts.get': 'read_artifact',
+    'research.pythonEnvironments.status': 'get_python_environment_status',
+    'research.pythonEnvironments.list': 'list_python_environments', 'research.experiment.environment': 'inspect_experiment_environment'};
   const run = {id: 'stage-run', stage, projectId: 'project', toolNames: manifest.requiredCapabilities.map(capability => names[capability])};
   const calls = [];
   let verified = 0;

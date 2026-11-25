@@ -15,6 +15,7 @@ export type ResearchPluginOptions = {
   executionGrantBroker: ExecutionGrantBroker;
   tasks: ResearchTaskRepository;
   usageLedger: RunUsageLedger;
+  pythonRoot: string;
   experimentRoot?: string;
   exportRoot?: string;
   diagnosticsRoot: string;
