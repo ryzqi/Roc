@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "ovis-8bit-repetition-1.05-backend",
+  "scope": "Compare the fixed independent backend cohort using only outputs from the complete 347-page candidate run. Previous exploratory controls informed this candidate; this is not a held-out check. Preserve all original backend and full-cohort outcomes.",
+  "identities": {
+    "candidate": {
+      "path": "evaluation/ovis-decoder/candidate-1.05.json",
+      "sha256": "68ec15d87e2d0dde72460817bbfb74a4eb531350506af9d56b4d8312131022fd"
+    },
+    "candidateScorer": {
+      "path": "scripts/research/score-ovis-candidate.py",
+      "sha256": "ba9db5051e369ba7941022e0ae146ae27841a3d11d8749861833ebdc003566a6"
+    },
+    "backendInputs": {
+      "path": "evaluation/ovis-evaluator/backend-inputs-v2.json",
+      "sha256": "135aa481ddd9ac80a619d99ef046ab2781b8e19d13d104c6569e13a4f8421455"
+    },
+    "acceptance": {
+      "path": "evaluation/ovis-evaluator/acceptance-v2.json",
+      "sha256": "0b87b9d8db6039561e59a5094d9e3437d744f6bb6d6a6be877fa5d62b8b2fa70"
+    },
+    "referenceScore": {
+      "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/official-mps/report.json",
+      "sha256": "60ef43abe994d3af17515d9ca2a4478b3f8ab60405ad76d59f2174beebe780b8"
+    }
+  },
+  "pageIds": [
+    "scientific-006",
+    "scientific-005",
+    "scientific-001"
+  ],
+  "acceptance": "Use the unchanged v2 quality comparison. This check cannot replace the full-cohort comparison or enable application parsing.",
+  "automaticAdoption": false,
+  "performanceQualification": false
+}
