@@ -50,6 +50,11 @@ def compare_blocks(reference: list, candidate: list, tolerance: int) -> dict:
             "referenceBlockCount": len(reference), "candidateBlockCount": len(candidate)}
 
 
+def require_acceptance_reference(report: dict) -> None:
+    if report.get("diagnostic") is not None or report.get("adoptionEligible") is False:
+        raise ValueError("Diagnostic output cannot serve as an independent acceptance reference")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", type=Path, required=True)
@@ -60,6 +65,7 @@ def main() -> None:
     config_path = CONFIG_PATH if args.backend == "cpu" else CONFIG_PATH.with_name("parity-mps.json")
     config = json.loads(config_path.read_text())
     reference_report = json.loads((args.reference / "report.json").read_text())
+    require_acceptance_reference(reference_report)
     candidate_report = json.loads((args.candidate / "report.json").read_text())
     expected_ids = [p["id"] for p in config["pages"]]
     if reference_report["configurationSha256"] != digest(config_path):

@@ -78,7 +78,7 @@ class MemoryGuard:
         self.thread.join()
 
 
-def run(args) -> int:
+def run(args, *, pixel_diagnostic=None) -> int:
     require_offline()
     cpu_config, source, prompt = verified_inputs(args.installation)
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -111,6 +111,9 @@ def run(args) -> int:
               "requirementsLockSha256": digest(Path(__file__).with_name("requirements.lock")),
               "settings": config["settings"], "network": "denied-by-seatbelt", "hostLoad": "mixed-host-load",
               "performanceQualification": False, "pages": []}
+    if pixel_diagnostic is not None:
+        report.update(scope=pixel_diagnostic.configuration["scope"],
+                      diagnostic=pixel_diagnostic.identity, adoptionEligible=False)
     guard = MemoryGuard(args.output / "memory.jsonl")
     try:
         with guard:
@@ -184,6 +187,8 @@ def run(args) -> int:
                     if set(inputs) != set(expected.files) or any(
                             not np.array_equal(inputs[k].numpy(), expected[k]) for k in inputs):
                         raise ValueError("Actual inference tensors differ from frozen preflight")
+                if pixel_diagnostic is not None:
+                    pixel_diagnostic.replace(inputs, page)
                 inputs = {key: value.to("mps") for key, value in inputs.items()}
                 tokens = Tokens(inputs["input_ids"], args.output / f"{page['id']}.tokens.jsonl")
                 started = time.perf_counter()

@@ -73,3 +73,17 @@ The CPU BF16 reference was interrupted after 2,044.39 seconds without emitting a
 The initial MPS run completed all three pages with official EOS 248046 and no truncation: 3,792 / 6,230 / 1,418 generated tokens in 210.33 / 344.65 / 73.17 seconds. Driver allocation was about 3.52 GB. These timings share the host with other work and do not qualify performance.
 
 **Strict parity failed (one of three pages passed).** The formulas/table page differed in one formula and one table content block. Dense tables matched. The charts/captions page differed in two embedded image-path coordinate strings; the frozen literal content rule rejects those differences even though the separate bbox tolerance is one unit. No text normalization or tolerance change was applied. Evidence is under `.artifacts/research-toolchain-p3/{pytorch-reference-mps,pytorch-mps-parity.json,pytorch-runtime-verification-mps.json}`. P3 adoption remains closed pending diagnosis and qualification; successfully generating valid JSON is insufficient.
+
+
+## Pixel-only diagnosis
+
+`diagnostic-pixels.json` was committed before `diagnose_pixels.py` ran. It pins both exported input reports and the original MPS result, substitutes only MLX pixel values after checking the official input tensors, and retains official tokens, masks, multimodal types, grid, source weights and generation settings. The report explicitly marks its output ineligible for adoption. `compare.py` rejects diagnostic reports as acceptance references; five regression tests passed.
+
+```sh
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-pytorch-reference/venv/bin/python -B evaluation/ovis-pytorch-reference/diagnose_pixels.py \
+  --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  --output .artifacts/research-toolchain-p3/pytorch-mps-shared-pixels-recheck
+```
+
+The actual three-page diagnostic completed with official EOS and no truncation. Against MLX, dense tables still match; the formulas/table page now matches its table but still differs in the formula, and charts/captions retain one differing image reference string. Against original MPS, the formula/table and one chart reference changed. Preprocessing rounding therefore affects generation but does not alone explain the observed backend differences. The strict acceptance result remains failed; neither outputs nor thresholds were replaced. Local evidence: `pytorch-mps-shared-pixels/` and `pytorch-pixel-diagnostic-comparison.json` under `.artifacts/research-toolchain-p3/`. Timings remain observations under mixed host load.
