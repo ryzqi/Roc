@@ -82,7 +82,7 @@ export function extractPaperTable(block: TableBlock, region: TableRegion | null)
     if (occupied.size < rows.length * width) result.warnings.push('research_table_ragged_grid');
     // SLANet boxes are measured in the region crop. Map only when every anchor cell has a box.
     const boxes = structure.bbox, anchors = result.rows.flatMap(r => r.cells);
-    if (Array.isArray(boxes) && boxes.length === anchors.length && block.imagePath && location.coordinateOrigin === 'TOPLEFT') {
+    if (Array.isArray(boxes) && boxes.length === anchors.length && block.imagePath && location.bbox && location.coordinateOrigin === 'TOPLEFT') {
       for (const [i, cell] of anchors.entries()) {
         const box: unknown = boxes[i];
         if (!Array.isArray(box) || ![4, 8].includes(box.length) || box.some(v => typeof v !== 'number' || !Number.isFinite(v))) {

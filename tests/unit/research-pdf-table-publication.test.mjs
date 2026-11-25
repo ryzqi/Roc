@@ -41,6 +41,9 @@ test('production parser, artifact readback, library restart and SQLite chunks pr
     assert.equal(parsed.status, 'ready', parsed.error ?? undefined);
     const data = f.repository.documents.parsed(document.id, parsed.currentParseId).data;
     const block = data.content.blocks.find(b => b.kind === 'table');
+    assert.ok(data.content.blocks.every(b => b.locations.length === 1 && b.locations[0].page === 1 &&
+      b.locations[0].bbox === null && b.locations[0].coordinateOrigin === null));
+    assert.deepEqual(block.table.source, {locator: block.locator, page: 1, bbox: null, coordinateOrigin: null});
     assert.equal(block.table.rawHtml, raw); assert.equal(block.table.assetId, null);
     assert.equal(block.table.rows[0].cells[0].rowSpan, 2);
     assert.equal(block.table.rows[2].cells[1].text, '2.1');

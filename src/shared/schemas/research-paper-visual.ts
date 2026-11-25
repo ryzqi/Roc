@@ -1,11 +1,11 @@
 import {z} from 'zod';
+import {researchPageLocationSchema, sameResearchPageLocation} from './research-page-location';
 import {equationEvidenceSchema, assertEquationEvidence, type EquationEvidence} from './research-paper-equation';
-export const paperVisualVersion = 'roc-paper-visual/1';
+export const paperVisualVersion = 'roc-paper-visual/2';
 export const paperVisualSchema = z.object({
   version: z.literal(paperVisualVersion), id: z.string().min(1), blockId: z.string().min(1),
   kind: z.enum(['figure', 'table']), objectNumber: z.string().nullable(),
-  source: z.object({page: z.number().int().positive(), bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
-    coordinateOrigin: z.enum(['TOPLEFT', 'BOTTOMLEFT']), locator: z.string().min(1)}).strict(),
+  source: researchPageLocationSchema.safeExtend({locator: z.string().min(1)}).strict(),
   imagePath: z.string().nullable(), assetId: z.string().nullable(),
   captions: z.array(z.object({status: z.enum(['linked', 'candidate']), number: z.string().nullable(),
     crossPage: z.boolean(), ruleScore: z.number().min(0).max(1), signals: z.array(z.string()).max(8),
@@ -23,8 +23,7 @@ export function assertPaperVisualBlock(block: VisualBlock): void {
   if (!block.visual) return;
   const value = paperVisualSchema.parse(block.visual);
   if (value.kind !== block.kind || value.blockId !== block.id || value.source.locator !== block.locator ||
-      block.locations && !block.locations.some(l => l.page === value.source.page &&
-        l.coordinateOrigin === value.source.coordinateOrigin && l.bbox.every((v, i) => v === value.source.bbox[i])) ||
+      block.locations && !block.locations.some(l => sameResearchPageLocation(l, value.source)) ||
       block.imagePath !== undefined && (value.imagePath !== block.imagePath || value.assetId !== null) ||
       block.imageAssetId !== undefined && value.assetId !== block.imageAssetId) throw new Error('research_visual_binding_invalid');
 }

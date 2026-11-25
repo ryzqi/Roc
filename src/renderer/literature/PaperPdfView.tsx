@@ -249,8 +249,8 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
       for (const entry of parsedLocations.pages.get(pageNumber) ?? []) {
         const {location, ...identity} = entry;
         let region: ProjectedLocation['region'] = null, wholePage = false;
-        const [x1, y1, x2, y2] = location.bbox;
-        if (frame !== undefined && x2 > x1 && y2 > y1) {
+        if (frame !== undefined && location.bbox !== null && location.coordinateOrigin !== null) {
+          const [x1, y1, x2, y2] = location.bbox;
           wholePage = x1 === 0 && y1 === 0 && x2 === frame.width && y2 === frame.height;
           const [left, top, right, bottom] = projectParsedRegionToPdf({frame, bbox: location.bbox, coordinateOrigin: location.coordinateOrigin});
           const points = [[left,top], [left,bottom], [right,top], [right,bottom]].map(([x,y]) => raster.viewport.convertToViewportPoint(x,y));

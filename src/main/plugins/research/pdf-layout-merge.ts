@@ -80,11 +80,11 @@ export function fusePdfPage(input: {page: number; width: number; nativeItems: Na
   const assigned = new Map<string, NativeTextItem[]>(), uncovered: NativeTextItem[] = [];
   for (const item of input.nativeItems) {
     if (!clean(item.text)) continue;
-    const candidates = item.bbox === null ? [] : input.regions.filter(region => {
+    const candidates = item.bbox === null ? [] : input.regions.flatMap(region => {
       const box = region.block.locations[0]?.bbox;
-      return box && intersection(item.bbox!, box) / Math.max(area(item.bbox!), 1) >= 0.65;
-    }).sort((a, b) => area(a.block.locations[0]!.bbox) - area(b.block.locations[0]!.bbox));
-    const owner = candidates[0];
+      return box && intersection(item.bbox!, box) / Math.max(area(item.bbox!), 1) >= 0.65 ? [{region, area: area(box)}] : [];
+    }).sort((a, b) => a.area - b.area);
+    const owner = candidates[0]?.region;
     if (owner) assigned.set(owner.block.id, [...(assigned.get(owner.block.id) ?? []), item]);
     else uncovered.push(item);
   }
@@ -94,13 +94,13 @@ export function fusePdfPage(input: {page: number; width: number; nativeItems: Na
   const appendNative = (items: NativeTextItem[], overlapGroupId: string | null, disputed = false): void => {
     for (const group of nativeGroups(items, input.width)) {
       const duplicate = group.bbox === null ? undefined : blocks.find(block => block.kind === 'paragraph' &&
-        block.locations[0] && pdfBoxIou(group.bbox!, block.locations[0].bbox) >= 0.65 &&
+        block.locations[0]?.bbox && pdfBoxIou(group.bbox!, block.locations[0].bbox) >= 0.65 &&
         recognitionTextSimilarity(group.text, block.text) >= 0.9);
       if (duplicate) {duplicatedRegionCount++; provenance.push({blockId: duplicate.id, source: 'native', confidence: null,
         overlapGroupId, nativeItemIds: group.items.map(item => item.id), alternatives: [{source: 'native', text: group.text}],
         status: 'duplicate'}); continue;}
       blocks.push({id: group.id, kind: 'paragraph', label: 'Native text', text: group.text, locator: `page${input.page}`,
-        imagePath: null, locations: group.bbox === null ? [] : [{page: input.page, bbox: group.bbox, coordinateOrigin: 'TOPLEFT'}]});
+        imagePath: null, locations: [{page: input.page, bbox: group.bbox, coordinateOrigin: group.bbox === null ? null : 'TOPLEFT'}]});
       provenance.push({blockId: group.id, source: 'native', confidence: null, overlapGroupId,
         nativeItemIds: group.items.map(item => item.id), alternatives: [], status: disputed ? 'disputed' : 'selected'});
     }

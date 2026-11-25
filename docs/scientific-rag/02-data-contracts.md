@@ -6,10 +6,10 @@
 
 | 合同 | 权威源码 | 保证 |
 | --- | --- | --- |
-| Parsed Document | [research-production.ts](../../src/shared/schemas/research-production.ts) | Parse Contract 4；sourceHash/parserFingerprint、原始 blocks、locations、assets、工件及结构派生信息。 |
+| Parsed Document | [research-production.ts](../../src/shared/schemas/research-production.ts) | Parse Contract 5；sourceHash/parserFingerprint、原始 blocks、locations、assets、工件及结构派生信息。 |
 | Coordinate Snapshot | [research-document-coordinates.ts](../../src/shared/schemas/research-document-coordinates.ts) | source/parse 与工件绑定；PDF CropBox/rotation/viewport 到 TOPLEFT raster 的投影依据。 |
 | Source Locator | [research-source-locator.ts](../../src/shared/schemas/research-source-locator.ts) | 固定 document/parse/knowledgeDocument/block 与来源 hash，原始 locator、UTF-16 span、page/bbox/origin；没有几何时不能从字符串猜坐标。 |
-| Paper IR v2 / Artifact | [research-paper-ir-v2.ts](../../src/shared/schemas/research-paper-ir-v2.ts) | schema 2、`roc-paper-ir/2.1`；完整 source identity、metadata、章节/块、table/cell、figure、equation、algorithm、citation/reference、结构关系与质量。工件另外固定路径/hash/size/indexedBlocksHash。 |
+| Paper IR v2 / Artifact | [research-paper-ir-v2.ts](../../src/shared/schemas/research-paper-ir-v2.ts) | schema 2、`roc-paper-ir/2.2`；完整 source identity、metadata、章节/块、table/cell、figure、equation、algorithm、citation/reference、结构关系与质量。工件另外固定路径/hash/size/indexedBlocksHash。 |
 | 原 parent/child 标注 | [research-paper-ir.ts](../../src/shared/schemas/research-paper-ir.ts) | 保留旧知识工具所消费的章节角色及邻块关系，与独立 IR v2 工件并存。 |
 
 对象 ID 对 parseId/originalId 分量编码，避免分隔符歧义；cell 和算法 step 仍绑定原对象与同一 parse。表格几何可为 unknown，结构关系可为 candidate；这些状态不能提升成精确原文支持。

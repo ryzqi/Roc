@@ -233,13 +233,13 @@ test('architecture repair corpus materializes reusable ZIP, TIFF, history, and f
   }
 });
 
-test('scientific object and source boundaries advance derivation identity while preserving the readable artifact contract', () => {
-  assert.equal(researchParseContractVersion, 4);
-  assert.equal(researchDerivationGenerationVersion, 10);
+test('page-only scientific sources advance the artifact contract and derivation identity', () => {
+  assert.equal(researchParseContractVersion, 5);
+  assert.equal(researchDerivationGenerationVersion, 11);
   assert.deepEqual(researchParserIdentityPayload('a'.repeat(64)), {
     engine: 'paddleocr.js',
-    contractVersion: 10,
-    parserVersion: 'roc-research-parser/10',
+    contractVersion: 11,
+    parserVersion: 'roc-research-parser/11',
     modelManifest: 'a'.repeat(64)
   });
 });
@@ -264,7 +264,7 @@ test('native-text PDF with vector content keeps page evidence without an OCR mod
       onStage: (event) => stages.push(event)
     });
 
-    assert.equal(parsed.contractVersion, 4);
+    assert.equal(parsed.contractVersion, 5);
     assert.equal(parsed.parseMode, 'native-text');
     assert.ok(parsed.content.length > 0);
     assert.deepEqual(parsed.assets.map((asset) => ({ kind: asset.kind, page: asset.page })), [{ kind: 'page', page: 1 }]);
@@ -313,7 +313,7 @@ test('high-quality text-only pages preserve coordinates without rendering page i
       onStage: (event) => stages.push(event)
     });
 
-    assert.equal(parsed.contractVersion, 4);
+    assert.equal(parsed.contractVersion, 5);
     assert.equal(parsed.parseMode, 'native-text');
     assert.ok(parsed.content.length >= 600);
     assert.deepEqual(parsed.assets, []);
@@ -351,7 +351,7 @@ test('high-quality text-only pages preserve coordinates without rendering page i
 
 test('stored document schema accepts only the current output contract with separate JSON paths', () => {
   const content = {
-    contractVersion: 4,
+    contractVersion: 5,
     engine: 'paddleocr.js',
     engineVersion: 'current-test',
     parserVersion: 'roc-research-parser/2',
@@ -371,9 +371,10 @@ test('stored document schema accepts only the current output contract with separ
     warnings: []
   };
   const current = researchDocumentContentSchema.parse(content);
-  assert.equal(current.contractVersion, 4);
+  assert.equal(current.contractVersion, 5);
   assert.equal(current.artifacts.structuredContent, 'artifacts/structured.json');
   assert.equal(researchDocumentContentSchema.safeParse({...content, contractVersion: 3}).success, false);
+  assert.equal(researchDocumentContentSchema.safeParse({...content, contractVersion: 4}).success, false);
 });
 
 test('unknown or unavailable PDF operators conservatively retain page images', async () => {

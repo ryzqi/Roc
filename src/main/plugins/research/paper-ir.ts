@@ -7,7 +7,7 @@ import {assertPaperEquationBlock, type PaperEquation} from '../../../shared/sche
 import {assertPaperVisualBlock, assertPaperVisualEvidence, type PaperVisual} from '../../../shared/schemas/research-paper-visual';
 
 /** Identity of the existing block-derived IR; independent from parser and chunk versions. */
-export const paperIrVersion = 'roc-paper-ir/1-structure-1-table-1-equation-1-visual-1';
+export const paperIrVersion = 'roc-paper-ir/1-structure-1-table-2-equation-2-visual-2';
 export type PaperIdentity = Pick<PaperChunk, 'paperId' | 'parseId' | 'sourceHash'>;
 export type PaperBlock = {id: string; text: string; locator: string; kind: PaperChunk['blockKind']; label?: string;
   reading?: ResearchBlockReading; table?: NormalizedPaperTable; equation?: PaperEquation; visual?: PaperVisual;

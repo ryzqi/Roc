@@ -48,7 +48,7 @@ export function attachPaperEquations<T extends Block>(blocks: readonly T[], page
       const numbers = [blocks[index - 1], blocks[index + 1]].filter((other): other is T => {
         if (!other || other.kind !== 'paragraph' || !samePage(block, other) || !/^\s*\((?:[A-Z][.-]?)?\d+(?:[.-]\d+)*\)\s*$/u.test(other.text)) return false;
         const box = other.locations.find(l => l.page === location.page && l.coordinateOrigin === location.coordinateOrigin)?.bbox;
-        return Boolean(box && box[0] >= location.bbox[2] && box[1] < location.bbox[3] && box[3] > location.bbox[1]);
+        return Boolean(box && location.bbox && box[0] >= location.bbox[2] && box[1] < location.bbox[3] && box[3] > location.bbox[1]);
       });
       if (numbers.length === 1) {
         equation.equationNumber = numbers[0]!.text.trim().slice(1, -1);

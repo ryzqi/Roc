@@ -102,9 +102,7 @@ export function scientificSourceBlock(source: ScientificSource, card: PaperCardK
   }
   const proposal = source.proposal;
   if (proposal.kind === 'text') {
-    const expectedLocations = block.locations.map(location => ({page: location.page,
-      bbox: location.bbox[0] === location.bbox[2] || location.bbox[1] === location.bbox[3] ? null : location.bbox,
-      coordinateOrigin: location.bbox[0] === location.bbox[2] || location.bbox[1] === location.bbox[3] ? null : location.coordinateOrigin}));
+    const expectedLocations = block.locations;
     if (proposal.blockId !== block.id || proposal.end > block.text.length ||
         block.text.slice(proposal.start, proposal.end) !== source.quote || source.quote !== proposal.quote ||
         !sameJson(locator.textSpan, {start: proposal.start, end: proposal.end}) ||

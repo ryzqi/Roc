@@ -23,7 +23,7 @@ function scene(count = 1, imported = false) {
     f.document = document;
     f.repository.documents.begin(document.id, 'coverage-parse');
     f.repository.documents.complete(document.id, 'coverage-parse', {outputPath: '/tmp/synthetic-coverage', files: {}, content: {
-      contractVersion: 4, engine: 'paddleocr.js', engineVersion: 'synthetic-test', parserVersion: 'roc-research-parser/2',
+      contractVersion: 5, engine: 'paddleocr.js', engineVersion: 'synthetic-test', parserVersion: 'roc-research-parser/2',
       parserFingerprint: hash('synthetic parser'), modelManifest: '', runtime: {node: 'synthetic'}, tier: 'compact',
       parseMode: 'native-text', device: 'cpu', sourceHash: document.sourceHash, pageCount: 4,
       content: 'Synthetic measured result.', blocks: [{id: 'result-block', kind: 'paragraph', label: 'Synthetic result',

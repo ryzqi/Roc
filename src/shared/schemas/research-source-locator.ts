@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {researchPageLocationSchema} from './research-page-location';
 
 const identifier = z.string().trim().min(1);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -17,12 +18,7 @@ export const researchSourceLocatorSchema = z.object({
   objectId: identifier.optional(),
   parentBlockId: identifier.optional(),
   textSpan: z.object({start: z.number().int().nonnegative(), end: z.number().int().positive()}).strict().refine(span => span.end > span.start).optional(),
-  locations: z.array(z.object({
-    page: z.number().int().positive(),
-    bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
-    coordinateOrigin: z.enum(['TOPLEFT', 'BOTTOMLEFT']).nullable()
-  }).strict().refine(location => (location.bbox === null) === (location.coordinateOrigin === null),
-    'A region and its coordinate origin must be present together.'))
+  locations: z.array(researchPageLocationSchema)
 }).strict();
 
 export type ResearchSourceLocator = z.infer<typeof researchSourceLocatorSchema>;

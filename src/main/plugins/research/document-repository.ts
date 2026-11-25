@@ -222,7 +222,7 @@ export class ResearchDocumentRepository {
     for (const block of data.content.blocks) for (const location of block.locations) {
       const frame = frames.get(location.page);
       if (frame === undefined) throw new Error('research_document_coordinate_page_missing');
-      if (frame !== null) {
+      if (frame !== null && location.bbox !== null) {
         const [x1, y1, x2, y2] = location.bbox;
         if (x1 < 0 || y1 < 0 || x2 > frame.width || y2 > frame.height || x2 <= x1 || y2 <= y1) {
           throw new Error('research_document_coordinate_region_invalid');

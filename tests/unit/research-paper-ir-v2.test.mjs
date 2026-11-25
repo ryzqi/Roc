@@ -20,7 +20,7 @@ const block = (id, kind, text, y = 10) => ({id, kind, text, label: kind, locator
 const identity = {paperId: 'paper', documentId: 'document', parseId: 'parse:one', knowledgeDocumentId: 'document:parse:one',
   sourceHash: 'a'.repeat(64), parserFingerprint: 'b'.repeat(64)};
 const formulaPages = [{regions: [{id: 'equation', formula: 'x = y \\tag{2}'}]}];
-function source() {
+function source(pageOnly = false) {
   const blocks = [
     block('method', 'heading', '2 Method'),
     block('body', 'paragraph', 'We use original method [1]. Figure 1 and Eq. (2) describe it.', 40),
@@ -32,6 +32,7 @@ function source() {
     block('refs', 'heading', 'References', 250),
     block('reference', 'paragraph', '[1] Original author. Original paper.', 280)
   ];
+  if (pageOnly) for (const b of blocks) b.locations = [{page: 1, bbox: null, coordinateOrigin: null}];
   blocks[7].table = tables.extractPaperTable(blocks[7], {id: 'table',
     rawHtml: '<table><tr><th>Metric</th><th>F1 (%)</th></tr><tr><td>Original</td><td>90</td></tr></table>'});
   const enriched = visuals.attachPaperVisuals(equations.attachPaperEquations(blocks, formulaPages));
@@ -40,6 +41,34 @@ function source() {
     blocks: enriched});
   return {sourceHash: identity.sourceHash, parserFingerprint: identity.parserFingerprint, blocks: enriched, quality: report};
 }
+test('page-only scientific objects retain original text and page through IR publication and reject invented geometry', async () => {
+  const content = source(true), ir = builder.buildPaperIR({identity, content});
+  assert.equal(ir.tables[0].cells.length, 4);
+  assert.equal(ir.equations[0].data.rawLatex, formulaPages[0].regions[0].formula);
+  assert.equal(ir.equations[0].data.equationNumber, '2', 'explicit LaTeX tag needs no spatial guess');
+  assert.equal(ir.figures[0].data.captions.length, 0, 'no geometry means no automatic caption association');
+  assert.deepEqual(ir.blocks.map(b => b.text), content.blocks.map(b => b.text));
+  for (const object of validator.paperIRObjects(ir)) {
+    assert.deepEqual(object.sourceLocator.locations, [{page: 1, bbox: null, coordinateOrigin: null}]);
+  }
+  for (const mutate of [
+    v => {v.equations[0].data.source.page = 2;},
+    v => {v.figures[0].data.source = {...v.figures[0].data.source, bbox: [1, 2, 3, 4], coordinateOrigin: 'TOPLEFT'};},
+    v => {v.tables[0].data.rows[0].cells[0].bbox = [1, 2, 3, 4];},
+    v => {v.tables[0].cells[0].sourceLocator.locations[0].page = 2;},
+    v => {v.equations[0].sourceLocator.locations = [{page: 2, bbox: null, coordinateOrigin: null}];},
+    v => {v.relations[0].sourceLocator = {...v.relations[0].sourceLocator,
+      locations: [{page: 2, bbox: null, coordinateOrigin: null}]};}
+  ]) {
+    const bad = structuredClone(ir); mutate(bad);
+    assert.throws(() => validator.validatePaperIR(bad));
+  }
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-ir-page-only-')));
+  try {
+    const artifact = await new repository.PaperIRRepository(root).publish(ir);
+    assert.deepEqual(await new repository.PaperIRRepository(root).read(artifact), ir);
+  } finally {await rm(root, {recursive: true, force: true});}
+});
 test('parse-bound IR retains original objects, table cells, exact algorithms/citations and finite relations', () => {
   const content = source(), ir = builder.buildPaperIR({identity, content});
   assert.deepEqual(ir.blocks.map(b => b.text), content.blocks.map(b => b.text));

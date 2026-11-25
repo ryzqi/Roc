@@ -161,7 +161,7 @@ async function benchmarkScenario(scenario) {
       assert.equal(errorCode, null, `${scenario} must parse successfully`);
       assert.equal(parsed?.parseMode, 'native-text', `${scenario} must use the native-text route`);
       assert.ok((outputs['artifacts/middle.json'] ?? 0) > 0, `${scenario} must write middle.json`);
-      assert.equal(parsed?.contractVersion, 4, `${scenario} must use the current artifact contract`);
+      assert.equal(parsed?.contractVersion, 5, `${scenario} must use the current artifact contract`);
       assert.equal(parsed?.artifacts.middleJson, 'artifacts/middle.json');
       assert.equal(parsed?.artifacts.structuredContent, 'artifacts/structured.json');
       assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0);
@@ -183,7 +183,7 @@ async function benchmarkScenario(scenario) {
         assert.ok(cancelRequestedAt !== null); assert.equal(Object.keys(outputs).length, 0);
         assert.equal(stages.some(event => event.page !== null && event.page > 5), false);
       } else {
-        assert.equal(errorCode, null); assert.equal(parsed.contractVersion, 4);
+        assert.equal(errorCode, null); assert.equal(parsed.contractVersion, 5);
         const pages = [...new Set(stages.filter(event => event.stage === 'native-text').map(event => event.page))];
         assert.deepEqual(pages, scenario === 'long-local' ? [201] : Array.from({length: longPageCount}, (_, index) => index + 1));
         assert.equal(parsed.parseMode, 'native-text');
@@ -293,7 +293,7 @@ if (workerScenario !== null) {
   const artifact = {
     measuredAt: new Date().toISOString(),
     command,
-    contractVersion: 4,
+    contractVersion: 5,
     longFixture: {pages: longPageCount, mediaBox: [0, 0, 612, 792], complexity: '10 lines per page, 100 evidence words plus 10 page labels, Helvetica, no images'},
     measurementMeaning: 'firstExtractedPageMs is native extraction, firstReadableParseMs is published parse completion; page-cache uses production PDF.js/canvas, not renderer time',
     sampleCount,

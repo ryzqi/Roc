@@ -23,7 +23,7 @@ function importedDocument(f) {
 }
 function parsedContent(document,blocks) {
   return {outputPath:'/tmp/synthetic-locator-output',files:{},content:{
-    contractVersion:4,engine:'paddleocr.js',engineVersion:'synthetic-locator-test',parserVersion:'roc-research-parser/2',
+    contractVersion:5,engine:'paddleocr.js',engineVersion:'synthetic-locator-test',parserVersion:'roc-research-parser/2',
     parserFingerprint:hash('synthetic parser'),modelManifest:'',runtime:{node:'synthetic'},tier:'compact',
     parseMode:'native-text',device:'cpu',sourceHash:document.sourceHash,pageCount:4,
     content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],
@@ -231,18 +231,22 @@ test('migration reads refuse foreign sources and corrupt snapshots or current ta
   }finally{await f.close();}
 });
 
-test('zero geometry preserves a page-only location and out-of-range pages or inverted regions cannot be captured',async ()=>{
+test('page-only geometry survives capture; invalid pages, zero and inverted regions reject',async ()=>{
   const f=createResearchFixture(api,'reading');
   try {
     const document=importedDocument(f);
-    publishParse(f,document,'zero-geometry',[block('logical-page',{locations:[{page:2,bbox:[0,0,0,0],coordinateOrigin:'TOPLEFT'}]})]);
+    publishParse(f,document,'zero-geometry',[block('logical-page',{locations:[{page:2,bbox:null,coordinateOrigin:null}]})]);
     const evidence=capture(f,'zero-geometry');
     assert.deepEqual(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).sourceLocator.locations,
       [{page:2,bbox:null,coordinateOrigin:null}]);
     publishParse(f,document,'bad-page',[block('bad-page',{page:5})]);
     assert.throws(()=>capture(f,'bad-page'),/research_evidence_source_page_invalid/u);
-    publishParse(f,document,'bad-region',[block('bad-region',{locations:[{page:1,bbox:[40,20,1,2],coordinateOrigin:'TOPLEFT'}]})]);
-    assert.throws(()=>capture(f,'bad-region'),/research_evidence_source_region_invalid/u);
+    f.repository.documents.begin(document.id,'bad-region');
+    for (const bbox of [[40,20,1,2],[0,0,0,0]]) {
+      assert.throws(()=>f.repository.documents.complete(document.id,'bad-region',
+        parsedContent(document,[block('bad-region',{locations:[{page:1,bbox,coordinateOrigin:'TOPLEFT'}]})]),null),
+        /research_page_region_invalid/u);
+    }
     assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
   }finally{await f.close();}
 });

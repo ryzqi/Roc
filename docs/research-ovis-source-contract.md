@@ -168,3 +168,23 @@ node scripts/research/verify-ovis-pdf-artifact.mjs \
   --source-relative ori_pdfs/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.pdf \
   --output /absolute/new-evidence-directory
 ```
+
+
+## Page-only Paper IR contract
+
+Parse contract5 / derivation11 / Paper IR2.2 accept explicit page-only locations
+in blocks, equations, tables, figures, and their evidence. Coordinates and origin
+are either both null or a finite positive-area rectangle and its origin. HTML
+also emits page-only locations. Contract4 and scientific object version1 are
+rejected; there is no zero-box conversion or legacy reader.
+
+Object and relation locations must match their source object/block. A table with
+unknown source geometry cannot assert cell rectangles. Caption geometry, adjacent
+equation numbering, native/OCR overlap and cross-page paragraph continuation do
+not infer spatial relationships when coordinates are absent. Explicit LaTeX tags
+and original text remain available. The PDF reader opens the actual page and
+shows its page-only notice without drawing a region; evidence and scientific Wiki
+keep the captured source identity and reject changed locations.
+
+This contract prepares the downstream boundary. It does not register Ovis as a
+production parser or qualify the pending347-page evaluation.

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchEvidence} from '../../shared/types';
 import type {ResearchSourceLocator} from '../../shared/schemas/research-source-locator';
+import {sameResearchPageLocation} from '../../shared/schemas/research-page-location';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {ErrorBar} from '../shell/ErrorBar';
@@ -38,9 +39,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
     const block = blocks[0];
     if (block.locations.length !== locator.locations.length || block.locations.some((location, index) => {
       const saved = locator.locations[index];
-      return location.page !== saved.page || (saved.bbox === null ?
-        location.bbox[0] !== location.bbox[2] || location.bbox[1] !== location.bbox[3] :
-        JSON.stringify(location.bbox) !== JSON.stringify(saved.bbox) || location.coordinateOrigin !== saved.coordinateOrigin);
+      return !sameResearchPageLocation(location, saved);
     })) throw new Error('保存的页或区域与原始解析块不一致。');
     return {ok: true as const, data: {document, parsed}};
   }, {label: '读取证据原文固定版本'});

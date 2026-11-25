@@ -24,9 +24,9 @@
 | 项目 | 值 | 权威源码 |
 | --- | --- | --- |
 | Research DB schema | 74 | `src/main/infrastructure/database-schemas.ts` |
-| Parse Contract | 4 | `src/shared/schemas/research-production.ts` |
-| Derivation Generation / Parser | 10 / `roc-research-parser/10` | `src/shared/schemas/research-production.ts` |
-| Paper IR | schema 2 / `roc-paper-ir/2.1` | `src/shared/schemas/research-paper-ir-v2.ts` |
+| Parse Contract | 5 | `src/shared/schemas/research-production.ts` |
+| Derivation Generation / Parser | 11 / `roc-research-parser/11` | `src/shared/schemas/research-production.ts` |
+| Paper IR | schema 2 / `roc-paper-ir/2.2` | `src/shared/schemas/research-paper-ir-v2.ts` |
 | Scientific chunks | `roc-scientific-chunks/1` | `src/main/plugins/research/scientific-chunks.ts` |
 | Scientific context | `roc-scientific-context/1` | `src/shared/schemas/research-scientific-context.ts` |
 | 抽取 Prompt | `roc-scientific-extraction-prompts/25` | `src/main/plugins/research/scientific-extraction-model.ts` |

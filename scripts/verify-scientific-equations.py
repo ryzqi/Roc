@@ -125,7 +125,7 @@ def verify(report_path):
                 for key, value in wanted.items():
                     assert eq[key] == value, (ci, index, eq["id"], key)
                 block = blocks[eq["blockId"]]
-                assert eq["id"] == "equation:" + block["id"] and eq["version"] == "roc-paper-equation/1"
+                assert eq["id"] == "equation:" + block["id"] and eq["version"] == "roc-paper-equation/2"
                 assert eq["source"] == dict(block["locations"][0], locator=block["locator"])
                 assert eq["imagePath"] == block["imagePath"] and eq["assetId"] is None
                 for variable in eq["variables"]:

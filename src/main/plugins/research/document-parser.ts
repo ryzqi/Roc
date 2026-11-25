@@ -790,7 +790,7 @@ function parsePageRange(value: string, pageCount: number): number[] {
 }
 
 function makeBlock(id: string, kind: ParseBlock['kind'], label: string, text: string, page: number,
-  bbox: [number, number, number, number], imagePath: string | null): ParseBlock {
+  bbox: [number, number, number, number] | null, imagePath: string | null): ParseBlock {
   return {
     id,
     kind,
@@ -798,7 +798,7 @@ function makeBlock(id: string, kind: ParseBlock['kind'], label: string, text: st
     text: normalizeText(text),
     locator: `page ${page}`,
     imagePath,
-    locations: [{ page, bbox, coordinateOrigin: 'TOPLEFT' }]
+    locations: [{ page, bbox, coordinateOrigin: bbox === null ? null : 'TOPLEFT' }]
   };
 }
 
@@ -889,7 +889,7 @@ function collectHtmlBlocks(document: unknown, output: ParseBlock[], table: (bloc
     if (kind !== null) {
       const text = name === 'table' ? htmlTableText(node) : htmlText(node);
       if (text.length > 0) {
-        const block = makeBlock(`html-${output.length + 1}`, kind, name, text, 1, [0, 0, 0, 0], null);
+        const block = makeBlock(`html-${output.length + 1}`, kind, name, text, 1, null, null);
         output.push(block);
         if (kind === 'table') table(block, node);
       }
@@ -898,7 +898,7 @@ function collectHtmlBlocks(document: unknown, output: ParseBlock[], table: (bloc
     if (name === 'img') {
       const attrs = asRecord(node.attribs);
       const alt = typeof attrs?.alt === 'string' ? normalizeText(attrs.alt) : '';
-      if (alt.length > 0) output.push(makeBlock(`html-${output.length + 1}`, 'figure', 'image', alt, 1, [0, 0, 0, 0], null));
+      if (alt.length > 0) output.push(makeBlock(`html-${output.length + 1}`, 'figure', 'image', alt, 1, null, null));
       return;
     }
     for (const child of asArray(node.children)) visit(child);

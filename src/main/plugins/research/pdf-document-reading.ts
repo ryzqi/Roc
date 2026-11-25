@@ -26,7 +26,7 @@ export function annotatePdfDocumentReading(blocks: readonly Block[], pages: read
   const frames = new Map(pages.flatMap(page => page.coordinateFrame?.kind === 'pdf' ? [[page.page, page.coordinateFrame] as const] : []));
   const margin = (block: Block): 'top' | 'bottom' | null => {
     const location = block.locations.length === 1 ? block.locations[0] : undefined, frame = location && frames.get(location.page);
-    if (!location || !frame || location.coordinateOrigin !== 'TOPLEFT') return null;
+    if (!location?.bbox || !frame || location.coordinateOrigin !== 'TOPLEFT') return null;
     const box = location.bbox, height = frame.height;
     if (box[3] - box[1] > height * .06) return null;
     return box[3] <= height * .1 ? 'top' : box[1] >= height * .9 ? 'bottom' : null;
@@ -76,6 +76,7 @@ export function annotatePdfDocumentReading(blocks: readonly Block[], pages: read
     const leftFrame = frames.get(page), rightFrame = frames.get(page + 1);
     if (!left || !right || !leftFrame || !rightFrame || left.reading.role !== 'body' || right.reading.role !== 'body') continue;
     const a = left.locations[0]!.bbox, b = right.locations[0]!.bbox;
+    if (!a || !b) continue;
     const startsLowercase = /^[\p{Ll}\p{Script=Han}]/u.test(right.text.trim());
     const endsWord = /[\p{L}\p{N},;:，；：\-–]$/u.test(left.text.trim());
     // Last reading column may differ from the first next-page column; compare column widths.

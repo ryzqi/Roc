@@ -31,7 +31,7 @@ export function attachPaperVisuals<T extends Block>(blocks: readonly T[]): (T & 
   const proposals = objects.flatMap(object => captions.flatMap(cap => {
     if (cap.kind !== object.kind || Math.abs(cap.index - object.index) > 4) return [];
     const a = object.block.locations[0], b = cap.block.locations[0];
-    if (!a || !b || a.coordinateOrigin !== 'TOPLEFT' || b.coordinateOrigin !== 'TOPLEFT') return [];
+    if (!a?.bbox || !b?.bbox || a.coordinateOrigin !== 'TOPLEFT' || b.coordinateOrigin !== 'TOPLEFT') return [];
     const crossPage = a.page !== b.page;
     if (crossPage && (Math.abs(a.page - b.page) !== 1 || Math.abs(cap.index - object.index) > 2)) return [];
     const horizontal = overlap(a.bbox, b.bbox);

@@ -6,7 +6,7 @@ import {paperEquationSchema} from './research-paper-equation';
 import {paperVisualSchema} from './research-paper-visual';
 import {paperParseQualitySchema} from './research-paper-quality';
 
-export const paperIrV2Version = 'roc-paper-ir/2.1';
+export const paperIrV2Version = 'roc-paper-ir/2.2';
 const id = z.string().min(1);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const sourced = z.object({id, blockId: id, sourceLocator: researchSourceLocatorSchema}).strict();

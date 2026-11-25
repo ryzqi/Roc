@@ -30,7 +30,7 @@ function document(f, id, {libraryItemId = null, text = 'Original synthetic scien
   const parseId = `${id}-parse`;
   f.repository.documents.begin(id, parseId);
   f.repository.documents.complete(id, parseId, {outputPath: `/tmp/synthetic-${id}-parse`, files: {}, content: {
-    contractVersion: 4, engine: 'paddleocr.js', engineVersion: 'synthetic-replacement-test', parserVersion: 'roc-research-parser/2',
+    contractVersion: 5, engine: 'paddleocr.js', engineVersion: 'synthetic-replacement-test', parserVersion: 'roc-research-parser/2',
     parserFingerprint: hash('synthetic replacement parser'), modelManifest: '', runtime: {node: 'synthetic'}, tier: 'compact',
     parseMode: 'native-text', device: 'cpu', sourceHash: imported.sourceHash, pageCount: 2, content: text,
     blocks: [{id: `${id}-block`, kind: 'paragraph', label: 'Synthetic paragraph', text, locator: 'page:2', imageAssetId: null,

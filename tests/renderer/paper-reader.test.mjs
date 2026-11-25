@@ -256,7 +256,7 @@ function scene() {
       text: `${text}${index === 0 ? '' : ' repeated block'}`, locator, imageAssetId: null,
       locations: [{page: 1, bbox: [1, 2, 30, 40], coordinateOrigin: 'TOPLEFT'}]}));
     const data = {outputPath: 'synthetic-reader-output', files: {}, content: {
-      contractVersion: 4, engine: 'paddleocr.js', engineVersion: 'synthetic-reader', parserVersion: 'roc-research-parser/2',
+      contractVersion: 5, engine: 'paddleocr.js', engineVersion: 'synthetic-reader', parserVersion: 'roc-research-parser/2',
       parserFingerprint: hash('synthetic-reader-parser'), modelManifest: '', runtime: {node: 'synthetic'}, tier: 'compact',
       parseMode: 'native-text', device: 'cpu', sourceHash: document.sourceHash, pageCount: 1,
       content: blocks.map(block => block.text).join('\n\n'), blocks, assets: [],
@@ -344,7 +344,7 @@ async function realPdfScene({pageOnly = false, pdfOptions = null, pageRange = '1
 }
 
 /** Explicit synthetic block layout; original bytes and measured PDF viewports are real. */
-async function publishReverseLayout(f, {crossPage = false, pageOnly = false, fullPage = false} = {}) {
+async function publishReverseLayout(f, {crossPage = false, pageOnly = false, unknownGeometry = false, fullPage = false} = {}) {
   const data=structuredClone(f.collected.data), frame=f.collected.coordinates.pages[0].frame;
   const template=data.content.blocks[0], w=frame.width, h=frame.height;
   const location=bbox=>({page:1,bbox,coordinateOrigin:'TOPLEFT'});
@@ -358,6 +358,9 @@ async function publishReverseLayout(f, {crossPage = false, pageOnly = false, ful
   data.content.blocks=fullPage ? [make('synthetic-full-page','Whole-page',[location([0,0,w,h])])] :
     [make('reverse-left','Left',leftLocations),make('reverse-right','Right',[upperRight]),
       make('reverse-overlap','Overlap',[upperLeft])];
+  if(unknownGeometry) for(const block of data.content.blocks) {
+    block.locations=block.locations.map(({page})=>({page,bbox:null,coordinateOrigin:null}));
+  }
   data.content.content=data.content.blocks.map(block=>block.text).join('\n\n');
   data.content.parserVersion='synthetic-reverse-layout/v1';
   data.content.parserFingerprint=hash('synthetic-reverse-layout/v1');
@@ -659,6 +662,25 @@ test('original reading uses the full column with comfortable height and preserve
   assert.equal(await f.changes(),before);
   assert.deepEqual(errors,[]);
   await writeFile(join(artifacts,'original-reading-geometry.json'),JSON.stringify(rows,null,2));
+});
+
+test('explicit unknown regions with a measured page open page-only in reader and captured evidence', async () => {
+  const f=await realPdfScene();
+  await publishReverseLayout(f,{unknownGeometry:true});
+  await mount(f);await textEquals('Explicit synthetic Left region.');
+  await page.getByTestId('reader-block-source').first().click();await waitForOriginal();
+  await page.getByTestId('reader-pdf-page-only').waitFor();
+  assert.equal(await page.getByTestId('reader-pdf-region').count(),0);
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).inputValue(),'1');
+  const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:synthetic-reverse-parse:chunk:0'});
+  const source=f.repository.evidence.inspectEvidence(evidence.id,f.project.id);
+  assert.deepEqual(source.sourceLocator.locations,[{page:1,bbox:null,coordinateOrigin:null}]);
+  await mountSource(f,source);
+  await page.getByTestId('artifact-document-source-block').waitFor();await waitForOriginal();
+  await page.getByTestId('reader-pdf-page-only').waitFor();
+  assert.equal(await page.getByTestId('reader-pdf-region').count(),0);
+  await page.screenshot({path:join(artifacts,'page-only-source.png')});
+  assert.deepEqual(errors,[]);
 });
 
 test('uncaptured coordinate history provides page-only positioning; invalid page input and source corruption remain errors', async () => {

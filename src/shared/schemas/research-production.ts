@@ -6,6 +6,7 @@ import {paperTableSchema, assertPaperTableBlock} from './research-paper-table';
 import {paperEquationSchema, assertPaperEquationBlock} from './research-paper-equation';
 import {paperVisualSchema, assertPaperVisualBlock, assertPaperVisualEvidence} from './research-paper-visual';
 import {paperParseQualitySchema} from './research-paper-quality';
+import {researchPageLocationSchema} from './research-page-location';
 
 export const researchToolchainStatusSchema = z.object({
   available: z.boolean(),
@@ -106,10 +107,10 @@ export const researchDocumentLimits = {
   maxArtifactBytes: 128 * 1024 * 1024
 } as const;
 
-export const researchParseContractVersion = 4;
+export const researchParseContractVersion = 5;
 /** Increment when text, locations or indexed scientific objects change; retain immutable prior parses. */
-export const researchDerivationGenerationVersion = 10;
-export const researchParserVersion = 'roc-research-parser/10' as const;
+export const researchDerivationGenerationVersion = 11;
+export const researchParserVersion = 'roc-research-parser/11' as const;
 
 /** Stable index identity tracks derivation semantics, not the artifact contract version. */
 export function researchParserIdentityPayload(modelManifest: string) {
@@ -153,8 +154,7 @@ export const researchParsedDocumentSchema = z.object({
     table: paperTableSchema.optional(),
     equation: paperEquationSchema.optional(),
     visual: paperVisualSchema.optional(),
-    locations: z.array(z.object({ page: z.number().int().positive(), bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
-      coordinateOrigin: z.enum(['TOPLEFT', 'BOTTOMLEFT']) }).strict())
+    locations: z.array(researchPageLocationSchema)
   }).strict()).max(researchDocumentLimits.maxBlocks).superRefine((blocks, context) => {
     for (const block of blocks) try {assertPaperTableBlock(block); assertPaperEquationBlock(block); assertPaperVisualBlock(block);}
     catch (error) {context.addIssue({code: 'custom', message: (error as Error).message});}

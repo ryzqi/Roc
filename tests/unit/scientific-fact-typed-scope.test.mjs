@@ -42,7 +42,7 @@ function fixture({linked = false, partial = false, merged = false} = {}) {
   blocks[0].table = api.extractPaperTable(blocks[0], {id: blocks[0].id, rawHtml: html});
   if (linked) {
     const start = partial ? quotes[1].indexOf('GE-FL') : 0;
-    blocks[0].visual = {version: 'roc-paper-visual/1', id: `table:${blocks[0].id}`, blockId: blocks[0].id,
+    blocks[0].visual = {version: 'roc-paper-visual/2', id: `table:${blocks[0].id}`, blockId: blocks[0].id,
       kind: 'table', objectNumber: null, source: {...blocks[0].locations[0], locator: blocks[0].locator},
       imagePath: null, assetId: null, references: [], warnings: [],
       captions: [{status: 'linked', number: null, crossPage: false, ruleScore: 1, signals: [],

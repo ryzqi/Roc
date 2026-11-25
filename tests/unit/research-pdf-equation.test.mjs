@@ -48,6 +48,14 @@ test('duplicate numbering produces candidate references and does not bind a uniq
   }
 });
 
+test('page-only equations never adopt an adjacent spatial number', () => {
+  const source = [block('eq', 'formula', 'x=y'), block('n', 'paragraph', '(3)', 1, [220, 35, 245, 50])];
+  source[0].locations = [{page: 1, bbox: null, coordinateOrigin: null}];
+  const e = extractor.attachPaperEquations(source, [{regions: [{id: 'eq', formula: 'x=y'}]}])[0].equation;
+  assert.equal(e.equationNumber, null); assert.equal(e.numberEvidence, null);
+  assert.deepEqual(e.source, {page: 1, bbox: null, coordinateOrigin: null, locator: 'page 1'});
+});
+
 test('missing/invalid recognition is explicit; LaTeX tokens and escaped braces are retained', () => {
   const source = [block('eq', 'formula', 'not a LaTeX recognition')];
   const missing = extractor.attachPaperEquations(source, [{regions: []}])[0].equation;

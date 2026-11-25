@@ -53,11 +53,12 @@ test('cross-page open sentence links last right column to first left column past
 });
 
 test('completed sentences, page gaps, captions, titles and absent geometry cannot create continuation', () => {
-  for (const change of ['sentence', 'gap', 'caption', 'heading', 'geometry']) {
+  for (const change of ['sentence', 'gap', 'caption', 'heading', 'geometry', 'page-only']) {
     const left = block('a', change === 'sentence' ? 'The method learns.' : 'The method learns', 1, [30, 690, 280, 710]);
     const right = block('b', 'representations without labels.', change === 'gap' ? 3 : 2, [30, 100, 280, 120],
       change === 'caption' ? {text: 'Figure 1: The model.'} : change === 'heading' ? {text: '2 Method'} : {});
     if (change === 'geometry') right.locations = [];
+    if (change === 'page-only') right.locations = [{page: 2, bbox: null, coordinateOrigin: null}];
     const result = reading.annotatePdfDocumentReading([left, right], pages(1, 2, 3));
     assert.ok(result.every(b => b.reading.continuesFrom === null && b.reading.continuesTo === null), change);
   }

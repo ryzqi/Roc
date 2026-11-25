@@ -13,7 +13,7 @@ export function paperIRObjects(ir: PaperIRV2) {
 export function validatePaperIR(input: unknown): PaperIRV2 {
   const ir = paperIrV2Schema.parse(input), objects = paperIRObjects(ir), ids = new Set(objects.map(o => o.id));
   const raw = ir.blocks.map(b => ({id: b.blockId, text: b.text, kind: b.kind, locator: b.sourceLocator.rawLocator,
-    locations: b.sourceLocator.locations as Array<{page: number; bbox: [number, number, number, number]; coordinateOrigin: 'TOPLEFT' | 'BOTTOMLEFT'}>}));
+    locations: b.sourceLocator.locations}));
   const blocks = new Map(raw.map(b => [b.id, b]));
   const fail = (): never => {throw new Error('research_paper_ir_binding_invalid');};
   if (ids.size !== objects.length || blocks.size !== raw.length) fail();
@@ -27,7 +27,6 @@ export function validatePaperIR(input: unknown): PaperIRV2 {
         l.rawLocator !== b.locator || l.parentBlockId !== b.id || objectId && l.objectId !== objectId ||
         !l.objectId || !ids.has(l.objectId) ||
         l.textSpan && (l.textSpan.end > b.text.length || l.textSpan.start >= l.textSpan.end)) fail();
-    for (const l of b!.locations) if (l.bbox === null || l.coordinateOrigin === null) fail();
   };
   for (const o of objects) {
     checkLocator(o.sourceLocator, o.id);
@@ -105,8 +104,12 @@ export function validatePaperIR(input: unknown): PaperIRV2 {
   for (const c of ir.citations) if (c.targetIds.some(id => !referenceIds.has(id)) ||
     c.status === 'linked' && (!c.targetIds.length || c.unresolvedTargets.length)) fail();
   if (new Set(ir.relations.map(r => r.id)).size !== ir.relations.length) fail();
+  const objectsById = new Map(objects.map(object => [object.id, object]));
   for (const r of ir.relations) {
     checkLocator(r.sourceLocator);
+    const source = objectsById.get(r.sourceLocator.objectId!);
+    if (!source || source.blockId !== r.sourceLocator.blockId ||
+        !same(source.sourceLocator.locations, r.sourceLocator.locations)) fail();
     if (!ids.has(r.fromId) || !ids.has(r.toId) || r.fromId === r.toId) fail();
     if (r.id !== objectId('relation', `${r.type}:${r.fromId}:${r.toId}:${r.sourceLocator.textSpan?.start ?? ''}`)) fail();
   }

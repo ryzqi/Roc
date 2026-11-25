@@ -1,6 +1,7 @@
 import {z} from 'zod';
+import {researchPageLocationSchema, sameResearchPageLocation} from './research-page-location';
 
-export const paperTableVersion = 'roc-paper-table/1';
+export const paperTableVersion = 'roc-paper-table/2';
 export const paperTableLimits = {maxHtmlChars: 4 * 1024 * 1024, maxCells: 10_000, maxAxis: 1000} as const;
 const bbox = z.tuple([z.number(), z.number(), z.number(), z.number()])
   .refine(b => b[0] <= b[2] && b[1] <= b[3], 'research_table_coordinates_invalid');
@@ -22,8 +23,7 @@ const tableShape = z.object({
     .max(paperTableLimits.maxAxis),
   footnotes: z.array(z.string()).max(paperTableLimits.maxAxis),
   assetId: z.string().nullable(), imagePath: z.string().nullable(),
-  source: z.object({locator: z.string(), page: z.number().int().positive(),
-    bbox, coordinateOrigin: z.enum(['TOPLEFT', 'BOTTOMLEFT'])}).strict(),
+  source: researchPageLocationSchema.safeExtend({locator: z.string()}).strict(),
   warnings: z.array(z.string()).max(100)
 }).strict();
 export type NormalizedPaperTable = z.infer<typeof tableShape>;
@@ -52,7 +52,7 @@ function validateGrid(value: NormalizedPaperTable): void {
       if (ids.has(cell.id) || cell.id !== `${value.id}:cell:${r}:${cell.column}` ||
           r + cell.rowSpan > value.rows.length || cell.column + cell.colSpan > value.columns.length) throw new Error('research_table_grid_invalid');
       ids.add(cell.id);
-      if (cell.bbox && (cell.bbox[0] < value.source.bbox[0] || cell.bbox[1] < value.source.bbox[1] ||
+      if (cell.bbox && (!value.source.bbox || cell.bbox[0] < value.source.bbox[0] || cell.bbox[1] < value.source.bbox[1] ||
           cell.bbox[2] > value.source.bbox[2] || cell.bbox[3] > value.source.bbox[3] ||
           cell.bbox[0] >= cell.bbox[2] || cell.bbox[1] >= cell.bbox[3])) throw new Error('research_table_coordinates_invalid');
       for (let y = r; y < r + cell.rowSpan; y++) for (let x = cell.column; x < cell.column + cell.colSpan; x++) {
@@ -77,11 +77,10 @@ export function assertPaperTable(table: NormalizedPaperTable, blockId: string, l
 }
 export function assertPaperTableBlock(block: {id: string; kind: string; locator: string; table?: NormalizedPaperTable;
   locations?: Omit<NormalizedPaperTable['source'], 'locator'>[]; imagePath?: string | null; imageAssetId?: string | null}): void {
-  if (!block.table) return; // Historical parses retain their original contract.
+  if (!block.table) return;
   assertPaperTable(block.table, block.id, block.locator);
   if (block.kind !== 'table' || (block.locations && !block.locations.some(location =>
-    location.page === block.table!.source.page && location.coordinateOrigin === block.table!.source.coordinateOrigin &&
-    location.bbox.every((v, i) => v === block.table!.source.bbox[i]))) ||
+    sameResearchPageLocation(location, block.table!.source))) ||
     (block.imagePath !== undefined && (block.table.imagePath !== block.imagePath || block.table.assetId !== null)) ||
     (block.imageAssetId !== undefined && block.table.assetId !== block.imageAssetId)) throw new Error('research_table_binding_invalid');
 }

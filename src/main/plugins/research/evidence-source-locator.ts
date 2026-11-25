@@ -40,11 +40,6 @@ export function readCurrentEvidenceSourceLocator(db: Database, evidence: Researc
   }
   const locations = block.locations.map(location => {
     if (location.page > parsed.content.pageCount) throw new Error('research_evidence_source_page_invalid');
-    // HTML blocks currently carry a zero box: it is a logical page, not a
-    // measured rectangle. Preserve the page without claiming a usable region.
-    const [left, top, right, bottom] = location.bbox;
-    if (right === left && bottom === top) return {page: location.page, bbox: null, coordinateOrigin: null};
-    if (right <= left || bottom <= top) throw new Error('research_evidence_source_region_invalid');
     return location;
   });
   return researchSourceLocatorSchema.parse({

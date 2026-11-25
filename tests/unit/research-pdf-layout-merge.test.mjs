@@ -7,6 +7,15 @@ before(async () => {api = await importTypeScriptModule('src/main/plugins/researc
 const item = (id, text, bbox) => ({id, text, bbox, page: 1, itemIndex: Number(id.at(-1)) || 1, fontSize: 10, direction: 'ltr'});
 const region = (id, text, bbox, kind = 'paragraph') => ({score: .82, block: {id, text, kind, label: kind,
   locator: 'page1', imagePath: null, locations: [{page: 1, bbox, coordinateOrigin: 'TOPLEFT'}]}});
+test('unknown native and OCR geometry preserves page identity without fusing equal text', () => {
+  const ocr = region('ocr1', 'Original text', null);
+  ocr.block.locations[0].coordinateOrigin = null;
+  const result = api.fusePdfPage({page: 1, width: 600, nativeItems: [item('native1', 'Original text', null)], regions: [ocr]});
+  assert.equal(result.blocks.length, 2);
+  assert.equal(result.duplicatedRegionCount, 0);
+  assert.ok(result.provenance.every(p => p.overlapGroupId === null && p.source !== 'merged'));
+  for (const block of result.blocks) assert.deepEqual(block.locations, [{page: 1, bbox: null, coordinateOrigin: null}]);
+});
 test('one OCR object cannot discard native body text elsewhere on a mixed page', () => {
   const result = api.fusePdfPage({page: 1, width: 600,
     nativeItems: [item('native1', 'Native body must remain searchable', [30, 30, 260, 45])],
