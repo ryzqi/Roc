@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "defaultPythonVersion": "3.14.10",
+  "uv": {
+    "version": "0.13.9",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.13.9/uv-aarch64-apple-darwin.tar.gz",
+    "size": 14554974,
+    "sha256": "5aeca67f2283f75235de40d0bd9c0a5bbc5fce23b6d48b3bf9fa1b2db08382ca",
+    "member": "uv-aarch64-apple-darwin/uv",
+    "binarySize": 28309040,
+    "binarySha256": "0e17c316d23b33b4e840669f516f5cb7f5c1faa816ebd3824052ab50082ecefb"
+  },
+  "python": {
+    "version": "3.14.10",
+    "key": "cpython-3.14.10-macos-aarch64-none",
+    "size": 26970375,
+    "executable": {
+      "path": "bin/python3.14",
+      "size": 19072336,
+      "sha256": "1c4fc444d4dcf01d64c76ffec27834551254e494a211f34b00ad438e07cabfb6"
+    },
+    "downloads": {
+      "cpython-3.14.10-darwin-aarch64-none": {
+        "name": "cpython",
+        "arch": {
+          "family": "aarch64",
+          "variant": null
+        },
+        "os": "darwin",
+        "libc": "none",
+        "major": 3,
+        "minor": 14,
+        "patch": 10,
+        "prerelease": "",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.14.10%2B20261110-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "f15ec3d15460dd66c2eb88639b152cd9040e7d1ece11e38bf89e8f53f0171e02",
+        "variant": null,
+        "build": "20261110"
+      }
+    }
+  }
+}
