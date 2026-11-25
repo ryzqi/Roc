@@ -42,3 +42,35 @@ Python wheel and the 45.8 MB native MLX Metal wheel, verified their independent
 SHA-256 digests and removed every owned download directory. The report is retained
 at the output path; the verification refuses to overwrite an existing report.
 It does not certify installation of all 67 wheels.
+
+## Supervised offline package installation
+
+`ovis-package-installer.ts` creates a new private relocatable environment using
+the verified managed CPython 3.14.10 and uv 0.13.9. It accepts only the 67 pinned
+wheel files, verifies their lengths and hashes before execution, installs with
+`--offline --no-index --require-hashes --only-binary :all:`, and checks the exact
+installed distribution set without executing site startup hooks. The installer
+has no network permission, cannot build source packages, and writes only inside
+its new destination. Its caller owns publication and cleanup; an unproven child
+exit quarantines the lease and requires retention of the attempt.
+
+Actual verification from the repository root:
+
+```sh
+node scripts/research/verify-ovis-packages.mjs \
+  --output .artifacts/research-toolchain-p3/offline-packages-cancel-during-write
+node --test tests/unit/research-ovis-package-installer.test.mjs \
+  tests/unit/research-ovis-downloads.test.mjs tests/unit/research-download-lifecycle.test.mjs
+pnpm typecheck
+```
+
+All four runtime checks passed: all 67 wheels installed offline with native
+NumPy/Pillow/OpenCV imports; an existing destination was refused unchanged;
+cancellation after actual package writes reclaimed the supervised process;
+and a damaged wheel was refused before execution. The native import probe also
+confirmed that network connections and shell execution were denied. All owned
+download/runtime/cancellation directories were removed. Nine targeted Node
+regressions and typecheck passed. Failed development attempts remain separate
+reports; the first cancellation timer fired during preflight hashing and is not
+counted as process cleanup evidence. Model conversion and parser adoption remain
+separate gates.
