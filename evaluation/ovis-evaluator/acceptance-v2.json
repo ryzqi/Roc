@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "id": "ovis-ocr-quality-acceptance-v2",
+  "authorization": "User explicitly selected the original plan quality thresholds and source-localization checks in place of literal content parity after reviewing the v1 failure. Preserve v1 unchanged. This is a new protocol adopted after v1 observations, not a v1 passing result.",
+  "identities": {
+    "paired": {
+      "path": "evaluation/ovis-evaluator/paired-inference.json",
+      "sha256": "0770efdb3cdd46c152572d7ac567835c5f382fe9ba4622e2a5e3abc8c6b63f41"
+    },
+    "scoring": {
+      "path": "evaluation/ovis-evaluator/scoring.json",
+      "sha256": "e9d8c0413948761e907a3f51e2ae830305ad310d2b58b57290f657eb3dbad981"
+    },
+    "environment": {
+      "path": "evaluation/ovis-evaluator/environment.lock.json",
+      "sha256": "07660824ae0ac1ab548fc3dc388152808a1b2f3e833a763d3dd7fbbaf6cf5153"
+    },
+    "priorExactContract": {
+      "path": "evaluation/ovis-pytorch-reference/parity-mps.json",
+      "sha256": "7f66fef28fb3093dc18550d898cbfc253b2847811a544dd163a1446ea4d64d9c"
+    },
+    "priorExactResult": {
+      "path": ".artifacts/research-toolchain-p3/pytorch-mps-parity.json",
+      "sha256": "363edbb37076027d3989e1d0bf3c3435b7002e6ed60a4647cf3a3547b93e1d2b"
+    },
+    "officialReport": {
+      "path": ".artifacts/research-toolchain-p3/pytorch-reference-mps/report.json",
+      "sha256": "f272458b890ce1c97d717877e2c3f3577ce1f7ae7e274e0e15dce9814f444359"
+    },
+    "mlxBf16Report": {
+      "path": ".artifacts/research-toolchain-p3/smoke-original-bf16/report.json",
+      "sha256": "0edcc218bc7fbecce987da6c550a943ea0145833769bcb7e05b491b2fe234b51"
+    },
+    "mlx8bitReport": {
+      "path": ".artifacts/research-toolchain-p3/smoke-8bit/report.json",
+      "sha256": "d28762547eb91dc31c9f0e0c43fecfa708e0118a5a38ef591e9591c46c63dc85"
+    },
+    "goldBaselineAudit": {
+      "path": ".artifacts/research-toolchain-p3/scoring-gold-baseline-audit/denominator-audit.json",
+      "sha256": "013b9d9d953638ef4b6fdecb2849a93dc99e81693c1c5ac30578f4a93194a567"
+    }
+  },
+  "scope": {
+    "backendCheck": "Three originally frozen scientific pages, original official PyTorch MPS BF16 plus MLX BF16 and MLX 8bit, each scored against the same upstream annotations. This is a small independent implementation check, not an independent full-cohort reference.",
+    "quantizationCheck": "All 347 frozen scientific images, original MLX BF16 versus MLX8bit, each against upstream annotations. No page exclusions.",
+    "separateRequirements": [
+      "existing PDF-to-image geometry tests including rotations/crop transforms",
+      "production isolated Worker lifecycle",
+      "P4 evidence provenance and invalid-page refusal",
+      "P6 full application workflow"
+    ],
+    "skippedByUser": [
+      "additional scientific-scan gold",
+      "additional cross-page table gold",
+      "independent manual review"
+    ],
+    "knownPdfImageMismatch": "Retain slice144; do not reuse its masked-image gold for complete-PDF content claims.",
+    "trainingHoldoutVerified": false
+  },
+  "content": {
+    "backendAndQuantizationMargins": {
+      "cerCandidateMinusReferenceMaximum": 0.005,
+      "cdmCandidateMinusReferenceMinimum": -0.01,
+      "tedsCandidateMinusReferenceMinimum": -0.01
+    },
+    "text": "Use unchanged scoring.json normalization, family mapping, insertion/deletion-inclusive microCER; report WER without inventing an additional threshold.",
+    "formulaTable": "Use unchanged official matcher/CDM/TEDS with audited gold identities and nonempty gold glyph renderings. Compare scores against annotations, not reference-output strings.",
+    "invalidOutput": "Retain invalid pages in every denominator as empty predictions; candidate invalid-page count must not exceed reference; no repair or hidden retry.",
+    "backendComparisons": [
+      "MLX BF16 minus official MPS",
+      "MLX8bit minus official MPS"
+    ],
+    "quantizationComparison": "MLX8bit minus MLX BF16",
+    "zeroDenominator": "not-qualified, never automatic pass"
+  },
+  "geometry": {
+    "matching": "Use unchanged scoring.json one-to-one maximum IoU per category family at IoU>=0.5, all mapped nonignored gold polygons retained.",
+    "coordinates": "Gold polygon bounds divided by source page width/height; prediction integers divided by1000; no clipping, offset correction or box repair.",
+    "qualityFamilies": [
+      "all",
+      "formula",
+      "table",
+      "visual",
+      "caption"
+    ],
+    "recallCandidateMinusReferenceMinimum": -0.01,
+    "precisionCandidateMinusReferenceMinimum": -0.01,
+    "signedMeanCenterBiasAbsoluteMaximum": 0.01,
+    "signedMeanCenterBiasCandidateMinusReferenceAbsoluteMaximum": 0.002,
+    "biasAxes": [
+      "x",
+      "y"
+    ],
+    "zeroFamilyGold": "report not applicable only if no gold in the fixed cohort; never drop a family with gold or hallucinated predictions",
+    "noMatchesWithGold": "fail"
+  },
+  "readingOrder": {
+    "metric": "Pairwise inversion count among distinct, finite numeric gold orders using the same geometry matches, including every category with explicit order; gold order ties excluded; prediction order is raw block index.",
+    "coverage": "Matched explicit-order gold / all explicit-order gold; missing matches remain in the coverage denominator.",
+    "inversionRateCandidateMinusReferenceMaximum": 0.01,
+    "coverageCandidateMinusReferenceMinimum": -0.01,
+    "zeroComparablePairs": "not-qualified",
+    "upstreamReadingOrder": "diagnostic only due known perfect-table fixture defect; never substitute its metric"
+  },
+  "qualification": {
+    "allRequiredComparisonsMustPass": true,
+    "evaluatorFailureOrMissingGold": "invalidate run; never treat as model score",
+    "sourceIdentityChange": "invalidate run",
+    "literalContentDiff": "retain diagnostic evidence; no longer an adoption gate under explicit user authorization",
+    "automaticAdoption": false,
+    "performanceQualification": false,
+    "applicationEnablement": "Only after actual v2 quality, worker, source mapping and P4 product contracts pass; no switch based on configuration alone"
+  }
+}
