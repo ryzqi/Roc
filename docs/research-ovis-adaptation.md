@@ -24,7 +24,28 @@ All six runs ended with official EOS 248046 without truncation; strict output JS
 
 These are single-pass observations, not percentile estimates or an accuracy certificate. Both variants use MLX. The independent official PyTorch MPS reference subsequently passed strict parity on only one of three pages. Formula/table content and chart image-reference strings differed. A frozen pixel-only diagnostic eliminated the table difference but left formula and chart-reference differences; it is ineligible as an acceptance reference. The original exact-content contract and failed result remain unchanged. The user explicitly authorized quality acceptance v2 in place of that stricter adoption gate. See the [independent reference evidence](../evaluation/ovis-pytorch-reference/README.md).
 
-The 347-page scientific cohort is running paired BF16/8-bit inference. The official scorer was calibrated and its empty-prediction baseline completed: 2,240 text identities, 597 formula identities and 323 tables. All formula gold renders were nonempty. A separate immutable re-audit qualified the gold denominator; use `scoring-gold-baseline-audit-v2-linked` for final arm comparisons. Scorer documentation records the upstream reading-order defect and the PDF/image mismatch without excluding either. See [evaluation instructions](../evaluation/ovis-evaluator/README.md).
+The 347-page scientific cohort is running paired BF16/8-bit inference. The official scorer was calibrated and its empty-prediction baseline completed: 2,240 text identities, 597 formula identities and 323 tables. All formula gold renders were nonempty. A separate immutable re-audit qualified the gold denominator; `scoring-gold-baseline-audit-v2-linked` retains that baseline. Scorer documentation records the upstream reading-order defect and the PDF/image mismatch without excluding either. See [evaluation instructions](../evaluation/ovis-evaluator/README.md).
+
+The completed BF16 arm has 347 valid pages. Its initial scorer report was rejected
+because two formulas had position `0` in the matched output but `""` in the
+empty-prediction baseline. The upstream matcher tests order by truthiness. Both
+gold files are byte-identical, and the two exact formulas each occur once in their
+page's annotations with numeric order zero. The independent
+`scripts/research/audit-ovis-zero-order.py` re-audits saved results without editing
+the frozen evaluator or original reports. It maps an empty formula position to
+zero only when the exact page/category/LaTeX identifies one nonignored annotation
+with numeric order zero; multiplicities and all other audit errors remain binding.
+The linked report is
+`.artifacts/research-toolchain-p3/quality-v2-zero-order-audit/original-bf16/report.json`.
+It preserves the original CER 0.1352443265, CDM 0.9928023451 and TEDS 0.9354555977.
+This is a denominator audit, not quality adoption.
+
+The ongoing 8-bit arm already contains an invalid `scientific-253` page: generation
+repeats table-format tokens until the 16,384-token limit, leaving truncated JSON.
+BF16 completes the same page in 3,698 tokens. The 8-bit invalid-page count therefore
+exceeds BF16's zero and fails that v2 gate, regardless of the remaining scores.
+Original evidence stays in `paired-347/8bit/scientific-253.*`; a separately labelled
+cold-process diagnostic cannot replace this page in the frozen cohort.
 
 The production supervisor now runs actual 8-bit inference with scoped Metal compiler-cache access, filesystem/network isolation and resource admission. Model reuse, cancellation during generation, monitored memory termination and recovery all passed. Temporary jobs and compiler caches were removed. [Worker evidence](../evaluation/ovis-worker/README.md) records exact commands, native regression tests and resource-limit boundaries. This verifies lifecycle behavior without qualifying document accuracy or enabling the parser.
 
