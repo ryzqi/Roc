@@ -41,6 +41,8 @@ def verified_contract() -> dict:
 def backend_gold(config: dict) -> tuple[list, list, list]:
     require_committed(INPUTS)
     paired, gold = cohort(config)
+    source_lock = json.loads((ROOT / paired["sourceLockPath"]).read_text())
+    source_root = ROOT / source_lock["localSourceRoot"]
     by_id = {p["id"]: (p, g) for p, g in zip(paired["pages"], gold, strict=True)}
     pages = json.loads(INPUTS.read_text())["pages"]
     annotations, evidence = [], []
@@ -50,7 +52,7 @@ def backend_gold(config: dict) -> tuple[list, list, list]:
                 raise ValueError(f"Backend image association changed: {page['id']}:{key}")
         receipt = json.loads((ROOT / page["p0Receipt"]["path"]).read_text())
         selected, annotation = by_id[page["pairedPageId"]]
-        if (selected["imagePath"] != page["sourceImage"]["path"]
+        if (source_root / selected["imagePath"] != ROOT / page["sourceImage"]["path"]
                 or selected["sha256"] != page["sourceImage"]["sha256"]
                 or receipt["sourceHash"] != selected["sha256"]
                 or annotation["page_info"]["image_path"] != page["annotationImagePath"]):
