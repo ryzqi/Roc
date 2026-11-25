@@ -54,3 +54,47 @@ all60regions and their exact raw content, with page-only citations for every
 region. This is a replay of existing inference, not a new runtime inference or
 full PDF/application qualification. Evidence is retained under
 `.artifacts/research-toolchain-p3/ovis-source-adapter-*`.
+
+## Isolated Worker wrapper
+
+`ovis-worker.ts` consumes a model-store installation lease and verified page
+bindings. It hashes the receipt and inference source before launch; the isolated
+Python bootstrap rechecks them and verifies the installed runtime/model before
+importing MLX. It then calls the unchanged, pinned inference implementation once
+for the document's pages. Installed Python packages are reachable only through
+the explicit private runtime path; `-I -S -B` disables project/user startup and
+bytecode writes. Request values travel through JSON stdin, never interpolated
+code or shell commands.
+
+The existing process supervisor provides global parse/GPU admission, network
+denial, cancellation, timeout, process-group cleanup and6GiB monitored RSS. A
+private Darwin cache enables Metal compilation with narrowly scoped extensions.
+The4GiB MLX memory limit is a guideline; Apple compiler-service memory is outside
+Worker RSS monitoring. Ordinary Python experiment permissions do not change.
+
+The wrapper requires the entire requested page sequence and verifies report
+identity, image hashes, raw output and EOS before returning any page. It rejects
+invalid/partial documents and changed image bytes. Owned temporary output/cache
+directories are removed after confirmed completion or cancellation. If process
+exit cannot be proved, directories remain for recovery rather than being removed
+under a possibly live process. The caller must retain the returned raw output,
+token evidence and source bindings in its atomic parse artifact before publishing.
+There is no production parser registration or package/download integration yet.
+
+```sh
+node --test tests/unit/research-ovis-worker.test.mjs tests/unit/research-ovis-document-adapter.test.mjs tests/unit/research-pdf-reading-order.test.mjs
+node scripts/research/verify-ovis-worker.mjs \
+  --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  --reference-inference .artifacts/research-toolchain-p3/smoke-8bit \
+  --output /absolute/new-evidence-directory
+pnpm build
+```
+
+Fourteen boundary/ordering tests pass, including corrupted/partial reports,
+source mutation, output symlinks and unproven cleanup. The real supervised8bit
+wrapper replayed the chart page with all11regions and byte-identical raw output;
+both owned directories were removed. Mixed-load generation30.918s, supervisor
+hold41.283s, sampled peakRSS1,773,273,088B. This does not establish isolated
+performance, cross-document model reuse or full application qualification.
+Evidence: `.artifacts/research-toolchain-p3/worker-wrapper/` and
+`ovis-worker-boundary-tests.log`, `ovis-worker-build.log` in the same parent.
