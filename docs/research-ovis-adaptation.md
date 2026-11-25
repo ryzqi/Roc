@@ -24,7 +24,7 @@ All six runs ended with official EOS 248046 without truncation; strict output JS
 
 These are single-pass observations, not percentile estimates or an accuracy certificate. Both variants use MLX. The independent official PyTorch MPS reference subsequently passed strict parity on only one of three pages. Formula/table content and chart image-reference strings differed. A frozen pixel-only diagnostic eliminated the table difference but left formula and chart-reference differences; it is ineligible as an acceptance reference. The original exact-content contract and failed result remain unchanged. The user explicitly authorized quality acceptance v2 in place of that stricter adoption gate. See the [independent reference evidence](../evaluation/ovis-pytorch-reference/README.md).
 
-The 347-page scientific cohort is running paired BF16/8-bit inference. The official scorer was calibrated and its empty-prediction baseline completed: 2,240 text identities, 597 formula identities and 323 tables. All formula gold renders were nonempty. A separate immutable re-audit qualified the gold denominator; `scoring-gold-baseline-audit-v2-linked` retains that baseline. Scorer documentation records the upstream reading-order defect and the PDF/image mismatch without excluding either. See [evaluation instructions](../evaluation/ovis-evaluator/README.md).
+The 347-page scientific cohort completed paired BF16/8-bit inference. The official scorer was calibrated and its empty-prediction baseline completed: 2,240 text identities, 597 formula identities and 323 tables. All formula gold renders were nonempty. A separate immutable re-audit qualified the gold denominator; `scoring-gold-baseline-audit-v2-linked` retains that baseline. Scorer documentation records the upstream reading-order defect and the PDF/image mismatch without excluding either. See [evaluation instructions](../evaluation/ovis-evaluator/README.md).
 
 The completed BF16 arm has 347 valid pages. Its initial scorer report was rejected
 because two formulas had position `0` in the matched output but `""` in the
@@ -40,12 +40,43 @@ The linked report is
 It preserves the original CER 0.1352443265, CDM 0.9928023451 and TEDS 0.9354555977.
 This is a denominator audit, not quality adoption.
 
-The ongoing 8-bit arm already contains an invalid `scientific-253` page: generation
+The completed 8-bit arm contains one invalid `scientific-253` page: generation
 repeats table-format tokens until the 16,384-token limit, leaving truncated JSON.
 BF16 completes the same page in 3,698 tokens. The 8-bit invalid-page count therefore
 exceeds BF16's zero and fails that v2 gate, regardless of the remaining scores.
 Original evidence stays in `paired-347/8bit/scientific-253.*`; a separately labelled
 cold-process diagnostic cannot replace this page in the frozen cohort.
+
+The complete independent metrics also fail CER delta (0.0067811254 versus maximum
+0.005), formula region precision delta (-0.0129728059 versus minimum -0.01), and
+formula horizontal center bias (0.0155339379 versus maximum 0.01). BF16's own
+formula horizontal bias is 0.0151225660. These are recorded in
+`quality-v2-interim.json`; official 8-bit CDM/TEDS are still being scored. The
+question of permitting verified page-only citations while retaining unverified
+regions has been raised separately. No acceptance requirement has been waived.
+
+`scripts/research/probe-ovis-repetition.py` creates an explicitly labelled
+diagnostic copy of the frozen inference script. It changes only the repetition
+penalty, records the unchanged 20-token context window, preserves model/prompt/
+runtime inputs, and keeps the generated script, command, source hashes and output
+in a new evidence directory. It cannot change the application's decoder. Example:
+
+```sh
+python3 -B scripts/research/probe-ovis-repetition.py \
+  --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  --output /absolute/new-diagnostic-directory \
+  --page scientific-253 --penalty 1.05
+```
+
+The unchanged cold-process reproduction emits exactly the same raw bytes and
+tokens as the original failed page. Penalty 1.01 still fails; penalty 1.05 ends
+normally in 3,694 tokens with 24 blocks, but changes one paragraph classification
+and raises this page's CER from BF16's 0.222627 to 0.248322. Separate controls
+`scientific-006`, `scientific-005`, `scientific-001` all finish normally at 1.05;
+their combined CER is 0.080074, versus 0.084662 for both original arms. Evidence is
+under `diagnostic-scientific-253-cold`, `diagnostic-repetition-1.01`,
+`diagnostic-repetition-1.05` and `diagnostic-repetition-1.05-controls`. These selected
+probes are not full-cohort quality qualification or replacement inference pages.
 
 The production supervisor now runs actual 8-bit inference with scoped Metal compiler-cache access, filesystem/network isolation and resource admission. Model reuse, cancellation during generation, monitored memory termination and recovery all passed. Temporary jobs and compiler caches were removed. [Worker evidence](../evaluation/ovis-worker/README.md) records exact commands, native regression tests and resource-limit boundaries. This verifies lifecycle behavior without qualifying document accuracy or enabling the parser.
 

@@ -444,5 +444,11 @@ The completed three-page smoke report passed: 60blocks, 7equations, 4tables,
 content survived the applicable raw text/LaTeX/HTML fields; every citation remained
 page-only. Per-page hashes and counts are retained in
 `.artifacts/research-toolchain-p3/structural-replay-smoke/report.json`.
-All synthetic captures and temporary publications were removed. The same harness
-is ready for the completed347-page8-bit report when inference finishes.
+All synthetic captures and temporary publications were removed. The completed
+347-page report was subsequently replayed: 346 pages pass and `scientific-253`
+fails with its original invalid-output errors retained. Valid pages preserve
+4,988 blocks, 289 equations, 323 tables, 30,346 cells, 258 figures and 37,059 IR
+objects. The overall result remains failed, with all 347 pages included. Evidence
+is `structural-replay-paired-347/report.json` under the same artifact root; its
+temporary captures and publications were removed. No invalid output was repaired
+or published as a valid document.
