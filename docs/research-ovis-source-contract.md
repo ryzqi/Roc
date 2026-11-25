@@ -339,3 +339,27 @@ directories. Evidence is in `.artifacts/research-toolchain-p3/document-parser/`.
 Observed generation was23.820s, supervised admission hold32.845s and sampled peak
 RSS1,580,662,784B under mixed host load. These observations do not qualify isolated
 performance or the full quality gate. Build and both focused test batches passed.
+
+## Saved-output structural replay
+
+`verify-ovis-structural-replay.mjs` accepts a completed 8-bit inference report,
+checks its pinned model identity and each original input/raw/token binding, then
+uses that saved output to exercise image capture, collection and Paper IR
+publication/readback. The capture envelopes in this harness are explicitly
+synthetic because image normalization may change raster bytes. This checks
+structural preservation, not inference equivalence, source-binding qualification
+or gold quality. It never starts a Worker or adopts a model.
+
+```sh
+node scripts/research/verify-ovis-structural-replay.mjs \
+  --inference .artifacts/research-toolchain-p3/smoke-8bit \
+  --output /absolute/new-evidence-directory
+```
+
+The completed three-page smoke report passed: 60blocks, 7equations, 4tables,
+441cells, 3figures, 11candidate caption relations and521IR objects. Original
+content survived the applicable raw text/LaTeX/HTML fields; every citation remained
+page-only. Per-page hashes and counts are retained in
+`.artifacts/research-toolchain-p3/structural-replay-smoke/report.json`.
+All synthetic captures and temporary publications were removed. The same harness
+is ready for the completed347-page8-bit report when inference finishes.
