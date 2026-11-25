@@ -8,13 +8,12 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import { csvFormat } from 'd3-dsv';
 import runtimeExecutable from 'electron';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const runnerPath = join(repositoryRoot, 'resources/research-runtime/typescript-experiment-runner.mts');
 const require = createRequire(import.meta.url);
-const packageEntries = Object.fromEntries(['csv-parse', 'csv-stringify', 'd3-dsv', 'simple-statistics']
+const packageEntries = Object.fromEntries(['csv-parse', 'csv-stringify', 'simple-statistics']
   .map((name) => [name, require.resolve(name)]));
 const packageRoots = [...new Set(Object.values(packageEntries).map((entry) => {
   let root = dirname(entry);
@@ -89,7 +88,7 @@ function rowsSource(rows, columns) {
   }`;
 }
 
-test('experiment writeCsv preserves d3-dsv column, value and quoting semantics', async () => {
+test('experiment writeCsv serializes selected columns, primitive values and quoted fields', async () => {
   const columns = ['id', 'text', 'empty', 'enabled', 'score', 'formula'];
   const rows = [
     { id: 1, text: 'comma, field', empty: null, enabled: false, score: 2.5, formula: '=A1', ignored: 'not exported' },
@@ -102,7 +101,13 @@ test('experiment writeCsv preserves d3-dsv column, value and quoting semantics',
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stderr);
     const outputPath = join(outputDir, 'nested/results.csv');
-    assert.equal(await readFile(outputPath, 'utf8'), csvFormat(rows, columns));
+    assert.equal(await readFile(outputPath, 'utf8'), [
+      'id,text,empty,enabled,score,formula',
+      '1,"comma, field",,false,2.5,=A1',
+      '2,"line\nbreak and ""quotes""",,true,-4.25,"@SUM(1,2)"',
+      '3,"carriage\rreturn",,false,0,+1',
+      '4, leading and trailing ,,false,0,=1+1'
+    ].join('\n'));
     assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -118,7 +123,8 @@ test('experiment writeCsv infers columns in first-row key order', async () => {
   try {
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(await readFile(join(outputDir, 'nested/results.csv'), 'utf8'), csvFormat(rows, ['zeta', 'alpha', 'empty']));
+    assert.equal(await readFile(join(outputDir, 'nested/results.csv'), 'utf8'),
+      'zeta,alpha,empty\nlast header,first header,\nfirst row,second row,');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
