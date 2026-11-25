@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 import { packageNameFromModuleId, rendererChunkMetadata } from './scripts/renderer-chunk-metadata';
+import { mermaidDiagramBuild } from './scripts/mermaid-diagram-build';
 
 type RendererChunkRule = {
   chunk: string;
@@ -125,7 +126,7 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
-    plugins: [react(), tailwindcss(), rendererChunkMetadata(), {
+    plugins: [mermaidDiagramBuild(), react(), tailwindcss(), rendererChunkMetadata(), {
       name: 'roc-renderer-dev-csp',
       apply: 'serve',
       // Vite's React refresh preamble and HMR socket exist only in development.

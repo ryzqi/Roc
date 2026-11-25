@@ -333,6 +333,8 @@ seal 是文件哈希清单，不是签名或不可改写存储。证据缺失/�
 
 `evaluation/results/` 由 Git 忽略，全新克隆不包含本地报告，也不能依赖已清理的 Git 历史恢复它们。保留仍被当前语料流程消费的 `baseline/sciegqa-correspondence.json`，以及 `baseline/sciegqa-export.json`、`baseline/scidqa-export.json`、`baseline/sciegqa-review-materials.json` 来源与审核记录。保留记录的原始字节，不改写路径、哈希或字段；缺少时先运行对应来源准备、对齐和审核流程。
 
+SciEGQA 审核材料的 `sourcePins` 和原文链接还依赖 `.artifacts/scientific-rag/sciegqa-evidence-01/` 中的对应观测。该批次属于审核输入，需与材料一起保留；缺失时不能仅凭 baseline 摘要完成 `--verify`，须先重新生成对应证据并核对固定哈希。
+
 旧阶段脚本及其原始证据已缺失、没有当前消费者的运行摘要已清理；旧矩阵汇总和固定历史 ablation 入口也已移除。新报告按实际输入、有效运行与保留关系管理，不能仅因没有静态引用或文件已被忽略就删除。
 
 比较必须使用符合当前合同且原始证据仍可读取的 matched runs；缺失时重新生成，文字摘要不能代替证据。清理需要覆盖具体目标的删除授权。清理先生成明确路径、inventory/hash 与 owner 的预览，再应用同一计划；变更、活动 owner、新保留记录引用或路径/链接异常会拒绝删除。QASPER 原始锁定归档先复制并核验至 `local/sources`，再移除可再生缓存；用户配置、凭据、生产数据库和无关产物不在范围内。测试回收各自拥有的临时目录。`--output-root PATH` 支持独立输出父目录。

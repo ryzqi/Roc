@@ -7,7 +7,7 @@
 | 变更 | 命令与范围 |
 | --- | --- |
 | 文档 | 核对源码、脚本参数、本地链接及锚点；执行 `git diff --check` |
-| 类型与构建 | `pnpm typecheck`；`pnpm build` 同时检查阶段 Skill、类型并构建主进程、preload 和 renderer |
+| 类型与构建 | `pnpm typecheck`；`pnpm build` 检查阶段 Skill、类型，构建主进程、preload 和 renderer，最后自动执行 renderer chunk 检查 |
 | 阶段 Skill | `pnpm check:skills`；正文、manifest 与 catalog 必须一致，见[内置技能](builtin-skills.md) |
 | IPC | `pnpm check:ipc`；合同改变后执行 `pnpm generate:ipc` 并检查调用方 |
 | 领域逻辑 | `pnpm test:unit`，或选择相关 `tests/unit/*.test.mjs` |
@@ -23,7 +23,9 @@
 
 壳层专项入口为 `pnpm verify:p3-workspace`、`pnpm verify:p4-assistant`、`pnpm verify:p5-literature`、`pnpm verify:p8-settings`、`pnpm verify:p9-management`；根据受影响表面选择。先完成构建，再执行依赖 `dist/` 的测试，避免构建替换文件造成读取失败。
 
-`check:renderer-chunks` 检查首屏静态依赖及应用入口 chunk，包括懒加载画布和面板；预算由[脚本](../scripts/check-renderer-chunks.mjs)维护。编辑器按入口拆分，Mermaid 解析器和 ELK 的上游单模块仍可能产生 Vite 体积警告。升级依赖后须核对实际依赖图和产物。
+`pnpm build` 自动执行 `check:renderer-chunks`：检查首屏静态依赖、所有 JS chunk 的 500,000 字节上限，以及已裁剪图表依赖是否重新进入产物；预算由[脚本](../scripts/check-renderer-chunks.mjs)维护。编辑器按入口拆分，Vite 的体积警告阈值保留。
+
+私有图表 worker 按[现有格式策略](../src/shared/research-diagram-policy.ts)保留 Mermaid 的流程图（含 `graph`）、时序图、状态图、类图和 ER 图。[构建插件](../scripts/mermaid-diagram-build.ts)在 tree shaking 前裁剪其他图表及 Cose 布局注册项，移除未使用的 Langium 解析器；保留原有默认 ELK 布局，将上游预压缩引擎作为本地 Worker 资源独立输出，renderer chunk 仅包含轻量 API。Worker 资源单独校验字节数和内容哈希，不计入 JS chunk 预算。Mermaid 的渲染专用函数在发送给 ELK 前从 JSON 图数据中剥离。插件校验 Mermaid 版本和注册结构；升级 Mermaid 或扩展格式策略时，须同步审查插件、核对产物，并执行 `node --test tests/integration/research-diagram-runtime.test.mjs`。该测试验证全部支持格式的 SVG、PNG 和 PDF，并与同一环境的未裁剪 Mermaid 比较 PNG，覆盖子图、循环边和嵌套状态。
 
 ## 测试替代行为
 
@@ -63,7 +65,7 @@ Electron smoke 用隔离 `ROC_DATA_ROOT` 启动，夹具入口是 [tests/smoke/l
 | 路径 | 用途与清理边界 |
 | --- | --- |
 | `dist/`、`release/` | 编译和打包输出；无需保留该构建时可删除。分别用 `pnpm build`、`pnpm package:mac` 重建，依赖产物的检查须先构建。 |
-| `.artifacts/` | 测试截图、日志与专项输出；可删除已结束且不再用于验收、对照或独立重评分的批次，测试会重建各自输出。 |
+| `.artifacts/` | 测试截图、日志与专项输出；可删除已结束且不再用于验收、对照或独立重评分的批次，测试会重建各自输出。科研审核材料的 `sourcePins` 若引用某批次，按评测输入保留，见[评测保留规则](../evaluation/README.md#保留与验证)。 |
 | `.runtime/pnpm-cache/`、`.runtime/pnpm-store/` | 包元数据缓存与依赖内容存储；缓存可重新获取，store 优先用 `pnpm store prune` 回收。清理后再次安装可能需要网络；`node_modules/` 是当前开发依赖。 |
 | `.runtime/research-toolchain/`、`.runtime/research-models/` | 构建、解析与原生 smoke 的实际输入，不能当临时文件整目录清空；准备方法见[科研运行时](../resources/research-runtime/README.md)。 |
 | `.runtime/` 下其他子目录 | 按所属命令判断；已结束的临时工作区、废弃工具副本和空目录可清理。数据库迁移目录若含快照或备份，按[数据库维护合同](database-storage.md)保留。 |
@@ -71,6 +73,8 @@ Electron smoke 用隔离 `ROC_DATA_ROOT` 启动，夹具入口是 [tests/smoke/l
 | 根目录 | 保留源码入口、构建配置、锁文件、维护文档和本机工具配置；`.DS_Store` 与本次工作产生的临时文件可清理。 |
 
 `scripts/` 保留构建、测试、维护和可重跑的评测入口。仅绑定已丢失历史输入或不存在 Git 基线、且无当前调用方的专项脚本已移除；不要仅凭未列入 `package.json` 判断脚本无用。
+
+临时 worktree 回收后，核对本仓库 `node_modules/` 的软链接和 `.bin` 路径；直接依赖与 hoist 链接都应指向仍可读取的本地安装目录，不能保留指向已删除 worktree 的安装状态。
 
 完成普通构建并准备好科研工具链后，可以在新的验证根生成候选包：
 
