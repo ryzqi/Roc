@@ -47,21 +47,35 @@ int main(int argc, char **argv) {
     close(queue);
     close(3);
     close(gate[1]);
-    if (setpgid(0, 0) < 0) _exit(125);
     char start;
-    if (read(gate[0], &start, 1) != 1) _exit(125);
+    ssize_t received = read(gate[0], &start, 1);
+    if (received != 1) {
+      if (received == 0) errno = EPIPE;
+      _exit(fail("computation_gate_failed"));
+    }
     close(gate[0]);
+    /* The parent alone establishes the group before releasing this gate.
+     * Concurrent parent/child setpgid calls can fail with EPERM on Darwin,
+     * even when the other call has already installed the requested group. */
+    if (getpgrp() != getpid()) {
+      errno = EPERM;
+      _exit(fail("computation_group_changed"));
+    }
     execv(argv[2], &argv[2]);
+    fail("computation_exec_failed");
     _exit(126);
   }
   close(gate[0]);
   close(STDIN_FILENO);
-  /* Both sides establish the same group before the gated exec. */
-  if (setpgid(computation, computation) < 0 || watch_exit(queue, computation) < 0) {
+  const char *setup_failed = NULL;
+  if (setpgid(computation, computation) < 0) setup_failed = "computation_group_failed";
+  else if (watch_exit(queue, computation) < 0) setup_failed = "computation_watch_failed";
+  if (setup_failed != NULL) {
+    int result = fail(setup_failed);
     close(gate[1]);
     kill(computation, SIGKILL);
     waitpid(computation, NULL, 0);
-    return fail("computation_watch_failed");
+    return result;
   }
   if (dprintf(3, "%d\n", computation) < 0 || write(gate[1], "1", 1) != 1) {
     close(gate[1]);
