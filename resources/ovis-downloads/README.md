@@ -74,3 +74,32 @@ regressions and typecheck passed. Failed development attempts remain separate
 reports; the first cancellation timer fired during preflight hashing and is not
 counted as process cleanup evidence. Model conversion and parser adoption remain
 separate gates.
+
+## Supervised 8-bit conversion
+
+`ovis-conversion.ts` runs the frozen converter against the exact 29 official
+source files in an isolated Metal process. It imports only the fresh private
+wheel installation and verified managed Python, denies network and shell access,
+checks write/resource limits, and removes its private compiler cache after
+confirmed process exit. It refuses existing output, overlapping input/output
+directories, foreign source files and changed source/specification bytes. The
+caller retains ownership of the unpublished conversion directory.
+
+```sh
+node scripts/research/verify-ovis-conversion.mjs \
+  --installation ~/.roc/research-models/ovisocr3-mlx-8bit \
+  --output .artifacts/research-toolchain-p3/supervised-conversion
+node --test tests/unit/research-ovis-conversion.test.mjs \
+  tests/unit/research-ovis-package-installer.test.mjs
+pnpm build
+```
+
+The fresh managed runtime and all 67 offline wheels reproduced all **847 tensor
+values, dtypes and shapes** from the frozen reference: 187 affine 8-bit/group64
+language modules and 153 BF16 vision tensors. Configuration, tokenizer and
+processor settings also matched. Comparison hashes tensor payloads independently
+of safetensors header ordering. Existing output refusal, cancellation after
+Metal cache activity, damaged-source rejection, and removal of every owned
+temporary directory all passed. Four focused regressions and the full build
+passed. This verifies conversion reproducibility; full-cohort quality and final
+application publication remain separate gates.
