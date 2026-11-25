@@ -8,10 +8,9 @@ import {runOvisDocumentPages, type OvisWorkerInput, type OvisWorkerResult} from 
 import {hashResearchFile, prepareResearchJob} from './research-job';
 import {extractResearchPdfPageNativeText, renderResearchPdfPage, withResearchPdf} from './pdf-render';
 import {decodeRasterDocument, imagePng} from './research-raster';
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 
 const hash = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
-const unprovenExitCodes = new Set(['research_process_kill_failed', 'research_process_supervision_failed',
-  'research_process_completion_failed']);
 type Asset = {path: string; sha256: string; bytes: number};
 type PageArtifact = {page: number; image: Asset; evidence: Asset;
   crops: Array<Asset & {blockId: string; rasterBox: [number, number, number, number]; verification: 'unverified'}>};
@@ -157,7 +156,7 @@ export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
     await rename(join(job.output, 'manifest.json.part'), join(job.output, 'manifest.json'));
     return artifact;
   } catch (error) {
-    if (error instanceof Error && 'code' in error && unprovenExitCodes.has(String(error.code))) safeToClean = false;
+    if (hasUnprovenResearchProcessExit(error)) safeToClean = false;
     if (safeToClean) {
       try {await rm(job.output, {recursive: true, force: true});}
       catch (cleanup) {throw new AggregateError([error, cleanup], 'research_ovis_artifact_cleanup_failed', {cause: error});}

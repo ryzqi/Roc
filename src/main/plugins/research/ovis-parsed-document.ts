@@ -62,16 +62,18 @@ export async function writeOvisParsedDocument(input: CaptureInput): Promise<Pars
 }
 
 /** Rebuild before storage; matching caller/structured copies cannot legitimize altered content or provenance. */
-export async function verifyOvisParsedDocument(directory: string, parsed: ParsedDocument): Promise<{
+export async function verifyOvisParsedDocument(directory: string, parsed: ParsedDocument, signal: AbortSignal): Promise<{
   frames: ResearchDocumentCoordinateFrame[]; assetIntegrity: OvisPaperContent['assetIntegrity']; structuredSha256: string;
 }> {
   const result = await reconstruct({directory, manifestSha256: parsed.sourceCapture.sha256, sourceHash: parsed.sourceHash,
-    model: parsed.modelIdentity, signal: new AbortController().signal});
+    model: parsed.modelIdentity, signal});
   if (JSON.stringify(result.parsed) !== JSON.stringify(parsed)) throw new Error('research_ovis_result_capture_mismatch');
   const contents = encoded(result);
   for (const key of Object.keys(artifacts) as Array<keyof typeof artifacts>) {
+    signal.throwIfAborted();
     const bytes = await readResearchFile(directory, artifacts[key], researchDocumentLimits.maxArtifactBytes);
     if (!bytes.equals(Buffer.from(contents[key]))) throw new Error('research_ovis_result_artifact_mismatch');
   }
+  signal.throwIfAborted();
   return {frames: result.frames, assetIntegrity: result.assetIntegrity, structuredSha256: researchContentHash(contents.structuredContent)};
 }

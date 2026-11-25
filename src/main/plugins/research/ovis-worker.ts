@@ -1,4 +1,5 @@
 import {ovisModelIdentitySchema, type OvisModelIdentity} from '../../../shared/schemas/research-ovis';
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash} from 'node:crypto';
@@ -155,8 +156,7 @@ export async function runOvisDocumentPages(input: OvisWorkerInput,
     }
     return {pages: adapted, process: result};
   } catch (error) {
-    if (error instanceof Error && 'code' in error && ['research_process_kill_failed',
-      'research_process_supervision_failed', 'research_process_completion_failed'].includes(String(error.code))) safeToClean = false;
+    if (hasUnprovenResearchProcessExit(error)) safeToClean = false;
     throw error;
   } finally {
     if (safeToClean) {

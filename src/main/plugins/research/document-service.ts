@@ -22,6 +22,7 @@ import { createResearchDirectory, readResearchFile, researchContentHash, researc
 import {documentSourceRequest} from './document-source-request';
 import {documentSourceRange, VerifiedDocumentSources, verifyDocumentSource} from './verified-document-source';
 import {PaperIRRepository} from './paper-ir-repository';
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import type {ScientificLibraryIndexService, PreparedLibraryIndex} from './scientific-library-index';
 
 type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography' | 'defaultParseOptions'>;
@@ -418,7 +419,7 @@ export class ResearchDocumentService {
         options: tier === null ? options : { ...options, tier } }), {unit: 'blocks'}, result => result.blocks.length);
       trace.bind({parser_fingerprint: result.parserFingerprint});
       this.requireActive(signal);
-      const {data, coordinates} = await collectDocumentContent(root, output, result);
+      const {data, coordinates} = await collectDocumentContent(root, output, result, signal);
       if (this.semanticGenerator) data.semanticEnrichment = await enrichPaperSemantics(data.content.blocks,
         data.content.structure, this.semanticGenerator, signal, trace);
       if (document.mediaType === 'application/pdf') data.scholarlyEnrichment = await enrichScholarlyFields(
@@ -445,6 +446,7 @@ export class ResearchDocumentService {
       span.finish();
       return this.repository.documents.get(documentId);
     } catch (error) {
+      retained ||= hasUnprovenResearchProcessExit(error);
       span.fail(error);
       const cancelled = signal.aborted || this.closed;
       if (prepared) this.scientificIndex!.fail(prepared, signal);

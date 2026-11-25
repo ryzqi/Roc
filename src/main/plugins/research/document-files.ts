@@ -34,9 +34,11 @@ export async function documentStorageRoot(path: string | null): Promise<string> 
 
 export type CollectedDocumentContent = {data: StoredDocumentContent; coordinates: ResearchDocumentCoordinateSnapshot | null};
 
-export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>): Promise<CollectedDocumentContent> {
+export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>,
+  signal = new AbortController().signal): Promise<CollectedDocumentContent> {
+  signal.throwIfAborted();
   const parsed = researchParsedDocumentSchema.parse(input);
-  const ovis = parsed.engine === 'ovisocr3-mlx' ? await verifyOvisParsedDocument(output, parsed) : null;
+  const ovis = parsed.engine === 'ovisocr3-mlx' ? await verifyOvisParsedDocument(output, parsed, signal) : null;
   const requiresTables = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 6;
   const requiresEquations = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 7;
   const requiresVisuals = Number(parsed.parserVersion.match(/^roc-research-parser\/(\d+)$/u)?.[1] ?? 0) >= 8;
@@ -64,6 +66,7 @@ export async function collectDocumentContent(root: string, output: string, input
   const idsByPath = new Map<string, string>();
   let size = 0;
   for (const asset of parsed.assets) {
+    signal.throwIfAborted();
     const path = researchRelativePath(asset.path);
     if (idsByPath.has(path) || (asset.page !== null && asset.page > parsed.pageCount)) throw new Error('research_document_asset_invalid');
     const bytes = await readResearchFile(output, path, researchDocumentLimits.maxAssetBytes);
@@ -90,6 +93,7 @@ export async function collectDocumentContent(root: string, output: string, input
   // 工件是发布的一部分：缺件不能被当成一次完整成功（提案 §7/§8）。
   const [, , structured] = await Promise.all([parsed.artifacts.middleJson, parsed.artifacts.markdown, parsed.artifacts.structuredContent].map(path =>
     readResearchFile(output, researchRelativePath(path), maximumArtifactBytes)));
+  signal.throwIfAborted();
   const data = storedDocumentContentSchema.parse({
     outputPath: researchRelativePath(relative(root, output)),
     files,

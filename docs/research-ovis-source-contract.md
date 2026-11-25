@@ -298,3 +298,44 @@ tests/renderer/paper-reader.test.mjs` passed93. The focused Ovis result suite
 passed6, including cancellation after a derived file was written and preserving
 the previous successful parse after a later capture failed. Final `pnpm build`,
 `pnpm check:ipc` and `git diff --check` passed from the repository root.
+
+## Source-to-result transaction and exit ownership
+
+`ovis-document-parser.ts` composes model acquisition, source capture, result
+reconstruction and a final source hash check under one deadline. It releases the
+verified model lease only after the transaction settles. Cancellation and ordinary
+failures remove this transaction's output; directory identity checks prevent
+cleanup from deleting an existing or replaced directory. The document service also
+passes cancellation through result collection and preserves the previous successful
+publication after a later parse fails.
+
+`process-exit-state.ts` follows causes and aggregate errors, including cycles.
+Unconfirmed Worker termination retains both the diagnostic inputs and model lease;
+model deletion or reinstallation remains blocked in the current main process.
+This reservation is currently in memory. Durable recovery after a main-process
+restart must be addressed before production registration. This parser remains
+unregistered while the full P3 quality evaluation is pending.
+
+From the repository root, both focused batches passed22 tests each:
+
+```sh
+node --test tests/unit/research-ovis-document-parser.test.mjs \
+  tests/unit/research-ovis-parsed-document.test.mjs \
+  tests/unit/research-ovis-worker.test.mjs \
+  tests/unit/research-ovis-pdf-artifact.test.mjs
+node --test tests/unit/research-document-process-lifecycle.test.mjs \
+  tests/unit/literature-document-pipeline.test.mjs \
+  tests/unit/research-document-coordinates.test.mjs
+node scripts/research/verify-ovis-document-parser.mjs \
+  --installation /absolute/verified-8bit-installation \
+  --source-relative ori_pdfs/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.pdf \
+  --output /absolute/new-evidence-directory
+pnpm build
+```
+
+The real transaction produced11blocks and2crops, passed collection and Paper IR
+publication/readback, released its model lease and removed its private Worker
+directories. Evidence is in `.artifacts/research-toolchain-p3/document-parser/`.
+Observed generation was23.820s, supervised admission hold32.845s and sampled peak
+RSS1,580,662,784B under mixed host load. These observations do not qualify isolated
+performance or the full quality gate. Build and both focused test batches passed.
