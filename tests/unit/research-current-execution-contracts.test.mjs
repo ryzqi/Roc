@@ -14,7 +14,7 @@ after(() => api.dispose());
 const fields = { projectId: 'project', requestId: 'contract', label: 'Current execution',
   sourcePath: 'analysis.mts', inputPaths: [], parameters: {}, timeoutMs: 1000, network: 'disabled' };
 const typescript = { ...fields, engine: 'typescript', runtime: { kind: 'bundled-node' }, sourceVersion: 1 };
-const native = (engine) => ({ ...fields, engine, arguments: [], sourcePath: engine === 'r' ? 'analysis.r' : 'analysis.jl',
+const removedEngine = (engine) => ({ ...fields, engine, arguments: [], sourcePath: engine === 'r' ? 'analysis.r' : 'analysis.jl',
   runtime: engine === 'r' ? { kind: 'renv', rootPath: '/runtime/r', libraryPath: 'renv/library' }
     : { kind: 'julia', rootPath: '/runtime/julia', depotPath: '/runtime/depot' } });
 const { sourcePath: _typescriptPath, ...pythonFields } = fields;
@@ -23,7 +23,7 @@ const python = { ...pythonFields, engine: 'python', source: { kind: 'file', path
   runtime: { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) } };
 
 test('current experiment creation and stored execution use identical strict request limits', () => {
-  for (const request of [typescript, native('r'), native('julia'), python]) {
+  for (const request of [typescript, python]) {
     assert.deepEqual(experiments.researchExperimentStartSchema.parse(request), request);
     assert.deepEqual(experiments.researchExperimentExecutionSchema.shape.request.parse(request), request);
     for (const changed of [
@@ -46,6 +46,40 @@ test('current experiment creation and stored execution use identical strict requ
       ...fields, engine: 'python', sourcePath: 'analysis.py', runtime: { kind }, arguments: []
     }).success, false);
   }
+});
+
+test('R and Julia are rejected by every start, runtime, environment and stored execution boundary', () => {
+  for (const engine of ['r', 'julia']) {
+    const request = removedEngine(engine);
+    const { projectId, ...owned } = request;
+    assert.equal(experiments.researchOwnedExperimentStartSchema.safeParse(owned).success, false);
+    assert.equal(experiments.researchExperimentStartRequestSchema.safeParse(request).success, false);
+    assert.equal(experiments.researchExperimentStartSchema.safeParse(request).success, false);
+    assert.equal(experiments.researchExperimentRuntimeSchema.safeParse(request.runtime).success, false);
+    assert.equal(experiments.researchExperimentEnvironmentRequestSchema.safeParse({ projectId, runtime: request.runtime }).success, false);
+    assert.equal(experiments.researchExperimentExecutionSchema.shape.request.safeParse(request).success, false);
+  }
+  const packageSchema = experiments.researchExperimentEnvironmentSchema.shape.packages;
+  assert.equal(packageSchema.safeParse([{ name: 'unversioned', version: null }]).success, false);
+  assert.deepEqual(packageSchema.parse([{ name: 'numpy', version: '2.3.0' }]), [{ name: 'numpy', version: '2.3.0' }]);
+});
+
+test('removed R and Julia capability requests dispatch no environment inspection or experiment', async () => {
+  const registry = new api.CapabilityRegistry();
+  for (const descriptor of api.researchExperimentCapabilities) registry.declare('research', descriptor);
+  let dispatches = 0;
+  api.registerResearchExperimentCapabilities({ pluginId: 'research', capabilities: registry }, {}, {
+    async inspect() { dispatches++; throw new Error('unexpected_inspection'); },
+    async start() { dispatches++; throw new Error('unexpected_start'); }
+  });
+  for (const engine of ['r', 'julia']) {
+    const request = removedEngine(engine);
+    await assert.rejects(registry.invoke('research.experiment.start', request));
+    await assert.rejects(registry.invoke('research.experiment.environment', {
+      projectId: request.projectId, runtime: request.runtime
+    }));
+  }
+  assert.equal(dispatches, 0);
 });
 
 test('Python inspection and starts require exact path-free selections, version, seed and preview identity', () => {
@@ -92,7 +126,8 @@ test('repository refuses obsolete snapshots without rewriting or deleting retain
     assert.deepEqual(f.repository.experiments.get(f.project.id, run.id), run);
     for (const request of [
       { ...fields, projectId: f.project.id, engine: 'python', runtime: { kind: 'uv' }, sourcePath: 'analysis.py', arguments: [] },
-      { ...native('r'), projectId: f.project.id, network: 'enabled' }
+      { ...removedEngine('r'), projectId: f.project.id },
+      { ...removedEngine('julia'), projectId: f.project.id }
     ]) {
       const stored = JSON.stringify({ ...run, request });
       f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(stored, run.id);

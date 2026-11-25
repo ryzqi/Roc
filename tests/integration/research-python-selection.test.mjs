@@ -128,7 +128,6 @@ test('unsupported direct dependency explains how to choose a compatible environm
 test('existing environment API rechecks selected Python identity and refuses incomplete computation contracts', async () => {
   const f = await fixture({ scenario: 'environment-api' });
   const environments = new api.ResearchExperimentEnvironmentService({
-    nativeRuntime: async () => assert.fail('Python preview must not resolve native tools'),
     typescriptRuntime: async () => assert.fail('Python preview must not resolve TypeScript')
   }, f.service);
   const experiments = new api.ResearchExperimentService(f.repository, environments, f.path,
@@ -189,7 +188,6 @@ test('Python preparation rejects foreign or absent project admission before disp
     }
   };
   const environments = new api.ResearchExperimentEnvironmentService({
-    nativeRuntime: async () => assert.fail('Python must not use native tools'),
     typescriptRuntime: async () => assert.fail('Python must not use TypeScript')
   }, resolver);
   try {
@@ -197,29 +195,29 @@ test('Python preparation rejects foreign or absent project admission before disp
     const reference = f.reference(selected);
     const runtime = { kind: 'python', selectionId: reference.selectionId, expectedHash: reference.expectedHash };
     const signal = new AbortController().signal;
-    await assert.rejects(environments.inspect(f.workspace, runtime, f.jobDir, signal,
+    await assert.rejects(environments.inspect(runtime, f.jobDir, signal,
       { projectId: null, priority: 'background' }, () => undefined), /research_python_selection_project_required/u);
     assert.equal(dispatched.length, 0);
     await assert.rejects(f.service.resolve(reference, f.jobDir, signal,
       { projectId: 'foreign', priority: 'user' }, () => undefined), /research_python_selection_admission_mismatch/u);
     assert.equal(f.counts.dispatches, 1);
     const probes = [], admission = { projectId: f.project.id, priority: 'background' };
-    const prepared = await environments.inspect(f.workspace, runtime, f.jobDir, signal, admission, probe => probes.push(probe));
+    const prepared = await environments.inspect(runtime, f.jobDir, signal, admission, probe => probes.push(probe));
     assert.deepEqual(dispatched, [admission]);
     assert.equal(probes.length, 1); assert.equal(probes[0].exitCode, 0);
     assert.deepEqual(receipts.at(-1).admission, { ...admission, resourceClass: 'utility' });
     assert.deepEqual(probes[0].admission, receipts.at(-1).result.admission);
     assert.equal(prepared.python.metadataHash, selected.snapshot.metadataHash);
     api.assertPythonCodeReceipt(prepared.python.codeReceipt, prepared.snapshot.metadataHash);
-    assert.equal(prepared.nativeCode, null); assert.equal(prepared.typescriptRuntime, null);
+    assert.equal(prepared.typescriptRuntime, null);
     assert.equal(prepared.readablePaths.includes(f.workspace), false);
     assert.deepEqual(Object.keys(prepared.environment).sort(), ['LANG', 'PATH', 'TMPDIR']);
     const foreignPath = join(f.path, 'foreign'); await mkdir(foreignPath);
     const foreign = f.repository.createProject({ title: 'Foreign', description: '', workspacePath: foreignPath });
-    await assert.rejects(environments.inspect(foreignPath, runtime, f.jobDir, signal,
+    await assert.rejects(environments.inspect(runtime, f.jobDir, signal,
       { projectId: foreign.id, priority: 'user' }, () => undefined), /research_python_selection_project_mismatch/u);
     f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
-    await assert.rejects(environments.inspect(f.workspace, runtime, f.jobDir, signal, admission, () => undefined),
+    await assert.rejects(environments.inspect(runtime, f.jobDir, signal, admission, () => undefined),
       /research_project_archived/u);
     assert.deepEqual(f.counts, { picks: 1, dispatches: 2 });
   } finally { await f.cleanup(); }

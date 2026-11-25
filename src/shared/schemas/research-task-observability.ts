@@ -20,9 +20,9 @@ export const taskResourceDiagnosticsSchema = z.strictObject({
   reportSha256: z.string().regex(/^[a-f0-9]{64}$/u), outcome: z.enum(['not_dispatched', 'returned', 'rejected']), recordedAt: z.iso.datetime(),
   usage: researchProcessResourceUsageSchema.nullable(),
   admission: z.strictObject({waitMs: count, holdMs: count}).nullable(),
-  probes: z.strictObject({phase: z.enum(['preparation','verification']), kind: z.enum(['runtime_version','environment']),
+  probes: z.strictObject({phase: z.enum(['preparation','verification']), kind: z.literal('environment'),
     outcome: z.enum(['returned','rejected']), usage: researchProcessResourceUsageSchema.nullable(),
-    admission: z.strictObject({waitMs: count, holdMs: count}).nullable()}).array().max(4)
+    admission: z.strictObject({waitMs: count, holdMs: count}).nullable()}).array().max(2)
 });
 export const taskExecutionDiagnosticsRequestSchema = researchTaskRequestSchema.extend({
   executionKind: researchExecutionKindSchema, executionId: id,

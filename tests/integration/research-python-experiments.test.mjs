@@ -739,7 +739,6 @@ async function fixture(code = source, options = {}) {
     return result;
   });
   const environments = new api.ResearchExperimentEnvironmentService({
-    nativeRuntime: async () => assert.fail('Python must not resolve native tools'),
     typescriptRuntime: async () => assert.fail('Python must not resolve TypeScript')
   }, pythonService);
   const service = new api.ResearchExperimentService(f.repository, environments, path, { error: (...args) => failures.push(args) }, async request => {
@@ -1103,7 +1102,6 @@ test('Python disk recovery retains selected environments and historical audits, 
     restartedPython = new api.ResearchPythonEnvironmentService(repository,
       async () => assert.fail('Recovery must never open the native picker'), actualRun);
     const environments = new api.ResearchExperimentEnvironmentService({
-      nativeRuntime: async () => assert.fail('Recovery must not resolve native tools'),
       typescriptRuntime: async () => assert.fail('Recovery must not resolve TypeScript')
     }, restartedPython);
     restartedService = new api.ResearchExperimentService(repository, environments, f.path,

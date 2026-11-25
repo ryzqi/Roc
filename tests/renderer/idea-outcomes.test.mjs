@@ -58,7 +58,7 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
   const selection = await api.withResearchHumanContext({capability: 'research.pythonEnvironments.select', projectId: f.project.id, windowId: 72},
     () => pythonService.select({projectId: f.project.id, requestId: 'environment'}));
   service = new api.ResearchExperimentService(f.repository, new api.ResearchExperimentEnvironmentService({
-    nativeRuntime: async () => assert.fail('no native tools'), typescriptRuntime: async () => assert.fail('no TypeScript')
+    typescriptRuntime: async () => assert.fail('no TypeScript')
   }, pythonService), root, {error: (...args) => errors.push(JSON.stringify(args))});
   const runtime = {kind: 'python', selectionId: selection.snapshot.id, expectedHash: selection.snapshotHash};
   const environment = await service.inspect(f.project.id, runtime);

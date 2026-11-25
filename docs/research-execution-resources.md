@@ -18,7 +18,7 @@ resourceLimits和writeLimits必填，每个可写目录恰有一条限额；缺�
 
 | 可写目录 | 单文件 | 总量 | 文件数 | 目录项 |
 | --- | ---: | ---: | ---: | ---: |
-| 实验输出/scratch、R桥与原生探针 | 64 MiB | 128 MiB | 1000 | 2000 |
+| 实验输出/scratch与Python探针 | 64 MiB | 128 MiB | 1000 | 2000 |
 | Vale、Tectonic、Typst作业 | 64 MiB | 512 MiB | 10000 | 20000 |
 | 共享 worker作业 | 128 MiB | 896 MiB | 6000 | 12000 |
 
@@ -38,13 +38,9 @@ JS仍负责取消、超时、采样与限额，归还槽前确认计算/监督�
 
 ## 原生环境身份
 
-R/Julia环境检查使用合同4，代码清单合同1：冻结声明运行时/库/depot代码树的完整文件字节、成员、权限和链接拓扑，并在探针前后各核对一次。元数据不变但包代码变化仍改变环境hash；观测到漂移返回 `research_experiment_native_code_changed`。
+Python 环境检查使用合同1及代码清单合同1：冻结声明解释器和包代码树的完整文件字节、成员、权限及链接拓扑，并在探针前后各核对一次。元数据不变但包代码变化仍改变环境hash；观测到漂移返回 `research_python_native_code_changed`。解释器、前缀、完整包集合和锁文件须匹配已绑定的项目环境，见[Python环境](research-python-environment.md)。
 
-R项目读取只授予renv.lock及可选renv/settings.json，库与已核验renv缓存包根另行声明。Julia先在无项目读取范围下探测真实版本，再解析该版本选中的Project/Manifest、workspace、本地相对依赖、preferences/artifacts控制文件。仅控制文件和预发现本地包元数据逐文件可读，项目/包目录本身不扩大权限。
-
-Julia控制文件最多1000，含本地元数据最多10000；单文件16MiB、总64MiB。重复成员去重，循环、越界、链接、缺失及版本不符失败。报告必须精确返回冻结路径/hash与真实版本，结束后重验原件。
-
-代码扫描流式读取，单文件512MiB、总4GiB、100000项、清单64MiB。核对描述符和路径的inode/大小/权限/纳秒时间，拒绝特殊文件与未声明链接目标。两次扫描是观测，不证明期间从未发生瞬态修改，也不等于全系统共享库快照。Python使用自己的启动/环境身份格式，见[Python环境](research-python-environment.md)。
+代码扫描流式读取，单文件512MiB、总4GiB、100000项、清单64MiB。核对描述符和路径的inode/大小/权限/纳秒时间，拒绝特殊文件与未声明链接目标。两次扫描是观测，不证明期间从未发生瞬态修改，也不等于全系统共享库快照。
 
 原生代码与视觉模型的文件扫描在异步打开 / 元数据读取之后、创建读取流之前再次核对取消信号，避免已取消信号令流在迭代器拒绝后另发未处理错误。读取中取消仍由流传播，普通 I/O 错误保持失败；所有路径均关闭已打开的文件描述符。
 
@@ -53,10 +49,10 @@ Julia控制文件最多1000，含本地元数据最多10000；单文件16MiB、�
 | 文件 | 当前合同与含义 |
 | --- | --- |
 | log/resources.json | schema3/backend2：运行/项目/输入/环境、限额、实际退出、CPU/RSS、准入、探针序列、hostCrashCleanup与processGuardHash |
-| log/environment-code.json | 原生环境完整代码清单及原始metadata校验材料；R/Julia回执版本1、环境合同4，Python按专用格式 |
+| log/environment-code.json | Python环境完整代码清单及原始metadata校验材料；回执、环境和代码清单均为合同1 |
 | log/python-startup.json | Python真实启动路径、旗标、模块、版本和seed，见Python专题 |
 
-资源 outcome为returned/rejected/not_dispatched；准备失败不补计算观测，返回0后环境复核失败仍保存真实计算事实并将实验标为失败。probes分别保存preparation/verification的请求hash、命令、预算、状态及观测；R/Python各一次environment，Julia另含runtime_version。不存原始环境变量，探针消耗不混入计算。
+资源 outcome为returned/rejected/not_dispatched；准备失败不补计算观测，返回0后环境复核失败仍保存真实计算事实并将实验标为失败。probes分别保存preparation/verification的请求hash、命令、预算、状态及观测；Python在准备和复核阶段各保存一次environment，TypeScript无环境探针。不存原始环境变量，探针消耗不混入计算。
 
 回执只写一次、只读权限，发布校验字节、身份、限额、成功退出和完整探针序列；清单自身重新hash不能掩盖原环境身份。Node不生成原生代码回执。审计文件不进入科学知识索引；导出日志通过公开投影交付，原字节与投影身份分别保留。
 
@@ -64,4 +60,4 @@ Julia控制文件最多1000，含本地元数据最多10000；单文件16MiB、�
 
 资源边界的专项入口是 `pnpm test:research-resources`，需要 macOS Seatbelt 与原生监督资源。测试使用有界 C 探针和自建临时目录，检查 CPU/RSS、目录、日志、取消/超时、离组拒绝、网络/GPU/路径及宿主 SIGKILL 清理；完整开发要求见[开发指南](development.md)。
 
-原生边界探针不证明任意 R/Julia 环境、科学正确性或硬资源隔离。正常关闭和磁盘快照恢复不能替代真实宿主崩溃清理检查。
+原生边界探针不证明任意 Python 环境、科学正确性或硬资源隔离。正常关闭和磁盘快照恢复不能替代真实宿主崩溃清理检查。

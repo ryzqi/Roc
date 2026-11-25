@@ -374,7 +374,7 @@ test('DataCite observations survive native SQLite reopen with exact request, met
 test('Zotero captured CSL imports through the actual native bibliography worker with durable object provenance', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-zotero-native-')));
   const f = createResearchFixture(api, 'figure', root);
-  const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const tools = new api.ResearchToolchain(await realpath(process.env.ROC_TEST_RESEARCH_TOOLCHAIN ?? '.runtime/research-toolchain/darwin-arm64'));
   const library = new api.ResearchLibraryService(f.repository.library, tools, root);
   const key = 'ITEM2345';
   const csl = [{id: key, type: 'article-journal', title: 'Synthetic native Zotero paper', DOI: '10.1234/NATIVE-ZOTERO',
@@ -667,6 +667,46 @@ test('explicit resource association binds a real TypeScript execution and surviv
   }
 });
 
+test('actual TypeScript cancellation stops its process and retains an unpublished terminal resource receipt', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-typescript-cancel-')));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  await writeFile(join(workspace, 'cancel.mts'), `export async function run(context) {
+    await context.files.writeText('started.txt', String(process.pid));
+    await new Promise(resolve => setTimeout(resolve, 60000));
+  }`);
+  const f = createResearchFixture(api, 'experiment', workspace), errors = [];
+  const description = await runtimeDescription();
+  const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
+    {resolve: async () => assert.fail('TypeScript fixture must not resolve Python')});
+  const experiments = new api.ResearchExperimentService(f.repository, environments, root, {error: (...args) => errors.push(args)});
+  try {
+    const started = await experiments.start({projectId: f.project.id, ownerRunId: null, requestId: 'typescript-cancel',
+      label: 'Actual TypeScript cancellation', engine: 'typescript', runtime: {kind: 'bundled-node'}, sourceVersion: 1,
+      sourcePath: 'cancel.mts', inputPaths: [], parameters: {}, timeoutMs: 15000, network: 'disabled'});
+    const marker = join(f.repository.experiments.root(f.project.id, started.id), 'output/started.txt');
+    await until(() => existsSync(marker));
+    const pid = Number(await readFile(marker, 'utf8'));
+    assert.ok(Number.isSafeInteger(pid) && pid > 0);
+    process.kill(pid, 0);
+    const cancelled = await experiments.cancel(f.project.id, started.id);
+    assert.equal(cancelled.status, 'cancelled');
+    assert.equal(cancelled.error, 'research_experiment_cancelled');
+    assert.equal(cancelled.artifactId, null);
+    assert.throws(() => process.kill(pid, 0), {code: 'ESRCH'});
+    const report = JSON.parse((await experiments.read({projectId: f.project.id, runId: started.id,
+      area: 'log', path: 'resources.json'})).content);
+    assert.equal(report.engine, 'typescript');
+    assert.equal(report.outcome, 'rejected');
+    assert.equal(report.error, 'research_process_cancelled');
+    assert.deepEqual(report.probes, []);
+    await assert.rejects(experiments.publish(f.project.id, started.id), /research_experiment_completed_required/u);
+    assert.deepEqual(errors, []);
+  } finally {
+    await experiments.shutdown(); f.close(); await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('native experiment rerun updates a rendered figure, reviewed manuscript and local delivery from the same evidence', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-result-delivery-')));
   const workspace = join(root, 'workspace');
@@ -676,7 +716,7 @@ test('native experiment rerun updates a rendered figure, reviewed manuscript and
   const projectId = f.project.id;
   const human = (capability, action) => api.withResearchHumanContext({capability, projectId, windowId: 41}, action);
   const description = await runtimeDescription();
-  const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const tools = new api.ResearchToolchain(await realpath(process.env.ROC_TEST_RESEARCH_TOOLCHAIN ?? '.runtime/research-toolchain/darwin-arm64'));
   const environment = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
     {resolve: async () => assert.fail('The TypeScript run must use the bundled runtime.')});
   const errors = [], logger = {error: (...args) => errors.push(args), warn: (...args) => errors.push(args)};
@@ -1026,7 +1066,7 @@ export async function run(context) {
     }
     return reports;
   };
-  const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const tools = new api.ResearchToolchain(await realpath(process.env.ROC_TEST_RESEARCH_TOOLCHAIN ?? '.runtime/research-toolchain/darwin-arm64'));
   const secretPath = join(root, 'synthetic-secret.txt');
   const secret = 'ROC_SYNTHETIC_SECRET_MUST_STAY_PRIVATE';
   if (fault === 'hostile_pdf') {

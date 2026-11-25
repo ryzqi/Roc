@@ -13,7 +13,7 @@
 | [终端会话](terminal-sessions.md) | PTY 所有权、显示分离、输出回放与窗口清理 |
 | [科研工件检查器](research-artifact-inspector.md) | 工件快照、生产文件与人工审核版本 |
 | [Idea Canvas、方法计划与结果评估](research-ideas.md) | 构思晋升、方案批准与结果裁决 |
-| [科研实验运行](research-experiments.md) | TypeScript、R、Julia、Python 实验执行 |
+| [科研实验运行](research-experiments.md) | TypeScript、Python 实验执行 |
 | [Python 环境自动准备、预检与执行](research-python-environment.md) | CPython 自动发现、冻结检查与执行边界 |
 | [Notebook 导入与执行合同](research-notebooks.md) | Notebook 导入、预览与 Python 子集执行 |
 | [实验指标、审核与比较](research-experiment-results.md) | 结构化结果、指标 Evidence 与可比性 |

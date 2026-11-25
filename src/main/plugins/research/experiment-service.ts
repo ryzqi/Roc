@@ -1,19 +1,16 @@
 import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, sep } from 'node:path';
+import { extname, join, sep } from 'node:path';
 import { release } from 'node:os';
 import { z } from 'zod';
 import { notebookExperimentPaths, researchPythonSourcePath, researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
   type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
-import { assertNativeCodeReceipt, nativeCodeReportSchema } from './experiment-native-code-schema';
 import { assertPythonCodeReceipt, pythonCodeReportSchema } from './experiment-python-code-schema';
 import { runPythonExperimentProcess, pythonExecutionReportSchema, pythonExecutionStartupSchema,
   pythonExperimentBootstrapHash, pythonExperimentToolchainHash, type PythonExecutionStartup } from './experiment-python-process';
 import { collectExperimentFiles, experimentCsvRowLimit, experimentFileLimit, experimentInputTotalLimit, experimentOutputTotalLimit,
   experimentRunnerRequestLimit, experimentFileCountLimit, experimentDirectoryEntryLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
-import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
-import { runRExperimentProcess } from './experiment-native-process';
 import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { researchProcessGuardHash } from './process-guard';
@@ -68,10 +65,10 @@ export class ResearchExperimentService {
 
   async inspect(projectId: string, runtime: ResearchExperimentRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
     return await this.session.run(async (signal) => {
-      const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
+      await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);
       const job = await mkdtemp(join(storage, '.environment-'));
-      try { return (await this.environments.inspect(workspace, runtime, job, signal, { projectId, priority: 'user' }, () => {})).snapshot; }
+      try { return (await this.environments.inspect(runtime, job, signal, { projectId, priority: 'user' }, () => {})).snapshot; }
       finally { await rm(job, { recursive: true, force: true }); }
     });
   }
@@ -256,18 +253,11 @@ export class ResearchExperimentService {
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
+      prepared = await this.environments.inspect(request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'preparation' }));
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal, this.notebookInputs(request));
       files = snapshot.files;
-      if (request.engine === 'r' || request.engine === 'julia') {
-        const native = assertNativeCodeReceipt(prepared.nativeCode, prepared.snapshot.metadataHash);
-        const report = JSON.stringify(nativeCodeReportSchema.parse({ schemaVersion: 1, runId: initial.id, projectId: initial.projectId,
-          inputHash: snapshot.hash, environmentHash: prepared.snapshot.hash, native }));
-        if (Buffer.byteLength(report) > experimentFileLimit) throw new Error('research_experiment_native_code_report_limit');
-        await writeFile(join(root, 'log/environment-code.json'), report, { flag: 'wx', mode: 0o400 });
-      }
       if (request.engine === 'python') {
         if (prepared.python === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
         const python = assertPythonCodeReceipt(prepared.python.codeReceipt, prepared.snapshot.metadataHash);
@@ -303,7 +293,7 @@ export class ResearchExperimentService {
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
       if (request.engine === 'python') await this.verifyWorkspaceInputs(workspace, { ...initial, files: snapshot.files }, signal);
-      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
+      const current = await this.environments.inspect(request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'verification' }));
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
@@ -451,20 +441,7 @@ export class ResearchExperimentService {
         scratchDir: scratch, policy: { ...policy, writeLimits },
         admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' }, signal }, this.run);
     }
-    const executable = prepared.snapshot.executable;
-    const environment = { ...prepared.environment, PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
-      ROC_PARAMETERS_JSON: JSON.stringify(request.parameters) };
-    const source = join(input, request.sourcePath);
-    const command = request.engine === 'r' ? rExperimentCommand(prepared.snapshot.basePrefix, executable, ['--vanilla', '--slave', '-f', source, '--args', ...request.arguments])
-      : { command: executable, args: [...juliaExperimentFlags, `--project=${input}`, '--', source, ...request.arguments] };
-    const processRequest: ResearchProcessRequest = { ...command,
-      additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
-      writablePaths: [output, scratch], environment,
-      writeLimits,
-      ...policy,
-      admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
-      signal };
-    return { result: request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest), startup: null };
+    throw new ResearchProcessError('research_experiment_engine_unsupported');
   }
 
   private async indexDocuments(run: ResearchExperimentExecution, files: ResearchExperimentFile[]) {
@@ -505,16 +482,9 @@ export class ResearchExperimentService {
       || JSON.stringify(report.policy) !== JSON.stringify(computationPolicy(researchExperimentStartSchema.parse(run.request)))) {
       throw new Error('research_experiment_resource_report_changed');
     }
-    const expected = run.request.engine === 'typescript' ? 0 : run.request.engine === 'julia' ? 4 : 2;
+    const expected = run.request.engine === 'typescript' ? 0 : 2;
     if (report.probes.length !== expected || report.probes.some(probe => probe.outcome !== 'returned' || probe.exitCode !== 0)) {
       throw new Error('research_experiment_resource_report_changed');
-    }
-    if (run.request.engine === 'r' || run.request.engine === 'julia') {
-      const { bytes } = await this.source({ projectId: run.projectId, runId: run.id, area: 'log', path: 'environment-code.json' });
-      const code = nativeCodeReportSchema.parse(JSON.parse(bytes.toString('utf8')) as unknown);
-      if (run.environment === null || code.runId !== run.id || code.projectId !== run.projectId
-        || code.inputHash !== run.inputHash || code.environmentHash !== run.environment.hash) throw new Error('research_experiment_native_code_report_changed');
-      assertNativeCodeReceipt(code.native, run.environment.metadataHash);
     }
     if (run.request.engine === 'python') {
       if (run.environment === null) throw new Error('research_experiment_python_code_report_changed');

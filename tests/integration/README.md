@@ -4,6 +4,8 @@ Run `pnpm test:research-p0` from the repository root on macOS arm64 after depend
 installation and preparation of the locked runtime at
 `.runtime/research-toolchain/darwin-arm64`. Preparation and manifest verification are
 documented in [the runtime guide](../../resources/research-runtime/README.md).
+Set `ROC_TEST_RESEARCH_TOOLCHAIN` to a freshly prepared runtime directory when testing
+changed toolchain inputs; the suite leaves the default runtime in place.
 The suite requires the real runtime; it does not skip missing tools or replace compiled
 PDFs with fixture bytes. The command builds fresh production workers and launches the
 test runner with Electron's Node runtime. Fixtures copy those built workers into an

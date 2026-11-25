@@ -51,7 +51,6 @@ export {ResearchExperimentResultService} from '../../../src/main/plugins/researc
 export {registerResearchExperimentResultCapabilities} from '../../../src/main/plugins/research/experiment-result-capabilities';
 export * from '../../../src/shared/schemas/research-experiment-results';
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
-export { inspectNativeExperimentEnvironment } from '../../../src/main/plugins/research/experiment-native-environment';
 export { inspectPythonExperimentEnvironment, pythonEnvironmentProbe, pythonExperimentFlags } from '../../../src/main/plugins/research/experiment-python-probe';
 export { runPythonExperimentProcess, pythonExperimentBootstrap, pythonExperimentBootstrapHash, pythonExecutionStartupSchema } from '../../../src/main/plugins/research/experiment-python-process';
 export { pythonExecutionReportSchema } from '../../../src/main/plugins/research/experiment-python-process';
@@ -63,10 +62,9 @@ export { ResearchPythonEnvironmentService } from '../../../src/main/plugins/rese
 export { registerResearchPythonEnvironmentCapabilities } from '../../../src/main/plugins/research/python-environment-capabilities';
 export { registerResearchNotebookCapabilities } from '../../../src/main/plugins/research/notebook-capabilities';
 export { runEnvironmentProbe } from '../../../src/main/plugins/research/experiment-probe-resources';
-export { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion } from '../../../src/main/plugins/research/experiment-julia-controls';
 export { captureNativeCode } from '../../../src/main/plugins/research/experiment-native-code';
 export { ResearchExportFiles } from '../../../src/main/plugins/research/export-files';
-export { nativeCodeLimits, nativeCodeReceiptSchema, nativeCodeReportSchema, assertNativeCodeReceipt } from '../../../src/main/plugins/research/experiment-native-code-schema';
+export { nativeCodeLimits, nativeCodeSnapshotSchema } from '../../../src/main/plugins/research/experiment-native-code-schema';
 export { runResearchProcess, researchSandboxProfile, ResearchProcessError } from '../../../src/main/plugins/research/process-runner';
 export { researchExperimentResourceReportSchema, researchProcessResourceUsageSchema } from '../../../src/shared/schemas/research-process-resources';
 export { ResearchWorkspaceFileService } from '../../../src/main/plugins/research/workspace-files';

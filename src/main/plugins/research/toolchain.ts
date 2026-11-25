@@ -97,11 +97,6 @@ export class ResearchToolchain {
     return researchContentHash(JSON.stringify(manifest));
   }
 
-  async nativeRuntime(jobDir: string): Promise<{ root: string; hash: string; environment: NodeJS.ProcessEnv }> {
-    const { root, manifest } = await this.resolve();
-    return { root, hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.baseEnvironment(root, jobDir, true) };
-  }
-
   async typescriptRuntime(jobDir: string): Promise<ResearchTypeScriptRuntime> {
     const { root } = await this.resolve();
     const runnerPath = await researchPath(root, 'typescript-experiment-runner.mts');

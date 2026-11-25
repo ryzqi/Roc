@@ -51,7 +51,7 @@ Electron smoke 用隔离 `ROC_DATA_ROOT` 启动，夹具入口是 [tests/smoke/l
 | 范围 | 额外准备与证据 |
 | --- | --- |
 | 真实模型及完整科研质量 | 冻结资料、问题、模型、工具、预算和评分合同，独立人工参考与原始运行证据；要求见[评测指南](../evaluation/README.md) |
-| R / Julia / Python | 对应真实解释器、环境与锁文件；受控探针只证明其覆盖的执行边界 |
+| Python | 对应真实解释器、环境与锁文件；受控探针只证明其覆盖的执行边界 |
 | Zotero | 真实客户端、原生文件选择和附件互操作 |
 | Provider / Hugging Face / OpenReview | 目标服务与具体资源的访问条件、真实请求/响应；服务合同 fixture 不证明公网可用性 |
 | Zenodo | 官方 sandbox 的隔离账号及目标授权；公开发布需要具体包和远端目标的独立批准 |

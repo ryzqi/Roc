@@ -24,7 +24,7 @@ function request() {
 test('probe records original nonzero return, exact request policy and unknown observations without declaring inspection success', async () => {
   const input = request(), receipts = [];
   const actual = { exitCode: 9, stdout: 'probe refused', stderr: '', resourceUsage: usage, admission };
-  const result = await api.runEnvironmentProbe('runtime_version', input, async dispatch => {
+  const result = await api.runEnvironmentProbe('environment', input, async dispatch => {
     assert.equal(dispatch, input); return actual;
   }, receipt => receipts.push(receipt));
   assert.equal(result, actual); assert.equal(receipts.length, 1);

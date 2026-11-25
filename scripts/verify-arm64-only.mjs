@@ -13,8 +13,7 @@
  *   A. **构建入口拒绝非 arm64。** 不只是「没有配置 x64」——`package:mac` / `package:dir` /
  *      before-pack hook / 工具链 prepare 必须在**非 arm64 请求**上明确报错。被拒绝是断言，
  *      不是跳过。
- *   B. **锁文件与清单只有 arm64。** `tools.lock.json`、`ripgrep.lock.json`、
- *      `r-process.lock.json` 里的架构键集必须恰为 `['arm64']`；工具链 manifest schema 只接受
+ *   B. **锁文件与清单只有 arm64。** `tools.lock.json`、`ripgrep.lock.json` 里的架构键集必须恰为 `['arm64']`；工具链 manifest schema 只接受
  *      arm64（否则一个 x64 工具链仍能被接受并跑起来）。
  *   C. **打包配置不筛 x64 预编译产物、也不合成 universal。** `electron-builder.yml` 里
  *      `sqlite-vec-darwin-x64`、`darwin-!(${arch})` 这类分支要么不存在，要么按 arch 收窄。
@@ -126,15 +125,14 @@ assertCheck(
 
 for (const [path, label] of [
   ['resources/research-runtime/tools.lock.json', 'tools.lock.json'],
-  ['resources/ripgrep-binaries/ripgrep.lock.json', 'ripgrep.lock.json'],
-  ['resources/research-runtime/r-process.lock.json', 'r-process.lock.json']
+  ['resources/ripgrep-binaries/ripgrep.lock.json', 'ripgrep.lock.json']
 ]) {
   if (!existsSync(resolve(path))) {
     assertCheck('B 锁文件', `${label} 存在`, false, `missing ${path}`);
     continue;
   }
   const lock = readJson(path);
-  const arches = label === 'r-process.lock.json' ? lock.architectures : Object.keys(lock.architectures ?? {});
+  const arches = Object.keys(lock.architectures ?? {});
   assertCheck(
     'B 锁文件',
     `${label} 的架构键集恰为 ['arm64']`,
@@ -156,22 +154,6 @@ assertCheck(
   'manifest 校验与 lockedToolVersions 都按 arm64 取值',
   !/process\.arch/.test(toolchainSource.split('\n').filter((line) => line.includes('lockedToolVersions') || line.includes('manifest.architecture')).join('\n')),
   'checks 不再读 process.arch'
-);
-
-// r-process 原生助手：只构建 arm64 slice，且运行时只接受 arm64。
-const rProcessBuild = readFileSync(resolve('scripts/research/build-r-process.ts'), 'utf8');
-assertCheck(
-  'B 原生助手',
-  'r-process 只构建 arm64 slice（不再 lipo 合成双架构）',
-  !/x86_64/.test(rProcessBuild) && !/'x64'/.test(rProcessBuild),
-  /x86_64/.test(rProcessBuild) ? 'still compiles x86_64 slice' : 'arm64 only'
-);
-const rProcessRuntime = readFileSync(resolve('src/main/plugins/research/experiment-native-process.ts'), 'utf8');
-assertCheck(
-  'B 原生助手',
-  'r-process 运行时只接受 arm64',
-  /process\.arch !== 'arm64'/.test(rProcessRuntime) && !/'x64'/.test(rProcessRuntime),
-  /'x64'/.test(rProcessRuntime) ? 'runtime still admits x64' : 'arm64 only'
 );
 
 // ── C. 打包配置 ────────────────────────────────────────────────────────────────

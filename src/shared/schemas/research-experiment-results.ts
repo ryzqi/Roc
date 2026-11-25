@@ -47,7 +47,7 @@ export const researchExperimentResultSnapshotSchema=z.strictObject({
   schemaVersion:z.literal(1),id,request:researchExperimentResultReviewSchema,actor:researchRelationReviewerSchema,recordedAt:text,
   result:researchExperimentResultFileSchema,
   execution:z.strictObject({
-    runId:id,inputHash:digest,engine:z.enum(['typescript','python','r','julia']),environmentHash:digest,
+    runId:id,inputHash:digest,engine:z.enum(['typescript','python']),environmentHash:digest,
     source:researchExperimentFileSchema,output:researchExperimentFileSchema,
     inputs:z.array(researchExperimentFileSchema).max(500),
     parameters:z.record(z.string(),z.string()),arguments:z.array(z.string()).max(100),seed:z.number().int().nonnegative().nullable()

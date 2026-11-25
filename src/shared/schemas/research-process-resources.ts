@@ -21,7 +21,7 @@ const fileLimits = z.object({
   maxFiles: z.number().int().positive(), maxEntries: z.number().int().positive()
 }).strict();
 export const researchEnvironmentProbeResourceSchema = z.object({
-  kind: z.enum(['runtime_version', 'environment']), requestHash: digest,
+  kind: z.literal('environment'), requestHash: digest,
   command: z.string().min(1),
   policy: z.object({
     timeoutMs: z.number().int().positive(), maxOutputBytes: z.number().int().positive(), resourceLimits,
@@ -40,7 +40,7 @@ export const researchEnvironmentProbeResourceSchema = z.object({
 
 export const researchExperimentResourceReportSchema = z.object({
   schemaVersion: z.literal(3),
-  runId: z.string().min(1), projectId: z.string().min(1), engine: z.enum(['typescript', 'r', 'julia', 'python']),
+  runId: z.string().min(1), projectId: z.string().min(1), engine: z.enum(['typescript', 'python']),
   inputHash: digest.nullable(), environmentHash: digest.nullable(),
   backend: z.object({
     id: z.literal('macos-seatbelt'), contractVersion: z.literal(2), kernelRelease: z.string().min(1),
@@ -58,7 +58,7 @@ export const researchExperimentResourceReportSchema = z.object({
   admission: admission.nullable(),
   probes: z.array(researchEnvironmentProbeResourceSchema.safeExtend({
     phase: z.enum(['preparation', 'verification'])
-  })).max(4),
+  })).max(2),
   recordedAt: z.iso.datetime()
 }).strict().superRefine((value, context) => {
   if (value.outcome === 'returned') {
@@ -75,7 +75,7 @@ export const researchExperimentResourceReportSchema = z.object({
   if (value.outcome === 'rejected' && (value.inputHash === null || value.environmentHash === null)) {
     context.addIssue({ code: 'custom', message: 'research_experiment_resource_basis_required' });
   }
-  const expected = value.engine === 'typescript' ? [] : value.engine === 'julia' ? ['runtime_version', 'environment'] : ['environment'];
+  const expected = value.engine === 'typescript' ? [] : ['environment'];
   const preparation = value.probes.filter(probe => probe.phase === 'preparation');
   const verification = value.probes.filter(probe => probe.phase === 'verification');
   if (JSON.stringify(value.probes.map(probe => probe.phase)) !== JSON.stringify([

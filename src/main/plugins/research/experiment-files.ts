@@ -61,8 +61,6 @@ export async function snapshotExperimentInputs(workspace: string, target: string
       case 'vega-lite': return { kind: 'figure' as const, engine: request.engine, sourceVersion: request.sourceVersion, figure: request.figure };
       case 'typescript': return { kind: 'experiment' as const, engine: request.engine, sourceVersion: request.sourceVersion, network: request.network };
       case 'python': return { kind: 'experiment' as const, engine: request.engine, sourceVersion: request.sourceVersion, seed: request.seed, network: request.network };
-      case 'r':
-      case 'julia': return { kind: 'experiment' as const, engine: request.engine, network: request.network };
       default: throw new Error('research_experiment_engine_unsupported');
     }
   })();

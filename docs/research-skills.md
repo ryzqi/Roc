@@ -11,7 +11,7 @@
 - `figure_renderer` 读取现有 `research.figure.environment` 并验证渲染环境合同。
 - `export_toolchain` 读取现有 `research.toolchain.status`，工具链不可用时保存具体领域码并停止本阶段。
 
-缺能力、缺资源或准备检查失败不进入模型，也不创建生产产物。探针成功只代表所查询环境/工具链的报告有效，不证明任意脚本可执行或科学结果已通过审核。实验阶段尚无选定引擎时不猜 Python、TypeScript、R 或 Julia；选定后仍由现有 `inspect_experiment_environment` 核对准确 runtime、锁文件和环境哈希，真实启动再次校验。
+缺能力、缺资源或准备检查失败不进入模型，也不创建生产产物。探针成功只代表所查询环境/工具链的报告有效，不证明任意脚本可执行或科学结果已通过审核。实验阶段尚无选定引擎时不猜 Python 或 TypeScript；选定后仍由现有 `inspect_experiment_environment` 核对准确 runtime、锁文件和环境哈希，真实启动再次校验。
 
 阶段准备不安装依赖、执行实验、提交审核或开放网络。方法计划、来源记录与不确定结果遵循共享参考约束，人工科学决定继续使用原闸门。
 

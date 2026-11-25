@@ -6,17 +6,10 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((value) =>
   !value.startsWith('/') && !/[\\\u0000-\u001f]/u.test(value) && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..'),
 { message: 'research_relative_path_invalid' });
-const runtimePath = z.string().min(1).max(4096).refine((value) => value.startsWith('/') && !/[\u0000-\u001f]/u.test(value), { message: 'research_absolute_path_required' });
 export const researchPythonExperimentRuntimeSchema = researchPythonEnvironmentGetSchema.omit({ projectId: true }).extend({ kind: z.literal('python') });
 export const researchExperimentRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('bundled-node') }).strict(),
-  z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
-  z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict(),
   researchPythonExperimentRuntimeSchema
-]);
-const nativeRuntimeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
-  z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
 ]);
 export const researchExperimentFileSchema = z.object({
   area: z.enum(['input', 'output', 'log']), path: researchExperimentPathSchema,
@@ -25,7 +18,7 @@ export const researchExperimentFileSchema = z.object({
 export const researchExperimentEnvironmentSchema = z.object({
   runtime: researchExperimentRuntimeSchema, executable: z.string().min(1), prefix: z.string().min(1), basePrefix: z.string().min(1),
   version: z.string().min(1), platform: z.string().min(1), architecture: z.string().min(1), toolchainHash: digest, metadataHash: digest,
-  packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1).nullable() }).strict()).max(10000),
+  packages: z.array(z.object({ name: z.string().min(1), version: z.string().min(1) }).strict()).max(10000),
   lockFiles: z.array(z.object({ path: researchExperimentPathSchema, sha256: digest, size: z.number().int().nonnegative() }).strict()),
   hash: digest
 }).strict();
@@ -45,16 +38,6 @@ const typescriptStartSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (!value.sourcePath.toLowerCase().endsWith('.mts')) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
-});
-const nativeStartSchema = z.object({
-  ...experimentStartSharedFields, sourcePath: researchExperimentPathSchema, engine: z.enum(['r', 'julia']), runtime: nativeRuntimeSchema,
-  arguments: z.array(z.string().max(8192).refine((value) => !value.includes(String.fromCharCode(0)))).max(100)
-}).strict().superRefine((value, context) => {
-  const extension = value.engine === 'r' ? '.r' : '.jl';
-  const runtimeKind = value.engine === 'r' ? 'renv' : 'julia';
-  if (!value.sourcePath.toLowerCase().endsWith(extension)) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
-  if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
-  if (value.runtime.kind !== runtimeKind) context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
 });
 export const notebookExperimentPaths = {
   source: 'roc-notebook/run.py', original: 'roc-notebook/original.ipynb', receipt: 'roc-notebook/receipt.json'
@@ -80,22 +63,18 @@ const pythonStartSchema = z.strictObject({
     context.addIssue({ code: 'custom', message: 'research_experiment_reserved_input', path: ['inputPaths'] });
   }
 });
-export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, nativeStartSchema, pythonStartSchema]);
+export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, pythonStartSchema]);
 export const researchExperimentStartRequestSchema = z.discriminatedUnion('engine', [
   typescriptStartSchema.safeExtend({ projectId: z.string().min(1) }),
-  nativeStartSchema.safeExtend({ projectId: z.string().min(1) }),
   pythonStartSchema.safeExtend({ projectId: z.string().min(1) })
 ]);
 const typescriptProjectStartSchema = typescriptStartSchema.extend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
 });
-const nativeProjectStartSchema = nativeStartSchema.extend({
-  projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
-});
 const pythonProjectStartSchema = pythonStartSchema.safeExtend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
 });
-export const researchExperimentStartSchema = z.discriminatedUnion('engine', [typescriptProjectStartSchema, nativeProjectStartSchema, pythonProjectStartSchema]);
+export const researchExperimentStartSchema = z.discriminatedUnion('engine', [typescriptProjectStartSchema, pythonProjectStartSchema]);
 export const researchExperimentExecutionSchema = z.object({
   id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema, ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),

@@ -257,9 +257,6 @@ importers:
       simple-statistics:
         specifier: 8.0.0
         version: 8.0.0
-      smol-toml:
-        specifier: 1.9.1
-        version: 1.9.1
       sqlite-vec:
         specifier: 0.1.9
         version: 0.1.9
@@ -3551,10 +3548,6 @@ packages:
   simple-update-notifier@2.0.0:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
-
-  smol-toml@1.9.1:
-    resolution: {integrity: sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==}
-    engines: {node: '>= 18'}
 
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
@@ -7713,8 +7706,6 @@ snapshots:
   simple-update-notifier@2.0.0:
     dependencies:
       semver: 7.8.6
-
-  smol-toml@1.9.1: {}
 
   sonic-boom@4.2.1:
     dependencies:

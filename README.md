@@ -321,13 +321,11 @@ Idea Canvas 保存问题、假设、新颖性、支持证据、反证、实验�
 
 ### 多语言实验与结果审核
 
-实验支持 TypeScript、R、Julia、Python，冻结源码、明确输入、环境、参数、日志、输出和文件哈希。运行关闭网络；失败、取消、中断与负结果保留实际记录，不自动重跑。
+实验支持 TypeScript、Python，冻结源码、明确输入、环境、参数、日志、输出和文件哈希。运行关闭网络；失败、取消、中断与负结果保留实际记录，不自动重跑。
 
 | 引擎 | 准备与执行范围 |
 | --- | --- |
 | TypeScript | `.mts` 固定 `run(context)` 接口，使用随包 Node、文件与统计接口，不临时安装项目包 |
-| R | 已准备的 R 与项目库、`renv.lock`；核对真实包和锁文件 |
-| Julia | 已准备的运行时、depot、Project／Manifest及明确本地依赖 |
 | Python | 用户选择的 macOS arm64 正式 CPython 3.14、标准 venv、完整锁文件、环境哈希与明确 seed |
 | Notebook | 冻结 nbformat 4.5，仅执行受控 Python cell 子集，不提供完整 Jupyter 语义 |
 

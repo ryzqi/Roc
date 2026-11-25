@@ -24,8 +24,7 @@ const SCRIPT_FILES = [
   'archive-utils.ts',
   'download-asset.ts',
   'manifest.ts',
-  'smoke.ts',
-  'build-r-process.ts'
+  'smoke.ts'
 ] as const;
 const DARWIN_O_EXLOCK = 0x20;
 const PROXY_KEYS = [

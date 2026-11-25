@@ -1170,39 +1170,6 @@
       "scenarioKind": "invariant_or_recovery_control"
     },
     {
-      "file": "tests/unit/research-julia-controls.test.mjs",
-      "name": "Julia explicit manifest must exist and match actual interpreter version; missing lock and malformed declarations fail",
-      "boundary": "local-file-controls",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
-      "id": "S07-106",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/unit/research-julia-controls.test.mjs",
-      "name": "Julia workspace and manifest path declarations cannot read outside workspace or follow symlinked local packages",
-      "boundary": "local-file-controls",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
-      "id": "S07-107",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/unit/research-julia-controls.test.mjs",
-      "name": "Julia workspace cycles, excessive declared projects and cancelled discovery fail without an environment receipt",
-      "boundary": "local-file-controls",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
-      "id": "S07-108",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
       "file": "tests/unit/research-native-code.test.mjs",
       "name": "native code identity detects changed bytes of unchanged-size files even when mtime is restored",
       "boundary": "local-file-code-identity",
@@ -1245,17 +1212,6 @@
       "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
       "id": "S07-112",
       "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/unit/research-native-code.test.mjs",
-      "name": "native code receipt cryptographically connects complete inventory to original environment metadata identity",
-      "boundary": "local-file-code-identity",
-      "outcomeClasses": [
-        "invariant_checked"
-      ],
-      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
-      "id": "S07-113",
-      "scenarioKind": "invariant_or_recovery_control"
     },
     {
       "file": "tests/unit/research-resources.test.mjs",
@@ -1480,7 +1436,7 @@
       "outcomeClasses": [
         "sandbox_denied"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-133",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1492,7 +1448,7 @@
         "policy_denied",
         "not_dispatched"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-134",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1504,7 +1460,7 @@
         "policy_denied",
         "not_dispatched"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-135",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1515,7 +1471,7 @@
       "outcomeClasses": [
         "sandbox_denied"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-136",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1526,7 +1482,7 @@
       "outcomeClasses": [
         "sandbox_denied"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-137",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1537,7 +1493,7 @@
       "outcomeClasses": [
         "sandbox_denied"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-138",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1548,7 +1504,7 @@
       "outcomeClasses": [
         "sandbox_denied"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-139",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1560,7 +1516,7 @@
         "policy_denied",
         "not_dispatched"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-140",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1571,7 +1527,7 @@
       "outcomeClasses": [
         "resource_terminated"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-141",
       "scenarioKind": "adversarial_boundary_regression"
     },
@@ -1583,129 +1539,8 @@
         "policy_denied",
         "not_dispatched"
       ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "effectObservation": "real process/file/receiver assertions using controlled C probes; scientific correctness is not measured",
       "id": "S07-142",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-native-environment-boundaries.test.mjs",
-      "name": "actual R launch sandbox reads declared lock/settings and denies undeclared project data during environment inspection",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "sandbox_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-143",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-native-environment-boundaries.test.mjs",
-      "name": "a forged environment report cannot make the main process read undeclared project files as package metadata",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-144",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia inspection reads version-selected controls and local package metadata while denying undeclared workspace/package data",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "sandbox_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-145",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia control report cannot grant the main process access to undeclared project files",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-146",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia package report cannot widen exact local Project metadata access to private package data",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-147",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia control report must contain the entire frozen declared control set",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-148",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia reports cannot change a frozen control hash or duplicate a control",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-149",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
-      "name": "Julia controls and local package metadata are checked against pre-probe bytes after actual native dispatch",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-150",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-native-code-integrity.test.mjs",
-      "name": "native environment identity detects an actually loaded runtime dylib changing with executable/version/package metadata unchanged",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-151",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-native-code-integrity.test.mjs",
-      "name": "native environment identity detects actually loaded package code through an intentional renv cache link",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-152",
-      "scenarioKind": "adversarial_boundary_regression"
-    },
-    {
-      "file": "tests/integration/research-native-code-integrity.test.mjs",
-      "name": "native code changed after actual probe dispatch invalidates the environment instead of returning an original-metadata success",
-      "boundary": "native-process-and-receipt",
-      "outcomeClasses": [
-        "policy_denied"
-      ],
-      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
-      "id": "S07-153",
       "scenarioKind": "adversarial_boundary_regression"
     },
     {
@@ -1739,6 +1574,17 @@
         "not_dispatched"
       ],
       "effectObservation": "forged deterministic tool proposals dispatch zero callbacks; isolated sentinel bytes and frozen manifest unchanged; no real model or internet",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "id": "S07-157",
+      "file": "tests/unit/research-current-execution-contracts.test.mjs",
+      "name": "removed R and Julia capability requests dispatch no environment inspection or experiment",
+      "boundary": "experiment-capability-schema",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "obsolete runtime and start requests reject before service callbacks; dispatch count remains zero",
       "scenarioKind": "adversarial_boundary_regression"
     }
   ]
