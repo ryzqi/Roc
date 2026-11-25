@@ -103,3 +103,32 @@ Metal cache activity, damaged-source rejection, and removal of every owned
 temporary directory all passed. Four focused regressions and the full build
 passed. This verifies conversion reproducibility; full-cohort quality and final
 application publication remain separate gates.
+
+## Complete installation transaction
+
+`ovis-installation.ts` composes the download, offline package installation and
+8-bit conversion into a new private generation. It writes the complete receipt
+after removing installation scratch, then verifies the full installed inventory
+before returning a trusted root and receipt hash. Existing generations are never
+overwritten. Failures remove only the owned attempt; unproven process exit retains
+the attempt for recovery. Callers supply a verified managed interpreter, serialize
+preparation, and publish the returned handle. A converted receipt does not grant
+quality qualification or enable the application parser.
+
+```sh
+node scripts/research/verify-ovis-installation.mjs \
+  --installation ~/.roc/research-models/ovisocr3-mlx-8bit \
+  --reference-inference .artifacts/research-toolchain-p3/smoke-8bit \
+  --output .artifacts/research-toolchain-p3/installation-transaction
+node --test tests/unit/research-ovis-installation.test.mjs \
+  tests/unit/research-ovis-conversion.test.mjs tests/unit/research-ovis-package-installer.test.mjs
+pnpm build
+```
+
+Four transaction checks passed: the fresh generation and complete receipt verify;
+one real page through the production Worker reproduces reference raw output;
+cancelling another attempt leaves the successful generation intact; and a
+corrupt download fails without changing it. Verified cached official source bytes
+were copied from the frozen reference, while all wheel files were downloaded and
+hash checked. Five focused regressions and the full build passed. All disposable
+test environments, downloads and compiler caches were removed.
