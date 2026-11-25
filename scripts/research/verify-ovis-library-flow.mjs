@@ -9,7 +9,7 @@ import {importTypeScriptModule} from '../lib/bundle-ts.mjs';
 import {createResearchFixture, loadResearchTestApi} from '../../tests/unit/fixtures/research-test-kit.mjs';
 
 const {values} = parseArgs({options: {installation: {type: 'string'}, 'source-relative': {type: 'string'},
-  output: {type: 'string'}}, strict: true});
+  output: {type: 'string'}, 'project-index': {type: 'boolean', default: false}}, strict: true});
 if (!values.installation || !values['source-relative'] || !values.output) {
   throw new Error('--installation, --source-relative (frozen corpus PDF/image) and --output are required');
 }
@@ -39,10 +39,10 @@ const summary = {status: 'running', automaticAdoption: false, performanceQualifi
   fixtures: ['in-memory repository', 'embedding vectors', 'deterministic excerpt card generator'],
   source, identity, modules: {}};
 const store = new helpers.OvisModelStore({root: installation, pythonBase: receipt.python.basePrefix, inferenceScript, identity});
-let api, fixture, embeddings, documents, processRequest, parserError;
+let api, fixture, embeddings, documents, indexer, processRequest, parserError;
 try {
   for (const name of [...moduleNames, 'document-service', 'document-files', 'document-repository', 'paper-card-service',
-    'scientific-context-assembler', 'scientific-chunks', 'scientific-text-serializer']) {
+    'scientific-context-assembler', 'scientific-chunks', 'scientific-text-serializer', 'index-service']) {
     summary.modules[name] = hash(await readFile(`src/main/plugins/research/${name}.ts`));
   }
   summary.harnessSha256 = hash(await readFile(new URL(import.meta.url)));
@@ -62,7 +62,8 @@ try {
   embeddings = new api.ResearchEmbeddingService(fixture.repository.knowledge,
     {embed: async ({texts}) => texts.map(() => [3, 4, 0])},
     {secrets: {get: async () => 'fixture-key'}, logger: {info() {}, warn() {}, error() {}}});
-  documents = new api.ResearchDocumentService(fixture.repository, {
+  const parseTools = {
+    identity: async () => JSON.stringify(identity),
     defaultParseOptions: () => ({tier: 'complete', device: 'auto', pageRange: ''}),
     parseDocument: async request => {
       try {
@@ -75,7 +76,9 @@ try {
         });
       } catch (error) {parserError = error; throw error;}
     }
-  }, output, null, null, new helpers.ScientificLibraryIndexService(fixture.repository, embeddings, output));
+  };
+  documents = new api.ResearchDocumentService(fixture.repository, parseTools, output, null, null,
+    new helpers.ScientificLibraryIndexService(fixture.repository, embeddings, output));
   const roles = ['problem', 'contribution', 'method', 'experimental_setup', 'results', 'limitations'];
   fixture.repository.paperCards.start(async (_title, blocks) => {
     const block = blocks.find(value => value.text.trim().length > 20); assert.ok(block);
@@ -137,7 +140,6 @@ try {
   for (const [name, value] of Object.entries({stored: data, ir, search, context, wiki})) {
     await writeFile(join(output, `${name}.json`), JSON.stringify(value, null, 2) + '\n', {flag: 'wx'});
   }
-  await writeFile(join(output, 'research.sqlite'), fixture.db.serialize(), {flag: 'wx'});
   const capture = JSON.parse(await readFile(join(output, data.outputPath, 'manifest.json')));
   Object.assign(summary, {status: 'passed', documentId: document.id, parseId, generationId: generation.id,
     blocks: ir.blocks.length, equations: ir.equations.length, tables: ir.tables.length,
@@ -145,12 +147,62 @@ try {
     candidates: search.candidates.length, contextObjects: context.evidence.length, checkedPageOnlyLocators: locators,
     wikiSections: wiki.current.sections.length, sourceUnchanged: true, process: capture.process,
     modelLeaseReleased: true, ownedWorkerDirectoriesRemoved: true, outputPath: data.outputPath});
+  if (values['project-index']) {
+    summary.status = 'running-project';
+    const workspace = join(output, 'project-workspace'), storage = join(output, 'project-index');
+    await mkdir(workspace); await copyFile(input, join(workspace, `source${extension}`));
+    const project = fixture.repository.createProject({title: 'Actual Ovis project index', description: '', workspacePath: workspace});
+    const {projectId, revision, ...settings} = fixture.repository.indexing.settings(project.id);
+    fixture.repository.indexing.saveSettings(projectId, revision, {...settings, kinds: [sourceKind], watch: false});
+    indexer = new api.ResearchIndexService(fixture.repository, parseTools, embeddings, storage, {info() {}, warn() {}, error() {}});
+    fixture.repository.indexing.requestScan(project.id, true);
+    await indexer.scan(project.id, controller.signal);
+    const queued = fixture.repository.indexing.nextJob(); assert.ok(queued); assert.equal(queued.projectId, project.id);
+    const job = fixture.repository.indexing.beginJob(queued.id); await indexer.process(job, controller.signal);
+    const completed = fixture.repository.indexing.job(job.id);
+    assert.equal(completed.status, 'ready', completed.error);
+    const payload = fixture.repository.indexing.cached(job.fileId).payload;
+    const projectIR = await indexer.paperIR(project.id, job.fileId, controller.signal);
+    const projectRouter = new helpers.ScientificRetrievalRouter(fixture.repository, embeddings, {library: output, index: storage},
+      new api.ScholarlyRelationsRepository(fixture.db, fixture.repository));
+    const projectSearch = await projectRouter.search({projectId: project.id, documentIds: [], query: terms.join(' '),
+      embeddingConfigId: null, candidateLimit: 100, limit: 20, rerank: 'none'});
+    assert.ok(projectSearch.candidates.some(c => c.signals.some(s => s.method === 'fts')));
+    assert.ok(projectSearch.candidates.some(c => c.signals.some(s => s.method === 'dense')));
+    await projectRouter.assertCurrent(projectSearch);
+    const projectContext = await projectRouter.readContext({search: projectSearch,
+      candidateIds: projectSearch.hits.filter(hit => hit.chunkId !== null).map(hit => hit.id)});
+    assert.ok(projectContext.evidence.length);
+    for (const candidate of projectSearch.candidates) if (candidate.sourceLocator) {
+      assert.equal(candidate.sourceLocator.sourceHash, source.sha256);
+      assert.equal(candidate.sourceLocator.parseId, payload.parseArtifactId);
+      assert.ok(candidate.sourceLocator.locations.every(location => location.bbox === null && location.coordinateOrigin === null));
+    }
+    const projectGeneration = fixture.repository.scientificIndex.active(project.id, `project-index:${job.fileId}`);
+    assert.ok(projectGeneration); fixture.repository.scientificIndex.verify(projectGeneration.id);
+    assert.ok(fixture.repository.knowledge.hasDocumentEmbeddings(`project-index:${job.fileId}`, 'fixture', 1));
+    assert.equal(hash(await readFile(join(workspace, `source${extension}`))), source.sha256);
+    for (const path of processRequest.writablePaths) await assert.rejects(access(path), {code: 'ENOENT'});
+    assert.equal(store.busy, false);
+    const projectCapture = JSON.parse(await readFile(join(storage, payload.artifactPath, 'manifest.json')));
+    for (const [name, value] of Object.entries({payload, ir: projectIR, search: projectSearch, context: projectContext})) {
+      await writeFile(join(output, `project-${name}.json`), JSON.stringify(value, null, 2) + '\n', {flag: 'wx'});
+    }
+    summary.projectIndex = {status: 'passed', projectId, fileId: job.fileId, parseId: payload.parseArtifactId,
+      generationId: projectGeneration.id, blocks: projectIR.blocks.length, equations: projectIR.equations.length,
+      tables: projectIR.tables.length, figures: projectIR.figures.length, candidates: projectSearch.candidates.length,
+      contextObjects: projectContext.evidence.length, sourceUnchanged: true, process: projectCapture.process,
+      modelLeaseReleased: true, ownedWorkerDirectoriesRemoved: true};
+    summary.status = 'passed';
+  }
+  assert.deepEqual(fixture.db.pragma('foreign_key_check'), []);
+  await writeFile(join(output, 'research.sqlite'), fixture.db.serialize(), {flag: 'wx'});
 } catch (error) {
   Object.assign(summary, {status: 'failed', error: {message: error.message, code: error.code,
     stdout: error.stdout, stderr: error.stderr}, ownedWorkerDirectories: processRequest?.writablePaths ?? []});
   process.exitCode = 1;
 } finally {
-  await documents?.shutdown(); await fixture?.repository.knowledgeJobs.shutdown();
+  await indexer?.shutdown(); await documents?.shutdown(); await fixture?.repository.knowledgeJobs.shutdown();
   await embeddings?.shutdown(); await fixture?.close(); api?.dispose();
   summary.modelStoreBusy = store.busy;
   await writeFile(join(output, 'report.json'), JSON.stringify(summary, null, 2) + '\n', {flag: 'wx'});

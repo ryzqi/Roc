@@ -25,7 +25,7 @@ import {ScientificIndexBuilder} from './scientific-index-builder';
 import type {ScientificGeneration} from './scientific-index-repository';
 import { embeddingKey, knowledgeId, type IndexJob, type IndexPayload } from './index-repository';
 import { indexFileSignature, indexDocumentBlocks, indexText, readIndexFile, scanChangedIndexFiles, scanIndexFiles, type IndexFileKind } from './index-files';
-import { maximumArtifactBytes } from './document-files';
+import { collectDocumentContent, maximumArtifactBytes } from './document-files';
 import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import { pruneResearchArtifacts } from './artifact-gc';
 import type { ResearchArtifactGcReport } from './artifact-gc';
@@ -196,7 +196,7 @@ export class ResearchIndexService {
     return { bytes, path: record.source.path, kind: record.source.kind };
   }
 
-  async paperIR(projectId: string, fileId: string) {
+  async paperIR(projectId: string, fileId: string, signal = new AbortController().signal) {
     // The project catalog validates file ownership before any artifact read.
     const payload = this.repository.indexing.cached(fileId).payload;
     if (!payload?.paperIR) throw new Error('research_paper_ir_artifact_missing');
@@ -204,6 +204,9 @@ export class ResearchIndexService {
     const storage = await this.storage();
     const parsed = researchParsedDocumentSchema.parse(JSON.parse((await readResearchFile(storage,
       `${payload.artifactPath}/result.json`, maximumArtifactBytes)).toString('utf8')));
+    if (parsed.engine === 'ovisocr3-mlx') {
+      await collectDocumentContent(storage, join(storage, payload.artifactPath!), parsed, signal);
+    }
     const ir = buildPaperIR({identity: {paperId: knowledgeId(fileId), documentId: knowledgeId(fileId),
       knowledgeDocumentId: knowledgeId(fileId), parseId: payload.parseArtifactId!, sourceHash: payload.sourceHash,
       parserFingerprint: payload.parserFingerprint!}, content: parsed,
@@ -379,7 +382,7 @@ export class ResearchIndexService {
       let ir: PaperIRV2 | null = null;
       if (cachedText !== null) {
         payload = cachedText;
-        if (payload.paperIR) ir = await this.paperIR(job.projectId, job.fileId);
+        if (payload.paperIR) ir = await this.paperIR(job.projectId, job.fileId, signal);
       }
       else if (!['pdf', 'image', 'html'].includes(job.input.kind)) {
         const bytes = await readResearchFile(storage, source.relativePath, 16 * 1024 * 1024);
@@ -394,7 +397,7 @@ export class ResearchIndexService {
           admission: { projectId: job.projectId, priority: 'background' },
           options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') }), {unit: 'blocks'}, result => result.blocks.length);
         if (parsed.sourceHash !== source.sourceHash) throw new Error('research_index_source_changed');
-        const artifact = await this.publishArtifact(storage, source.sourceHash, parsed, work);
+        const artifact = await this.publishArtifact(storage, source.sourceHash, parsed, work, signal);
         trace.bind({parse_id: artifact.parseArtifactId, parser_fingerprint: parsed.parserFingerprint});
         const semanticEnrichment = this.semanticGenerator ? await enrichPaperSemantics(parsed.blocks,
           parsed.structure, this.semanticGenerator, signal, trace) : undefined;
@@ -467,20 +470,31 @@ export class ResearchIndexService {
    * 提案 §8 要求两条消费者（文献阅读器与项目索引）共享同一份工件，而且索引链**不得**在取完
    * 文本后删掉它——只留 chunks 会让检索命中无法回到 `parseId`/`locator`，也让“工具目录已经
    * 清理掉了”变成一种静默的数据丢失。做法是先在同一文件系统上写 staging，再原子 rename 到
-   * `artifacts/<sourceHash>/<fingerprint>`；重复解析同一源+同一 fingerprint 直接复用。
+   * `artifacts/<resultHash>`；只有完整结果相同时才可复用，重解析内容变化必须产生新代次。
    */
   private async publishArtifact(storage: string, sourceHash: string,
-    parsed: z.infer<typeof researchParsedDocumentSchema>, workPath: string): Promise<{ parseArtifactId: string; artifactPath: string; parserFingerprint: string }> {
-    // 工件身份由源内容 + 解析身份决定：同一份 PDF 换档位/换模型必须得到新身份（提案 §8 缓存键）。
-    const parseArtifactId = `${sourceHash.slice(0, 16)}-${parsed.parserFingerprint.slice(0, 16)}`;
+    input: z.infer<typeof researchParsedDocumentSchema>, workPath: string, signal: AbortSignal): Promise<{ parseArtifactId: string; artifactPath: string; parserFingerprint: string }> {
+    this.requireActive(signal);
+    const parsed = researchParsedDocumentSchema.parse(input);
+    if (parsed.sourceHash !== sourceHash) throw new Error('research_index_source_changed');
+    const encoded = JSON.stringify(parsed);
+    // The same source/model can produce different content. Bind the actual result and capture too.
+    const parseArtifactId = researchContentHash(encoded);
+    if (parsed.engine === 'ovisocr3-mlx') {
+      await collectDocumentContent(storage, join(workPath, 'output'), parsed, signal);
+    }
     const root = await createResearchDirectory(storage, 'artifacts');
     const target = join(root, parseArtifactId);
     const artifactPath = researchRelativePath(relative(storage, target));
-    // `target` 只会由一次原子 rename 产生，所以“存在”就意味着上一次发布已完整。
-    // 存在性检查不用 try/catch 包住 read：`ENOENT` 是正常分支，而“结果文件读不出来”
-    // 必须是一个真实错误，不能变成“那就重新发布一次”。
+    const verifyExisting = async (): Promise<void> => {
+      if (!(await readResearchFile(target, 'result.json', maximumArtifactBytes)).equals(Buffer.from(encoded))) {
+        throw new Error('research_index_artifact_conflict');
+      }
+      if (parsed.engine === 'ovisocr3-mlx') await collectDocumentContent(storage, target, parsed, signal);
+      this.requireActive(signal);
+    };
     if (await pathExists(target)) {
-      await readResearchFile(target, 'result.json', maximumArtifactBytes);
+      await verifyExisting();
       return { parseArtifactId, artifactPath, parserFingerprint: parsed.parserFingerprint };
     }
     const staging = `${target}.staging-${process.pid}-${Date.now()}`;
@@ -488,12 +502,15 @@ export class ResearchIndexService {
     try {
       // 完整原件：MiddleJson / Markdown / structured_content / images 全在本次 job 的 output 里。
       await cp(join(workPath, 'output'), staging, { recursive: true, errorOnExist: false });
-      await writeFile(join(staging, 'result.json'), JSON.stringify(parsed), { mode: 0o600, flag: 'wx' });
+      if (parsed.engine === 'ovisocr3-mlx') await collectDocumentContent(storage, staging, parsed, signal);
+      this.requireActive(signal);
+      await writeFile(join(staging, 'result.json'), encoded, { mode: 0o600, flag: 'wx', signal });
+      this.requireActive(signal);
       await rename(staging, target);
     } catch (error) {
       await rm(staging, { recursive: true, force: true });
-      // 并发发布同一次解析（两个消费者）时，后来者看到 EEXIST 就是正确结果，不是失败。
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (!['EEXIST', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+      await verifyExisting();
     }
     return { parseArtifactId, artifactPath, parserFingerprint: parsed.parserFingerprint };
   }

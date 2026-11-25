@@ -59,6 +59,34 @@ qualification. The initial PDF harness admission failure is retained separately
 in `library-flow-formula/`; it was rejected before process launch because the
 harness omitted the required `parse` resource class.
 
+Project-directory indexing now validates Ovis captures before copying, validates
+the staged copy before publication, and revalidates retained evidence on artifact
+reuse and Paper IR reads. Its artifact ID hashes the complete parsed result,
+including source, parser and capture identities. Reprocessing the same file with
+different output therefore creates a separate immutable artifact; earlier IR and
+index references remain intact. A changed raw capture cannot replace the current
+index. Collection receives the job's cancellation signal.
+
+`tests/unit/research-ovis-project-index.test.mjs` exercises this path with a real
+PDF raster, SQLite/FTS/sqlite-vec and controlled OCR/embedding responses. All three
+regressions fail before the fix: different results reused an artifact ID, altered
+raw output was published, and stored raw output was not checked on IR read. The
+combined project/library/publication batch passes 30 tests; evidence is in
+`ovis-project-red.log` and `ovis-project-recheck.log` under the P3 artifact root.
+These are integration and integrity checks; production Ovis routing still awaits
+the full quality qualification.
+
+Adding `--project-index` to the live harness runs a second real Worker invocation
+through project scanning, capture validation, artifact publication, both indexes
+and cited context. The frozen formula PDF passed this path with 30 blocks,
+7 equations, one table, 23 retrieval candidates and three context objects. Source
+bytes, generation verification and Worker/lease cleanup passed. The full evidence
+is `.artifacts/research-toolchain-p3/project-library-flow-formula/report.json`,
+with `project-*.json` and the serialized SQLite database alongside it. The project
+generation took 58.850s and sampled peak RSS was 1,633,501,184 bytes under mixed
+host load; embeddings remain fixtures, so no semantic retrieval quality or
+exclusive-host performance claim follows from this check.
+
 The caller supplies a verified installation identity, source hash, hash of the
 actual inference image and measured page frame. A version1 completion envelope
 must match them exactly, bind the unmodified UTF8 output by SHA256 and provide
