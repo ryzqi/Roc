@@ -98,3 +98,26 @@ hold41.283s, sampled peakRSS1,773,273,088B. This does not establish isolated
 performance, cross-document model reuse or full application qualification.
 Evidence: `.artifacts/research-toolchain-p3/worker-wrapper/` and
 `ovis-worker-boundary-tests.log`, `ovis-worker-build.log` in the same parent.
+
+## Installation inspection and leases
+
+`ovis-model-store.ts` provides a read-only integrity boundary and counted leases.
+It requires a receipt hash supplied by a trusted preparation transaction; reading
+an arbitrary local receipt and trusting its own hash is not supported. It checks
+every recorded entry, mode, regular-file hash/size, link target, interpreter and
+shared library, inference source, model revision and8-bit conversion metadata.
+Missing/extra entries, unexpected external links and changed files are refused.
+No package import, model load, network download or user-profile write occurs.
+Cancellation and failed inspection unwind the reservation; release is idempotent.
+Future download/removal integration must respect active reservations.
+
+The existing installation passed a fresh inspection:16,561entries and
+3,538,535,671regular-file bytes excluding the receipt and external interpreter.
+`qualityQualified` remains false; full-cohort quality and product qualification
+are separate gates. Four fixture tests cover integrity failures, invalid roots,
+inventory paths and lease cleanup. `pnpm typecheck` also passes. Evidence:
+`.artifacts/research-toolchain-p3/ovis-model-store-inspection.json`.
+
+```sh
+node --test tests/unit/research-ovis-model-store.test.mjs
+```
