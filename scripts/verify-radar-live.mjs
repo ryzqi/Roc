@@ -12,8 +12,8 @@ const results=[];mkdirSync('.artifacts/reading-radar',{recursive:true});
 try{
  const page=await app.firstWindow();await page.waitForSelector('[data-testid="roc-app"]');
  const project=await page.evaluate(async workspacePath=>{const result=await window.roc.research.createProject({title:'Live radar acceptance',description:'Public sources',workspacePath});if(!result.ok)throw new Error(result.error.message);return result.data;},paths.workspaceRoot);
- await navigate(page,`page=research&project=${project.id}&view=library`);
- await page.getByRole('tab',{name:'学术雷达',exact:true}).click();
+ await navigate(page,`page=research&project=${project.id}&view=overview&subview=discover`);
+ await page.getByRole('tab',{name:'推荐与趋势',exact:true}).click();
  for(const [source,label,origin] of [['cool','Cool Papers','https://papers.cool'],['modelscope','魔搭论文','https://modelscope.cn']]){
   try{
    await page.getByRole('tab',{name:label,exact:true}).click();
@@ -41,6 +41,8 @@ try{
    writeFileSync(`.artifacts/reading-radar/live-${source}.png`,Buffer.from(png,'base64'));
    results.push({source,ok:true,detail});console.log(`PASS ${source}`,JSON.stringify({title:detail.title,links:detail.links,extracted:detail.extractedTitles.length,firstTitle:detail.extractedTitles[0],node:detail.node,bridge:detail.bridge}));
   }catch(error){
+   const rendererErrors=await page.getByTestId('radar-browser').getByRole('alert').allTextContents();
+   await page.screenshot({path:`.artifacts/reading-radar/live-${source}-renderer-failure.png`}).catch(()=>{});
    const detail=await app.evaluate(async({webContents},origin)=>{
     const contents=webContents.getAllWebContents().find(value=>value.getURL().startsWith(origin));
     return contents?contents.executeJavaScript('({url:location.href,title:document.title,text:document.body?.innerText.slice(0,1500),links:document.links.length,readyState:document.readyState})'):null;
@@ -50,7 +52,7 @@ try{
     return contents?(await contents.capturePage()).toPNG().toString('base64'):null;
    },origin).catch(()=>null);
    if(png)writeFileSync(`.artifacts/reading-radar/live-${source}-failure.png`,Buffer.from(png,'base64'));
-   results.push({source,ok:false,error:String(error),detail});console.log(`FAIL ${source}`,String(error),JSON.stringify(detail));process.exitCode=1;
+   results.push({source,ok:false,error:String(error),rendererErrors,detail});console.log(`FAIL ${source}`,String(error),JSON.stringify({rendererErrors,detail}));process.exitCode=1;
   }
  }
 }finally{writeFileSync('.artifacts/reading-radar/live-native.json',JSON.stringify({checkedAt:new Date().toISOString(),results},null,2));await app.close();}

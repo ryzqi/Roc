@@ -10,9 +10,9 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
   const selected=useViewSelected(),readingRoot=useRef<HTMLDivElement>(null);
   const area=useRef<HTMLDivElement>(null),[papers,setPapers]=useState<z.infer<typeof radarBrowserPaperSchema>[]|null>(null);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState('');
-  const mounted=useRef(true),pending=useRef(false),layoutRevision=useRef(0),activity=useRef(onBusyChange);
+  const mounted=useRef(true),pending=useRef(false),navigationRevision=useRef(0),activity=useRef(onBusyChange);
   activity.current=onBusyChange;
-  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;layoutRevision.current++;activity.current?.(false);};},[]);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;navigationRevision.current++;activity.current?.(false);};},[]);
   const begin=(message:string):boolean=>{
     if(pending.current||!mounted.current)return false;
     pending.current=true;activity.current?.(true);setBusy(true);setError(null);setStatus(message);return true;
@@ -25,11 +25,14 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
   const command=async(action:'open'|'bounds'|'hide'|'back'|'reload'|'inspect'):Promise<void>=>{
     const interaction=action==='back'||action==='reload'||action==='inspect';
     if(interaction&&!begin(action==='inspect'?'正在读取当前页论文…':'正在更新网页…'))return;
-    const revision=interaction?null:++layoutRevision.current;
-    const current=():boolean=>mounted.current&&(revision===null||revision===layoutRevision.current);
+    // Bounds/overlay updates must not discard a slower navigation's failure receipt.
+    if(action==='open'||interaction)navigationRevision.current++;
+    const revision=navigationRevision.current;
+    const current=():boolean=>mounted.current&&revision===navigationRevision.current;
     try{const result=await client.api.research.radarBrowser({action,source,bounds:bounds()});
       if(!current())return;
       if(!result.ok){setError(result.error.message);return;}
+      if(action==='open'||action==='back'||action==='reload')setError(null);
       if(action==='inspect'){const found=[...result.data.papers];if(source==='cool' && /^https:\/\/papers\.cool\/(?:venue\/[^/?#]+|arxiv\/\d{4}\.\d{4,5}(?:v\d+)?)(?:[?#]|$)/u.test(result.data.url)&&!found.some(paper=>paper.url===result.data.url))found.unshift({title:'当前 Cool Papers 论文',url:result.data.url,doi:null,arxivId:null});setPapers(found);}
       if(interaction)setStatus('');
     }catch(error){if(current())setError(String(error));}
@@ -88,7 +91,7 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
     <div ref={area} data-radar-papers className="relative min-h-0 flex-1 overflow-auto" aria-label={source==='cool'?'Cool Papers 浏览区':'魔搭论文浏览区'}>
       {!selected?null:papers!==null?<div className="p-3">{papers.length===0?<p>当前页没有可识别的论文链接，请打开论文详情后重试。</p>:papers.map(paper=><article className="border-b-[0.5px] border-line py-3" key={paper.url}>
         <h3 className="font-medium">{paper.title}</h3><p className="break-all text-muted">{paper.url}</p><button className="mt-2 rounded-control border-[0.5px] border-line px-3 py-1" type="button" disabled={busy||!writable} onClick={()=>void importPaper(paper)}>加入文献库</button>
-      </article>)}</div>:<p className="p-4 text-muted">正在加载 {source==='cool'?'Cool Papers':'魔搭论文'}…</p>}
+      </article>)}</div>:error?null:<p className="p-4 text-muted">正在加载 {source==='cool'?'Cool Papers':'魔搭论文'}…</p>}
     </div>
   </div></ReadingViewBoundary>;
 }
