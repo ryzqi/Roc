@@ -181,6 +181,7 @@ export class ScientificRetrievalRouter {
     const numbers = plan.objects[channel === 'table' ? 'tableNumbers' : channel === 'figure' ? 'figureNumbers' : 'equationNumbers'];
     const terms = scientificQueryTerms(plan.query), rows: Array<{candidate: Candidate; score: number; exact: boolean}> = [];
     for (const paper of papers) for (const chunk of paper.chunks) {
+      if (!chunk.retrieval) continue;
       if (channel === 'table' ? !['table', 'table_row_group'].includes(chunk.chunkType) :
         chunk.chunkType !== channel) continue;
       if (chunk.chunkType === 'table' && paper.chunks.some(c => c.parentId === chunk.id && c.chunkType === 'table_row_group')) continue;

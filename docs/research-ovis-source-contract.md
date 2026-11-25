@@ -4,6 +4,33 @@
 future complete parser. It is not registered in the production parser. P3 full
 347-page quality qualification and P4 downstream integration remain required.
 
+The isolated downstream regression now injects `parseOvisDocument` into the real
+document service. It imports a two-page PDF, captures its source rasters and
+passes controlled Ovis output through collection, SQLite, immutable Paper IR,
+generic and scientific embeddings, FTS/sqlite-vec retrieval, context validation,
+six-section Paper Cards and structured Paper Card/Wiki knowledge. OCR responses,
+embedding vectors and card/extraction proposals are fixtures; this is integration
+coverage, not a live model quality or language-model generation result.
+
+Table HTML/cells, complete LaTeX, captured images and page-only source locators
+survive publication. Candidate captions remain unverified and independently
+searchable. They do not assign exact table/figure numbers. A figure without
+attributable retrieval text remains available in IR and structured cards; object
+search excludes its non-retrievable chunk, matching the FTS/dense eligibility
+rule and preventing later source validation from rejecting the whole result.
+Reparse retires the previous index while preserving old IR and Wiki revisions;
+failed indexing, changed raw capture and cancellation preserve the current parse.
+
+```sh
+node --test tests/unit/research-ovis-downstream.test.mjs tests/unit/scientific-retrieval.test.mjs tests/unit/scientific-context.test.mjs tests/unit/scientific-evidence.test.mjs
+pnpm build
+```
+
+The combined regression passes 28 tests. Evidence is retained in
+`.artifacts/research-toolchain-p3/downstream-retrieval-final.log` and
+`downstream-build.log`. Production parser registration and the full 347-page
+quality gate remain pending.
+
 The caller supplies a verified installation identity, source hash, hash of the
 actual inference image and measured page frame. A version1 completion envelope
 must match them exactly, bind the unmodified UTF8 output by SHA256 and provide
