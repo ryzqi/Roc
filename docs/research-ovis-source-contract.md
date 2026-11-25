@@ -31,6 +31,34 @@ The combined regression passes 28 tests. Evidence is retained in
 `downstream-build.log`. Production parser registration and the full 347-page
 quality gate remain pending.
 
+The live library harness also runs a frozen original PDF or image through the
+actual private Metal Worker and the same document/index/context/Wiki path:
+
+```sh
+node scripts/research/verify-ovis-library-flow.mjs \
+  --installation /absolute/qualification-installation \
+  --source-relative ori_pdfs/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.pdf \
+  --output /absolute/new-verification-directory
+```
+
+It verifies the frozen source, installation receipt and inference-script hashes,
+records module identities, and saves the captured output, IR, retrieval/context,
+Wiki and SQLite evidence. Embeddings and the excerpt-based card generator remain
+fixtures. It uses the read-only qualification store; application model ownership
+must use the installation manager.
+
+The formula PDF passed with 30 blocks, 7 equations, 27 table cells, 62 checked
+page-only locators and six Wiki sections. The frozen image
+`images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg` passed with 11 blocks,
+2 figures, 42 checked locators and six Wiki sections. Both retained the original
+source hash, verified both indexes and released the model lease and Worker
+directories. Evidence lives in `.artifacts/research-toolchain-p3/` under
+`library-flow-formula-admission/` and `library-flow-image/`. Generation times were
+53.791s and 26.184s under mixed host load; these are observations, not a performance
+qualification. The initial PDF harness admission failure is retained separately
+in `library-flow-formula/`; it was rejected before process launch because the
+harness omitted the required `parse` resource class.
+
 The caller supplies a verified installation identity, source hash, hash of the
 actual inference image and measured page frame. A version1 completion envelope
 must match them exactly, bind the unmodified UTF8 output by SHA256 and provide

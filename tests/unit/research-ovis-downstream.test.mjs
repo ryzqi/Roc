@@ -86,7 +86,8 @@ async function fixture() {
       defaultParseOptions: () => ({tier: 'complete', device: 'auto', pageRange: ''}),
       parseDocument: async request => {
         outputs.push(request.outputDir);
-        const result = await api.parseOvisDocument({...request, sourceKind: 'pdf', pages: null, timeoutMs: 60_000}, models, {
+        const result = await api.parseOvisDocument({...request, sourceKind: 'pdf', pages: null, timeoutMs: 60_000,
+          admission: {...request.admission, resourceClass: 'parse'}}, models, {
           capture: capture => api.createOvisSourceArtifact(capture, async worker => {
             await workerHook(worker);
             return {process: {exitCode: 0}, pages: worker.pages.map(({binding}) => {
