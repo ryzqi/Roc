@@ -1,4 +1,4 @@
-/** Validate a complete preparation transaction and load its exact output in the worker. */
+/** Validate installation lifecycle with a fresh preparation and actual Worker readback. */
 import assert from 'node:assert/strict';
 import {constants} from 'node:fs';
 import {access, copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile} from 'node:fs/promises';
@@ -16,14 +16,16 @@ const {ResearchPythonRuntimeStore} = await module('python-runtime-store');
 const {runPythonInstallerProcess} = await module('python-installer-process');
 const {prepareOvisInstallation} = await module('ovis-installation');
 const {ovisDownloadAssets} = await module('ovis-downloads');
-const {OvisModelStore, inspectOvisInstallation} = await module('ovis-model-store');
+const {inspectOvisInstallation} = await module('ovis-model-store');
+const {OvisInstallationManager} = await module('ovis-installation-manager');
 const {runOvisDocumentPages} = await module('ovis-worker');
 const {downloadVerified, fileSha256} = await importTypeScriptModule('scripts/research/download-asset.ts', {platform: 'node'});
 const root = await realpath(await mkdtemp('/private/tmp/roc-ovis-transaction-check-'));
 const signal = new AbortController().signal;
 const report = {status: 'running', checks: [], ownedDirectoriesRemoved: false,
   wrapperSha256: await fileSha256('src/main/plugins/research/ovis-installation.ts'),
-  scope: 'Fresh preparation, verified receipt, real one-page inference, retry/cancellation and corruption cleanup; no parser adoption'};
+  managerSha256: await fileSha256('src/main/plugins/research/ovis-installation-manager.ts'),
+  scope: 'Fresh managed selection, verified receipt, real one-page inference, leases, retry/cancellation and explicit removal; no parser adoption'};
 const unprovenExit = error => ['research_process_completion_failed', 'research_process_kill_failed',
   'research_process_supervision_failed'].includes(error?.code);
 let safeToClean = true;
@@ -60,13 +62,21 @@ try {
   let lastPhase;
   const input = {runtime, parent, specification: await realpath('resources/ovis-ocr'), signal, projectId: 'ovis-transaction-check',
     onProgress: progress => {if (progress.phase !== lastPhase) {console.log(progress.phase); lastPhase = progress.phase;}}};
-  const prepared = await prepareOvisInstallation(input, download), installedRoot = prepared.installation.root;
+  const manager = () => new OvisInstallationManager(parent, input.specification,
+    {prepare: request => prepareOvisInstallation(request, download), inspect: inspectOvisInstallation});
+  const store = manager();
+  assert.equal(await store.installed(), false);
+  const prepared = await store.install(input), installedRoot = prepared.installation.root;
   assert.equal(prepared.qualityQualified, false);
-  assert.deepEqual(await readdir(parent), [basename(installedRoot)]);
+  const selectedFiles = ['active.json', basename(installedRoot)].sort();
+  assert.deepEqual((await readdir(parent)).sort(), selectedFiles);
+  assert.equal(await manager().installed(), true);
+  await assert.rejects(manager().install(input), /already_selected/);
   await assert.rejects(access(join(installedRoot, 'scratch')), {code: 'ENOENT'});
   report.checks.push({name: 'complete-generation-verified-without-temporary-downloads', entries: prepared.entries,
     bytes: prepared.bytes, identity: prepared.installation.identity});
-  const store = new OvisModelStore(prepared.installation), lease = await store.acquire(signal);
+  const lease = await store.acquire(signal);
+  await assert.rejects(manager().remove(), /installation_busy/);
   const page = reference.pages.at(-1), frame = {kind: 'image', page: 1, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT',
     width: page.width, height: page.height};
   console.log('inference');
@@ -81,6 +91,7 @@ try {
   assert.equal(parsed.pages[0].raw, await readFile(join(referenceInference, `${page.id}.raw.txt`), 'utf8'));
   report.checks.push({name: 'fresh-installation-worker-output-matches-reference', process: parsed.process,
     rawSha256: parsed.pages[0].rawSha256});
+  report.checks.push({name: 'persistent-selection-shared-lease-and-replacement-refusal', passed: true});
   console.log('cancel-and-retry');
   const controller = new AbortController(); let cancellationError;
   try {
@@ -88,13 +99,20 @@ try {
       onProgress: progress => {if (progress.phase === 'converting') controller.abort(new Error('cancelled-before-conversion'));}}, download);
   } catch (error) {if (unprovenExit(error)) throw error; cancellationError = error;}
   assert.equal(cancellationError?.message, 'cancelled-before-conversion');
-  assert.deepEqual(await readdir(parent), [basename(installedRoot)]);
+  assert.deepEqual((await readdir(parent)).sort(), selectedFiles);
   await inspectOvisInstallation(prepared.installation, signal);
   report.checks.push({name: 'cancelled-new-attempt-cleans-only-owned-generation', passed: true});
   await assert.rejects(prepareOvisInstallation(input, async (_url, _hash, target) => writeFile(target, 'damaged')),
     /integrity_failed/);
-  assert.deepEqual(await readdir(parent), [basename(installedRoot)]);
+  assert.deepEqual((await readdir(parent)).sort(), selectedFiles);
   report.checks.push({name: 'damaged-download-attempt-preserves-successful-generation', passed: true});
+  await writeFile(join(installedRoot, 'runtime/unexpected.py'), 'pass\n', {flag: 'wx'});
+  await assert.rejects(manager().acquire(signal), /inventory_changed/);
+  assert.equal(store.busy, false); assert.equal(await store.installed(), true);
+  await manager().remove();
+  assert.deepEqual(await readdir(parent), []); assert.equal(await store.installed(), false);
+  await access(runtime.executable);
+  report.checks.push({name: 'corruption-refuses-lease-and-explicit-removal-preserves-shared-interpreter', passed: true});
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed'; report.error = {message: error.message, code: error.code, cause: error.cause, stdout: error.stdout, stderr: error.stderr};
