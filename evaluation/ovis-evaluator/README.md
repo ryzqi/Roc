@@ -1,0 +1,73 @@
+# OvisOCR evaluator and PDF slice audit
+
+This directory uses the actual OmniDocBench scorer at commit `0ff4f3cfbcd45636cc6d9933a551036893f0d83c`. Its CDM renders colored LaTeX glyphs through pdfTeX, ImageMagick and Ghostscript. Its TEDS uses the official table tree implementation. No approximate formula metric is labeled CDM, and no evaluator source has been patched.
+
+The installed environment is private to `.runtime/ovis-evaluator/`. It is separate from the Ovis Python 3.14 inference installation because the upstream evaluator requires Python `>=3.10,<3.12`. There are no global packages, shell-profile changes or host ImageMagick policy changes.
+
+## Frozen environment
+
+[`environment.lock.json`](environment.lock.json) identifies the upstream archive and 94 executable/configuration source files, all native package URLs/builds/SHA-256, 151 TeX package revisions/container checksums and cached BLEU/METEOR/NLTK resources. [`requirements.in`](requirements.in) states dependency intent; [`requirements.lock`](requirements.lock) freezes the Python dependency closure with hashes.
+
+The measured environment is macOS arm64, CPython 3.11.18, TeX Live 2025/pdfTeX 1.40.28, ImageMagick 7.1.1-47 and Ghostscript 10.05.1. This is a calibrated **macOS variant**, not a claim of equivalence to the README's Linux/Python 3.10/Ghostscript 9.55.0 reference.
+
+Installation used uv 0.13.9 with a task-private Python installation/cache, micromamba 2.0.5 with a task-private native prefix and the archived TeX Live 2025 final repository. TeX's portable profile disabled PATH adjustment and documentation/source installation; `scheme-basic` was extended with `geometry booktabs multirow amsmath amsfonts was xcolor cjk arphic`. `upgreek.sty` belongs to `was`. The TeX repository/container hashes were recorded; GPG verification was unavailable and is not claimed. Archive installers and package-manager caches are disposable; the actual environment and verification receipts remain local.
+
+Two real preflight failures are retained in the local evidence: the unconstrained latest PyArrow required NumPy 2 while the official scorer pins NumPy 1.24, and Ghostscript 9.56.1 lacked the `png16malpha` device used by this ImageMagick build. The final lock fixes the former dependency graph and uses Ghostscript 10.05.1. `lxml`, `pylatexenc` and `func-timeout` were rebuilt with isolation disabled under pinned setuptools 80.9.0/wheel 0.45.1. No failing run was treated as a model score.
+
+`snapshot_runtime.py` hashes every file/link/directory in the private interpreter, Python environment, native prefix, TeX tree and official checkout. The local receipt has 33,536 entries; verify it before using saved results or scoring new model predictions. Writable caches are excluded from that inventory; the offline resource files have separate hashes in the committed environment lock.
+
+## Checks and evidence
+
+All commands below run from the repository root. Use a new output directory for every run; commands reject overwrites.
+
+```sh
+python3 -B evaluation/ovis-evaluator/snapshot_runtime.py \
+  --runtime .runtime/ovis-evaluator \
+  --receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json --verify
+
+.runtime/ovis-evaluator/venv/bin/python -B -m unittest discover \
+  -s evaluation/ovis-evaluator -p test_evaluator.py -v
+
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/calibrate.py \
+  --runtime .runtime/ovis-evaluator --output .artifacts/research-toolchain-p3/evaluator-calibration-recheck
+
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/calibrate_pipeline.py \
+  --runtime .runtime/ovis-evaluator --output .artifacts/research-toolchain-p3/evaluator-pipeline-recheck
+
+.runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/verify_pdf_slices.py \
+  --output .artifacts/research-toolchain-p3/pdf-slices-recheck
+```
+
+On 2026-11-25, six regression tests passed, including real raster markers on cropped pages rotated 0/90/180/270 degrees. The coordinate mapping uses the exact 200/72 DPI scale and outward-rounded raster canvas, then maps to upstream image pixels and `TOPLEFT_NORMALIZED`. PyMuPDF 1.26.7's rotated-page matrix omits CropBox offsets, so the verifier reads the matrix with the in-memory page unrotated, restores rotation and composes the full transform. It never changes the source PDF bytes.
+
+The official direct APIs passed 12 cases repeated twice: identical ASCII/CJK CDM 1.0 with eight glyph tokens each; different, empty and malformed predictions CDM 0; empty gold or unavailable renderer classified as an invalid evaluator/gold run; identical TEDS 1.0; changed content or merged cells 0.8; empty/malformed tables 0. Repeated scores and the identical-pair glyph-box files matched exactly. The final run was under the OS network-deny sandbox.
+
+The official Markdown parsing, `quick_match`, normalization and aggregate pipeline also passed controlled CDM/TEDS checks. Identical fixtures scored CDM/TEDS 1; changed formula/table content scored 0/0.8; an absent page scored 0/0 with text edit distance 1 and remained in the page denominator. These are synthetic calibration fixtures, never corpus gold. **Reading-order qualification remains open:** the perfect table-containing fixture produces gold order `[1,2,3]` and predicted order `[1,2]`, hence edit distance 1/3. The upstream scorer omits the table from predicted order; no reading-order pass is inferred.
+
+`warm_resources.py` uses the revisions already frozen in the environment lock. `check_offline_resources.py` exercised their exact cached metrics under Seatbelt network denial. BLEU returned 1 and METEOR returned its expected 0.9976851851851852. Upstream METEOR initialization still attempts NLTK index checks; those attempts were blocked and logged, while scoring used the pinned local data. The proposed main CDM/TEDS configuration does not invoke BLEU/METEOR.
+
+## PDF pairing findings
+
+All 210 frozen original slices were readable, unencrypted single-page PDFs, required no parser repair, had rotation 0, matched their image/annotation dimensions at 200 DPI and had no annotation polygons outside the image. 207 had non-whitespace extractable native text; three did not. Lack of extractable text does not by itself prove that a page is a scientific scan.
+
+All estimated translation offsets were zero. Median unshifted SSIM was about 0.99849; 209 pages were at least 0.98155. **One actual content mismatch remains:** `scihub_c2gc35284b.pdf_6.jpg` has the body of Table 1 blanked in the frozen image, while the original PDF renders the full table. The image's gold has no table-body annotation. The PDF and image are therefore not interchangeable complete-page gold. This finding was visually inspected by the implementing agent; it is not an independent human review. The 210-page denominator is preserved; no page was silently excluded.
+
+[`pdf-pairing-findings.json`](pdf-pairing-findings.json) records the mismatch and text-layer exceptions. Full render PNGs, native text, normalized annotation polygons, transforms, source hashes and per-page diagnostics stay under `.artifacts/research-toolchain-p3/pdf-slices-audit/`. The final corrected audit replaced two task-owned intermediate renders; its cleanup receipt is retained.
+
+No complete scientific-PDF qualification, original-paper identity count, cross-page table gold, independent reviewer attestation or verified training holdout is established by these checks. On 2026-11-25 the user elected to skip additional scientific-scan/cross-page gold and independent review work. Those categories remain unverified; this does not waive the existing-sample quality or backend parity checks.
+
+## Frozen paired inference
+
+[`paired-inference.json`](paired-inference.json) binds all 347 inputs, model/installation identities, generation settings and failure policy. `run_paired.py` requires the configuration to match committed HEAD, runs BF16 followed by 8-bit with one model worker, checks actual settings and exact completed page IDs/order, and preserves invalid or partial output. It does not alter the model installation receipt.
+
+```sh
+python3 -B evaluation/ovis-evaluator/run_paired.py \
+  --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  --output .artifacts/research-toolchain-p3/paired-347-recheck
+```
+
+The 347-page run is inference evidence, not automatic quality acceptance. Independent official PyTorch parity, the final CER/WER/reading-order/coordinate contract and absolute resource gates remain separate requirements. Both current arms use the MLX adapter; matching them alone cannot establish official-model implementation parity. The frozen configuration records all gaps at run creation; subsequent user-approved skipped coverage is recorded above without altering that configuration.
+
+Other repository builds and Python tests ran on the same host during paired inference. Its latency and peak-memory observations therefore describe mixed host load and cannot qualify an exclusive-host P95 performance gate. Performance qualification requires a separate frozen-sample run after competing heavy work has finished.

@@ -89,6 +89,8 @@ def main() -> int:
                 if report.get("settings") != expected_settings or report.get("formattedPromptSha256") != config["settings"]["formattedPromptSha256"]:
                     raise ValueError("actual inference settings differ from the committed contract")
             completed = {p["id"] for p in report.get("pages", [])}
+            if report.get("status") in ("completed", "invalid-output") and [p["id"] for p in report.get("pages", [])] != [p["id"] for p in pages]:
+                raise ValueError("completed report page IDs/order differ from the frozen manifest")
             status["arms"].append({"variant": arm, "exitCode": code, "status": report.get("status", "report-missing"),
                                    "completedPages": len(completed), "validPages": sum(p["valid"] for p in report.get("pages", [])),
                                    "unprocessedPageIds": [p["id"] for p in pages if p["id"] not in completed]})

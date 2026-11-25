@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "sourceLockSha256": "423000834c4bbc9ac82fb239ffaf1e5a984c3c8dd3ef1ecf2134a1879bbe79e6",
+  "auditReportSha256": "8d0c91c8cfdb4345ca07905891724a741add015bf2440cbb62a4902862315137",
+  "selectedOriginalPdfSlices": 210,
+  "processed": 210,
+  "readableSinglePages": 210,
+  "nativeNonemptyTextPages": 207,
+  "independentReviewerCount": 0,
+  "completePdfGoldQualified": false,
+  "silentExclusions": 0,
+  "contentMismatch": {
+    "id": "slice-144",
+    "imagePath": "images/scihub_c2gc35284b.pdf_6.jpg",
+    "pdfPath": "ori_pdfs/scihub_c2gc35284b.pdf_6.pdf",
+    "imageSha256": "0c1b7f4779e1885475942cdca1ac4493f0d4fd1ce964d8c4af138efc8818092d",
+    "pdfSha256": "a2d7f052586784a55e3f556beac6106ddc61e03d4e6e91beb651bfc5329fdd20",
+    "renderSha256": "e3b7c96dc2256288fcd42961a1d3607a84b3a777ea9191a9c0d081af0060e221"
+  },
+  "contentMismatchFinding": "Original PDF renders Table 1 body; frozen upstream image blanks that body; current image gold has no corresponding table-body annotation. Same page geometry does not certify content/gold equivalence.",
+  "findingReview": "visual inspection by implementing agent; not independent human review",
+  "noExtractableText": [
+    {
+      "id": "slice-137",
+      "imagePath": "images/eastmoney_f72b162baf25f1a2060e4ce877071ec27e490ab16e9de1a2b18572b596d2bde8.pdf_2.jpg",
+      "pdfPath": "ori_pdfs/eastmoney_f72b162baf25f1a2060e4ce877071ec27e490ab16e9de1a2b18572b596d2bde8.pdf_2.pdf"
+    },
+    {
+      "id": "slice-183",
+      "imagePath": "images/yanbaopptmerge_11eeaa31ab6171a9d1ea55aeb0b167e51bffeaa8a83a97cb5e2c3fb7963bf1bf.pdf_7.jpg",
+      "pdfPath": "ori_pdfs/yanbaopptmerge_11eeaa31ab6171a9d1ea55aeb0b167e51bffeaa8a83a97cb5e2c3fb7963bf1bf.pdf_7.pdf"
+    },
+    {
+      "id": "slice-206",
+      "imagePath": "images/yanbaopptmerge_e3b48594d5a2a6dc86b51244737f24867a0c1781e9f0e4fb52d96bbc6f9d95c7.pdf_3.jpg",
+      "pdfPath": "ori_pdfs/yanbaopptmerge_e3b48594d5a2a6dc86b51244737f24867a0c1781e9f0e4fb52d96bbc6f9d95c7.pdf_3.pdf"
+    }
+  ],
+  "scanClassification": "not established from text absence",
+  "userScopeDecision": {
+    "date": "2026-11-25",
+    "instruction": "跳过",
+    "skipped": ["additional scientific scanned gold", "cross-page table/cell gold", "independent human review"],
+    "effect": "Coverage remains unverified; no waiver of existing-sample quality or independent backend parity."
+  },
+  "remainingQualification": [
+    "independent source/page/coordinate review",
+    "complete original-document identities",
+    "original scientific scanned gold",
+    "cross-page table/cell gold"
+  ]
+}

@@ -1,0 +1,2760 @@
+{
+  "schemaVersion": 1,
+  "platform": "macos-arm64",
+  "python": "3.11.18",
+  "referenceLinuxParity": "not_established",
+  "officialSource": {
+    "repository": "opendatalab/OmniDocBench",
+    "revision": "0ff4f3cfbcd45636cc6d9933a551036893f0d83c",
+    "archiveUrl": "https://codeload.github.com/opendatalab/OmniDocBench/tar.gz/0ff4f3cfbcd45636cc6d9933a551036893f0d83c",
+    "archiveSha256": "d0a3fb2168914745fa06babc3f252143fdcc604a1e79d516ce160b49d1cd471d",
+    "files": [
+      {
+        "path": ".github/workflows/cla.yml",
+        "sha256": "da8f528f23b937e79eba7d6a9abeff3f981ce54cf4b314e008dff60db556d4d4"
+      },
+      {
+        "path": "configs/end2end.yaml",
+        "sha256": "e61db7cbf29f220d7b01d31470ae2869405df9d49f0d9af02a735ce810f7214b"
+      },
+      {
+        "path": "pdf_validation.py",
+        "sha256": "7603a81d473f723d6b520773e0742ecd9259cdfffcd81d720c6a772acc8dfe68"
+      },
+      {
+        "path": "pyproject.toml",
+        "sha256": "ab57c9299673e1d17e0d278d48b63327dfbb33fd5c09ea94fb7feafc221ccbad"
+      },
+      {
+        "path": "skills/scripts/generate_end2end_config.py",
+        "sha256": "8febb2a6444c42dd3daef3dac6b02c9375d5551cc8347d19fe59e715cecdf134"
+      },
+      {
+        "path": "skills/scripts/parse_results.py",
+        "sha256": "164a2a5d2043c2d9fc792039752daa396ffd06cb3af06bd4c6d203cf83d9055f"
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "a0ab02a688904925f1e7b0c6b3655f63378ed6e9094317469d5fb6842dc12343"
+      },
+      {
+        "path": "src/cli.py",
+        "sha256": "16c74480ba4af2998a9a2572feed1c69cdd71bea1702bc1c290cf4e03a5ac28c"
+      },
+      {
+        "path": "src/core/__init__.py",
+        "sha256": "fefccccad6165c789f153a1095c5e7449bcdadc2dde4a46d8cbfb2b730520e21"
+      },
+      {
+        "path": "src/core/matching/__init__.py",
+        "sha256": "732ce6c5708e68576c92a698553ff31634ed62f26e5aba7d385f26c34de5d5e4"
+      },
+      {
+        "path": "src/core/matching/match.py",
+        "sha256": "b25318b4e752b1e75cff2d9d736c1f2346daee3facb6771fe7adad34afc316fb"
+      },
+      {
+        "path": "src/core/matching/match_quick.py",
+        "sha256": "38925e1e746b3396eb8d73fa6535cc0c2b0cab42db09cef01a1b0857c5aab906"
+      },
+      {
+        "path": "src/core/metrics.py",
+        "sha256": "d7905915614f4fa56d50de5b19e45f27346e5088c09b66e36b941ee456b0d643"
+      },
+      {
+        "path": "src/core/pipeline.py",
+        "sha256": "078a538bb39803932c58468680871f1927cc181d951e9631044505fe77e3e26c"
+      },
+      {
+        "path": "src/core/pipeline_eval.py",
+        "sha256": "623406c80d2d99a1cbdecf5539a3031fe4fa8919e51a6b0eae67c6bdd8a6a376"
+      },
+      {
+        "path": "src/core/preprocess/__init__.py",
+        "sha256": "edbdc1afd134a436ac5a35bab93b04aafa9fa2bb2496cd043fe44daadb06c5a8"
+      },
+      {
+        "path": "src/core/preprocess/data_preprocess.py",
+        "sha256": "d108d0726f0cc36eaf1fed2786a0405531549b3b32879e64fd4690ff88ba9dbd"
+      },
+      {
+        "path": "src/core/preprocess/extract.py",
+        "sha256": "6c10a9a9982c3f10436e0ccde73c216688fe129588f49ba6121170bd82b421eb"
+      },
+      {
+        "path": "src/core/preprocess/formula_cdm.py",
+        "sha256": "e8c8cbc6b82f8dda20e3be468cb8c4566993ebea56bc7116334a2c45ebb5f3c3"
+      },
+      {
+        "path": "src/core/preprocess/read_files.py",
+        "sha256": "d950fa135bdcd2e13b50cbf92c5d3931b88e3c0d1e40c30eb53ee2baf627051a"
+      },
+      {
+        "path": "src/core/preprocess/table_postprocess.py",
+        "sha256": "6aa7e91b3f52371cd5e62bcc30bb5bbc8c3d7c7dd5c80862024bbae8929b7762"
+      },
+      {
+        "path": "src/core/preprocess/table_utils.py",
+        "sha256": "febb662ee1be4e97343833c3844321e8ac3d4f29452fd2ceeef5f965add9b731"
+      },
+      {
+        "path": "src/core/preprocess/text_postprocess.py",
+        "sha256": "2b995619c2013bbffefee50795940a2271a74fcbdd667b8a41ff2d83f33dda29"
+      },
+      {
+        "path": "src/core/registry.py",
+        "sha256": "b7c0361cae96c0d545d0f4e20882e46eba0fc45ab13b185637b11b39b5fc31ae"
+      },
+      {
+        "path": "src/dataset/__init__.py",
+        "sha256": "55cf8e6bfc9178b5a7cce5990dad46cd7b911995414a2e4ec94007d0af4087dc"
+      },
+      {
+        "path": "src/dataset/end2end_dataset.py",
+        "sha256": "1f6c0fadf3ddc48d0f5e5a7f54a884f7604cadb6c69b1360ef6c729f036f1d0c"
+      },
+      {
+        "path": "src/dataset/table_dataset.py",
+        "sha256": "d8c8cea64ee4b388710ba081d55fbc4ac61cc3e81dc4b1f87cb0bca921636e1b"
+      },
+      {
+        "path": "src/metrics/__init__.py",
+        "sha256": "4ee2d3b83131e414093b08592382d1915e0ad2015025aea7d8197baf85aca479"
+      },
+      {
+        "path": "src/metrics/cal_metric.py",
+        "sha256": "8cad72aa277581f7c2b63e7fc22ca4992992f407be2933353e66268b1b79246b"
+      },
+      {
+        "path": "src/metrics/cdm/__init__.py",
+        "sha256": "5e531eb3ab7d32d8e4add39101e8fd0f3b3ebd18c3c41d904a502a1574c55f55"
+      },
+      {
+        "path": "src/metrics/cdm/cdm.py",
+        "sha256": "6e07d3e8271740295d8f4e874f7a55942379327e12d74c56db5f1cb41fd2bbf7"
+      },
+      {
+        "path": "src/metrics/cdm/modules/__init__.py",
+        "sha256": "445c1d23fe34064c7451fb333b15029636c66db4d88d091ed6286901c8984327"
+      },
+      {
+        "path": "src/metrics/cdm/modules/latex2bbox_color.py",
+        "sha256": "df6f61f2d89f7fe12d317b3987fea9cfb3484472522852a0c5f6a56953b42daf"
+      },
+      {
+        "path": "src/metrics/cdm/modules/latex_processor.py",
+        "sha256": "87bdd03e674b970ba96e966f6bfd352f968b3dd4f8625e3bf7c32a2d8599f209"
+      },
+      {
+        "path": "src/metrics/cdm/modules/latex_render_percentage.py",
+        "sha256": "683621e677968436dbf101a13d10f1d2f049a858520de24ee60e8c08b1962f89"
+      },
+      {
+        "path": "src/metrics/cdm/modules/ransac.py",
+        "sha256": "2ea2d0bfa06ff150a108a959a060782beb30efc4aecb25c19cc25967378ebde0"
+      },
+      {
+        "path": "src/metrics/cdm/modules/texlive_env.py",
+        "sha256": "59395404645c6658953299c92cbecc4d0423aa7b3a324a89bfee15fcb2d2a876"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/__init__.py",
+        "sha256": "672e0d66f6d98858023ee0a90fa23f135b37fb0df4db0129396b32bc17a4fdd9"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/katex_nodes.py",
+        "sha256": "e818410d1f164f5a9100ea8fe4b1806a2ca76f3f62206812c46ae0933ebcc288"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/katex_renderer.py",
+        "sha256": "5763d61e21c27608778c0b52120c2a84a3145e525fe08357444627ccbad7dd8e"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/options.py",
+        "sha256": "330c32f2a39f708d5adee1f8a63acc45870f0c8443a45a258cdca968c0e73bce"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/parse_guard.py",
+        "sha256": "2caa82605ebe3f9399d5dd0c00feaa4ac8201f8ae13826aa4e0da7deadf0c440"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/preprocess_formula.py",
+        "sha256": "b6a344cc47c3662a6f64153de2d6f91026aa84add027d59c7aa7fde3cfd2e37c"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/preprocess_tabular.py",
+        "sha256": "bd71ee1aa580011bdfcdcec9d093430eaf59674323f9791bd65f4113b847fcbf"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/pylatexenc_to_katex.py",
+        "sha256": "214be62fc429273f871f4b4e29290555bd37c4ff28f0a89186340163d87beeff"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/pylatexenc_tokenizer.py",
+        "sha256": "2ea3d0ffe9947e9ca48e6bec1ddc2fc5f05471daa620c4369a59465f81159e31"
+      },
+      {
+        "path": "src/metrics/cdm/modules/tokenize_latex/tokenize_latex.py",
+        "sha256": "9f77e5dc3194f3fce9cd7f2162a5c9a23cd7bb162ac27717d1c5cbc44a7fa0d5"
+      },
+      {
+        "path": "src/metrics/cdm/modules/visual_matcher.py",
+        "sha256": "6c51325e6d7ad7047d85db0c653f6fa730ae717e219cb18253c0473a825c3257"
+      },
+      {
+        "path": "src/metrics/cdm_metric.py",
+        "sha256": "13bb3282c3967d2851023c4367b71a0af668f49a2c34972a10370a17be16602c"
+      },
+      {
+        "path": "src/metrics/table_metric.py",
+        "sha256": "5694f070d87ffb0a919b326ec293abb70fd9eae00b3a1dc00983dd4e8b20216e"
+      },
+      {
+        "path": "src/runtime/__init__.py",
+        "sha256": "d96ae788e3ac2407b4cd3dcc47fee2bb09ff91c34b864d45853114b8380b2d36"
+      },
+      {
+        "path": "src/runtime/concurrency.py",
+        "sha256": "c18081098ff612d611f5a7d9b33fb3fea1e6752b6b2eebfb542bb88974af6439"
+      },
+      {
+        "path": "src/runtime/eval_report.py",
+        "sha256": "dd2dd74965220783399ba840bc7dae8937c2794b40a6ff75e3fba7538f9069ad"
+      },
+      {
+        "path": "tools/image_to_pdf.py",
+        "sha256": "21c08bade8fa5f8e2ab3d6afab5c5fb3997536efe16f680cb50312f750b7a5d7"
+      },
+      {
+        "path": "tools/json2md.py",
+        "sha256": "abc0104dcd53ecdd3d67b4faf7a9810368a95969292cedb4b5b947b0bf11f60a"
+      },
+      {
+        "path": "tools/model_infer/DeepSeek_OCR.py",
+        "sha256": "fe742c2b0a0366a0cb97f0886fbaca09336245a355a282de4c5ad6ea8d4a41d9"
+      },
+      {
+        "path": "tools/model_infer/Dolphin_img2md.py",
+        "sha256": "22d1e62eafd2a30936e87f1d58440bafd787d8d5a75f68666f172b07fbdd2690"
+      },
+      {
+        "path": "tools/model_infer/Dolphin_v2_img2md.py",
+        "sha256": "ffbf02ee4c44f44b74c24a1d0202e2d3e41320d7f9e6d47069fa77231826805e"
+      },
+      {
+        "path": "tools/model_infer/DotsOCR_img2md.py",
+        "sha256": "f45e04acaa7f0351595b175877a116ce7436a30aa31aaff4e55820faf4df0aff"
+      },
+      {
+        "path": "tools/model_infer/FireRed_OCR_img2md.py",
+        "sha256": "252e5ea2b9c504ab3afd50835b84f1c655cd0f51c758a4b00ff2440648e6be76"
+      },
+      {
+        "path": "tools/model_infer/GLMOCR_img2md.py",
+        "sha256": "2c107390c3b8078ef7bc767e449f685c8fd72c08b18f67224e2dc4fa4c5ba99e"
+      },
+      {
+        "path": "tools/model_infer/GOT-OCR_formula.py",
+        "sha256": "d851fc44af3ee16d34990c6e1f75a53e241cf0d24826367fc138c0fb831ebd6c"
+      },
+      {
+        "path": "tools/model_infer/GOT_img2md.py",
+        "sha256": "b0535a4629077e99976d14e7dcc9a415813fe2c0b6f8700a79e24a5b8b21326c"
+      },
+      {
+        "path": "tools/model_infer/HunYuanOCR_img2md.py",
+        "sha256": "3ca5f8245676508b8847972f817c8a07d3dc1ac2c19cd4d5871c03bc5d9786f5"
+      },
+      {
+        "path": "tools/model_infer/Logics_Parsing_v2_img2md.py",
+        "sha256": "1d1397ab70e2346e0fa52c0b19ec2c509f5dc914cf281f82e29b45ca5401eef4"
+      },
+      {
+        "path": "tools/model_infer/MinerU2.5_img2md.py",
+        "sha256": "38824558dfa5083d18c1fa13400c17e493a52d3b35b2e2364f92f5b20225662a"
+      },
+      {
+        "path": "tools/model_infer/Mistral-OCR_img2md.py",
+        "sha256": "799f7a4eb708b5f6f8695b2f1dee31d4b29e9cbccb91dfab1c46a0c3d90eb5ac"
+      },
+      {
+        "path": "tools/model_infer/MonkeyOCR_img2md.py",
+        "sha256": "f3c15fa8fc8bb9e3b80aec10dc6b9b549d521cf06c743392bc5c93ec564026ee"
+      },
+      {
+        "path": "tools/model_infer/Nanonets_ocr_img2md.py",
+        "sha256": "00653173d0f3dfbdfa31aad03c8e0d32e676d19694beef611533fdd86710491b"
+      },
+      {
+        "path": "tools/model_infer/OCRverse_img2md.py",
+        "sha256": "9b0b2250e2401e36c7c8f8af0d0db510e6c40a2050928111b4c3c4e56f4aad1b"
+      },
+      {
+        "path": "tools/model_infer/OpenDoc_img2md.py",
+        "sha256": "0724e7158836db87809395168d0c8402eae3c999a24812711b1f766729133f03"
+      },
+      {
+        "path": "tools/model_infer/Ovis_img2md.py",
+        "sha256": "713d9f79b76ee9bcfc083a5fa1d9225b6b39800dd68830e3542ee62036f28fe9"
+      },
+      {
+        "path": "tools/model_infer/PaddleOCR_img2md.py",
+        "sha256": "075d20761cf82cee4fb60c007e024d338c42547a548f525fa416cec3d4dd9ca1"
+      },
+      {
+        "path": "tools/model_infer/Pix2text_img2md.py",
+        "sha256": "e2bce44b5fdf34a9099725b6e57fa9289fe76328daefb481d8c362454afad05e"
+      },
+      {
+        "path": "tools/model_infer/Qianfan-OCR_img2md.py",
+        "sha256": "c296989c53c968863f9ca66394b7486fdeefc42002e27a6583ce858c1fea4084"
+      },
+      {
+        "path": "tools/model_infer/QifanOCR_img2md.py",
+        "sha256": "6cad99a6c6c08b591bd358dbfd3e6e11104319206b4e6f7b7f940b05c7b8aa83"
+      },
+      {
+        "path": "tools/model_infer/Qwen2VL_img2md.py",
+        "sha256": "2795a3e3b96f77f8c6e6b6afa92b417e784dcd1ef0f62619087480a0099aa4aa"
+      },
+      {
+        "path": "tools/model_infer/Qwen3-VL-235B_img2md.py",
+        "sha256": "494256fa20937e5afcb0c505afaf092982717be612622b18d947e242a4545db0"
+      },
+      {
+        "path": "tools/model_infer/RapidTable_table_recog.py",
+        "sha256": "1d1b250be396153f8c420115ee437948c3c6d99c0481f6637bb51e012ad40b44"
+      },
+      {
+        "path": "tools/model_infer/Youtu_Parsing_img2md.py",
+        "sha256": "38bce9022337064358695874d4e00a677bf1abf466b0a2f9c2500f15331d0b3b"
+      },
+      {
+        "path": "tools/model_infer/docling_img2md.py",
+        "sha256": "539fb6cf5b92c53729a362b6f3c68b00a9bbfb220a715eb3f724a91eaa378214"
+      },
+      {
+        "path": "tools/model_infer/gemini25_img2md.py",
+        "sha256": "6dced4127567e305fadb6ee193aa62234262821dfb1c651bd9d334cd2c57460e"
+      },
+      {
+        "path": "tools/model_infer/gemini3_flash_img2md.py",
+        "sha256": "038e33a9c30e644ac3bb66eb161fb3767b2682049cf8397faea7c3b2129fc496"
+      },
+      {
+        "path": "tools/model_infer/gemini3_pro_img2md.py",
+        "sha256": "a2c7f1ab3eb8e7ee3497d5b1da12a2a6a2aeef04fbe57859b7a32c7b9e4deb18"
+      },
+      {
+        "path": "tools/model_infer/gpt_4o_inf.py",
+        "sha256": "774fbd78f85b1c6bc4957c4e0fd31699e997e423793712802469442a9fd40c3e"
+      },
+      {
+        "path": "tools/model_infer/gpt_5.2_img2md.py",
+        "sha256": "e0568fc50665ce61950ffe4d75de5cad6f45d94d548faca678455e046842e527"
+      },
+      {
+        "path": "tools/model_infer/internvl2_test_img2md.py",
+        "sha256": "1516d01da93aa21fe670a885801908e0ddc0591483435769a936e4d7cf751966"
+      },
+      {
+        "path": "tools/model_infer/internvl_3.5_241.py",
+        "sha256": "6d1e993c3b27fe0e8f0e000b06916c96690f858457fbffc6a1887bfcd597fe25"
+      },
+      {
+        "path": "tools/model_infer/mathpix.py",
+        "sha256": "4850d06a53e9126b00af8bcfd53805b05d4dde98b2d8bda1b0e4052b23970d64"
+      },
+      {
+        "path": "tools/model_infer/mathpix_img2md.py",
+        "sha256": "2e43137e99aa3670261302bb0fa4839ae3a6c228913d9157993bbea0f438b39f"
+      },
+      {
+        "path": "tools/model_infer/paddleOCR_ocr.py",
+        "sha256": "5b61300b804c4bababaeb3e71a376f3e773fa7457a8c2581cdd9ad5f1755786e"
+      },
+      {
+        "path": "tools/model_infer/phocr_img2md.py",
+        "sha256": "e13437704dc81497fc8e44c7c8ab07ad5012225ed21b0e05215707d22f85340c"
+      },
+      {
+        "path": "tools/test_environment_and_smoke.py",
+        "sha256": "db423bc62b8d46f0d117192ce97f7e7b26a1487c44c874fcfbb8af096a800735"
+      },
+      {
+        "path": "tools/visualization.py",
+        "sha256": "e91718e116a6f7e40af2f5ea4a286076141934d1baeb34c3e008c2e9084bb526"
+      }
+    ]
+  },
+  "pythonRequirementsSha256": "d4871cc92a0dc8ad3fc71098c1be34ab686fd21d062b8fb4238d4a8862b6f219",
+  "native": [
+    {
+      "name": "_openmp_mutex",
+      "version": "4.5",
+      "build": "8_kmp_llvm",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-8_kmp_llvm.conda",
+      "sha256": "c7c98ce74f6a7ff25aaa4706d06fa41d63a333add4d697b73aa4d8d2d7ad7651",
+      "md5": "a2d706b4a7d603524133037c34f7fb76",
+      "size": 8016
+    },
+    {
+      "name": "adwaita-icon-theme",
+      "version": "51.0",
+      "build": "unix_0",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/adwaita-icon-theme-51.0-unix_0.conda",
+      "sha256": "def01b148aa54d4de29b7d4bf58d941c8699582201db14cf78c6c89fa1666434",
+      "md5": "6f62266fb2bfc35a5071cfa1d6ffdcc9",
+      "size": 687517
+    },
+    {
+      "name": "aom",
+      "version": "3.9.1",
+      "build": "h7bae524_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/aom-3.9.1-h7bae524_0.conda",
+      "sha256": "ec238f18ce8140485645252351a0eca9ef4f7a1c568a420f240a585229bc12ef",
+      "md5": "7adba36492a1bb22d98ffffe4f6fc6de",
+      "size": 2235747
+    },
+    {
+      "name": "atk-1.0",
+      "version": "2.38.0",
+      "build": "hd03087b_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/atk-1.0-2.38.0-hd03087b_2.conda",
+      "sha256": "b0747f9b1bc03d1932b4d8c586f39a35ac97e7e72fe6e63f2b2a2472d466f3c1",
+      "md5": "57301986d02d30d6805fdce6c99074ee",
+      "size": 347530
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8",
+      "build": "h4e30115_10",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda",
+      "sha256": "8ec22f0ba25cbfc2e64d70cf29459eccd7ffdf6436f6a6ff15bbfef799f7d4f6",
+      "md5": "b50612e7d190b8061ab4e7dc119cf4d5",
+      "size": 124965
+    },
+    {
+      "name": "cairo",
+      "version": "1.18.4",
+      "build": "h6a3b0d2_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/cairo-1.18.4-h6a3b0d2_0.conda",
+      "sha256": "00439d69bdd94eaf51656fdf479e0c853278439d22ae151cabf40eb17399d95f",
+      "md5": "38f6df8bc8c668417b904369a01ba2e2",
+      "size": 896173
+    },
+    {
+      "name": "dav1d",
+      "version": "1.2.1",
+      "build": "hb547adb_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/dav1d-1.2.1-hb547adb_0.conda",
+      "sha256": "93e077b880a85baec8227e8c72199220c7f87849ad32d02c14fb3807368260b8",
+      "md5": "5a74cdee497e6b65173e10d94582fae6",
+      "size": 316394
+    },
+    {
+      "name": "epoxy",
+      "version": "1.5.10",
+      "build": "hc919400_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/epoxy-1.5.10-hc919400_2.conda",
+      "sha256": "ba685b87529c95a4bf9de140a33d703d57dc46b036e9586ed26890de65c1c0d5",
+      "md5": "3b87dabebe54c6d66a07b97b53ac5874",
+      "size": 296347
+    },
+    {
+      "name": "fftw",
+      "version": "3.3.11",
+      "build": "nompi_haf1500d_100",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/fftw-3.3.11-nompi_haf1500d_100.conda",
+      "sha256": "fc6c507d7c68db156d6c8c5f6a79ca6b34c2a4c0c6222d8d4ecd0e4b97d3fd5e",
+      "md5": "58628fdc0c614982f1dafd2116916288",
+      "size": 746873
+    },
+    {
+      "name": "font-ttf-dejavu-sans-mono",
+      "version": "2.37",
+      "build": "hab24e00_0",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2",
+      "sha256": "58d7f40d2940dd0a8aa28651239adbf5613254df0f75789919c4e6762054403b",
+      "md5": "0c96522c6bdaed4b1566d11387caaf45",
+      "size": 397370
+    },
+    {
+      "name": "font-ttf-inconsolata",
+      "version": "3.000",
+      "build": "h77eed37_0",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2",
+      "sha256": "c52a29fdac682c20d252facc50f01e7c2e7ceac52aa9817aaf0bb83f7559ec5c",
+      "md5": "34893075a5c9e55cdafac56607368fc6",
+      "size": 96530
+    },
+    {
+      "name": "font-ttf-source-code-pro",
+      "version": "2.038",
+      "build": "h77eed37_0",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/font-ttf-source-code-pro-2.038-h77eed37_0.tar.bz2",
+      "sha256": "00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b139",
+      "md5": "4d59c254e01d9cde7957100457e2d5fb",
+      "size": 700814
+    },
+    {
+      "name": "font-ttf-ubuntu",
+      "version": "0.83",
+      "build": "h77eed37_4",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_4.conda",
+      "sha256": "a7384ac883b1acf492fd1aef27431f0f1a647bbb8b5709a1bfab11b0a765f5e5",
+      "md5": "1df978a6efeb98fa80b96f2860b9b280",
+      "size": 1619009
+    },
+    {
+      "name": "fontconfig",
+      "version": "2.18.3",
+      "build": "h81aa574_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/fontconfig-2.18.3-h81aa574_1.conda",
+      "sha256": "004570d35fb0eff73ce3ae49b209a47622d0c2e580dd0dc4c61d59626b386a09",
+      "md5": "8ac8cc3fe744b484de4387703134d8b2",
+      "size": 265659
+    },
+    {
+      "name": "fonts-conda-ecosystem",
+      "version": "1",
+      "build": "0",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2",
+      "sha256": "a997f2f1921bb9c9d76e6fa2f6b408b7fa549edd349a77639c9fe7a23ea93e61",
+      "md5": "fee5683a3f04bd15cbd8318b096a27ab",
+      "size": 3667
+    },
+    {
+      "name": "fonts-conda-forge",
+      "version": "1",
+      "build": "hc364b38_1",
+      "url": "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-forge-1-hc364b38_1.conda",
+      "sha256": "54eea8469786bc2291cc40bca5f46438d3e062a399e8f53f013b6a9f50e98333",
+      "md5": "a7970cd949a077b7cb9696379d338681",
+      "size": 4059
+    },
+    {
+      "name": "freetype",
+      "version": "2.14.3",
+      "build": "hce30654_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/freetype-2.14.3-hce30654_2.conda",
+      "sha256": "90681f1d0658cb2fd49a074f644eb4774272499290487a4bebb1c4df01d6997b",
+      "md5": "2f4cc7dc2e6622591735c49dda1b92aa",
+      "size": 175388
+    },
+    {
+      "name": "fribidi",
+      "version": "1.0.18",
+      "build": "hb001647_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/fribidi-1.0.18-hb001647_0.conda",
+      "sha256": "0eb7cf0378cfd45c4729e2eedd896bc1fab01872d1ed204d6ea8bbf853a0138d",
+      "md5": "08fef45968356b6a9093c19f05d2364e",
+      "size": 64404
+    },
+    {
+      "name": "gdk-pixbuf",
+      "version": "2.44.8",
+      "build": "h5867e2c_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/gdk-pixbuf-2.44.8-h5867e2c_2.conda",
+      "sha256": "96dcac22eaea2f24b9c92e8be078c3e39058829aa4db2a8103c1a4e85f8925ed",
+      "md5": "3a84786e0c929f4a05d08c07be5ec9b3",
+      "size": 552802
+    },
+    {
+      "name": "ghostscript",
+      "version": "10.05.1",
+      "build": "h8df48aa_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/ghostscript-10.05.1-h8df48aa_0.conda",
+      "sha256": "dc160bfbe1cc55f281c24f0192fc124aae936c7359fd3e3ac858bbb0fc7974bb",
+      "md5": "361eea5448e03434834b7a483f3869d6",
+      "size": 59337526
+    },
+    {
+      "name": "giflib",
+      "version": "5.2.2",
+      "build": "hd20048c_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/giflib-5.2.2-hd20048c_1.conda",
+      "sha256": "be9b4cf253c7d3bf20ccc9ff278ea7ec6f144ebbe8fdc9a131d18c35ff49692f",
+      "md5": "93963a54079e27fdb1bf8d289ad592d4",
+      "size": 73137
+    },
+    {
+      "name": "glib-tools",
+      "version": "2.90.0",
+      "build": "h06d1d6c_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/glib-tools-2.90.0-h06d1d6c_0.conda",
+      "sha256": "4c0cd7642611222bc573e93ac761b811839b015e4d0d968ae2e880b944e8b1a9",
+      "md5": "62aed33caa374a6807ba9b2780603b70",
+      "size": 202352
+    },
+    {
+      "name": "graphite2",
+      "version": "1.3.15",
+      "build": "h784d473_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/graphite2-1.3.15-h784d473_1.conda",
+      "sha256": "471f34a187fdb4f2df33e26f2e471b16c239a5b277903f643d9c3a8c9a9f44ec",
+      "md5": "0c7b78d9ffff4f5a6ca28d346f734d8f",
+      "size": 86493
+    },
+    {
+      "name": "graphviz",
+      "version": "12.2.1",
+      "build": "hff64154_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/graphviz-12.2.1-hff64154_1.conda",
+      "sha256": "54e3ce5668b17ea41fed515e57fbd9e805969df468eaf7ff65389d7f53b46d54",
+      "md5": "b0b656550a16dfba7efa1479756c5b63",
+      "size": 2189259
+    },
+    {
+      "name": "gtk3",
+      "version": "3.24.43",
+      "build": "h5febe37_6",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/gtk3-3.24.43-h5febe37_6.conda",
+      "sha256": "bd66a3325bf3ce63ada3bf12eaafcfe036698741ee4bb595e83e5fdd3dba9f3d",
+      "md5": "a99f96906158ebae5e3c0904bcd45145",
+      "size": 4768791
+    },
+    {
+      "name": "gts",
+      "version": "0.7.6",
+      "build": "he42f4ea_4",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/gts-0.7.6-he42f4ea_4.conda",
+      "sha256": "e0f8c7bc1b9ea62ded78ffa848e37771eeaaaf55b3146580513c7266862043ba",
+      "md5": "21b4dd3098f63a74cf2aa9159cbef57d",
+      "size": 304331
+    },
+    {
+      "name": "harfbuzz",
+      "version": "12.2.0",
+      "build": "haf38c7b_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/harfbuzz-12.2.0-haf38c7b_0.conda",
+      "sha256": "2f8d95fe1cb655fe3bac114062963f08cc77b31b042027ef7a04ebde3ce21594",
+      "md5": "1c7ff9d458dd8220ac2ee71dd4af1be5",
+      "size": 1537764
+    },
+    {
+      "name": "hicolor-icon-theme",
+      "version": "0.17",
+      "build": "h5ce3bf5_4",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/hicolor-icon-theme-0.17-h5ce3bf5_4.conda",
+      "sha256": "0a84cd6899057d9947ed3e26a659744ba8cb1905495379442867e848b15f1a28",
+      "md5": "c62e3c5262c80792f8767b26f5542ca9",
+      "size": 14694
+    },
+    {
+      "name": "icu",
+      "version": "75.1",
+      "build": "hfee45f7_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/icu-75.1-hfee45f7_0.conda",
+      "sha256": "9ba12c93406f3df5ab0a43db8a4b4ef67a5871dfd401010fbe29b218b2cbe620",
+      "md5": "5eb22c1d7b3fc4abb50d92d621583137",
+      "size": 11857802
+    },
+    {
+      "name": "imagemagick",
+      "version": "7.1.1_47",
+      "build": "gpl_h1845f4d_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/imagemagick-7.1.1_47-gpl_h1845f4d_0.conda",
+      "sha256": "cf808d9db48429e47a1ba4c2b401e8441fb71f5a496b4e7a21dc76025012098a",
+      "md5": "db79835a4c876192eaa570a6fe1611a2",
+      "size": 1861395
+    },
+    {
+      "name": "jbig",
+      "version": "2.2",
+      "build": "h74c22ad_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/jbig-2.2-h74c22ad_0.conda",
+      "sha256": "83ae81285fd0e4818fda33dd0a118a3751b9d9b9cbd42184c5b95c15d2784cb9",
+      "md5": "ff200577cd4f6236bfd5b800d748f55d",
+      "size": 44538
+    },
+    {
+      "name": "lerc",
+      "version": "4.3.0",
+      "build": "h0699d0c_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/lerc-4.3.0-h0699d0c_0.conda",
+      "sha256": "93b1189cf3e47b93fe613dc08213cf22b892650097e8df77519e50f9301e9f62",
+      "md5": "b0a537a2f2650404b5fe49f46db50c9d",
+      "size": 188293
+    },
+    {
+      "name": "libavif16",
+      "version": "1.4.2",
+      "build": "hfce71f6_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libavif16-1.4.2-hfce71f6_0.conda",
+      "sha256": "587bf5ae30a80bf95921fec83190d8c2fc86dedfcc784aa63d54480ed7d6aaa0",
+      "md5": "63225683f46e75fb7b85fd08361e0468",
+      "size": 119727
+    },
+    {
+      "name": "libcxx",
+      "version": "23.1.6",
+      "build": "hc645fd0_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.6-hc645fd0_0.conda",
+      "sha256": "822b2a88313977594230b7be745324e4c50293a35cf9244bb19ecc9c2c385288",
+      "md5": "fcd64d8eae3a3e5a5883da0f7602832e",
+      "size": 566632
+    },
+    {
+      "name": "libde265",
+      "version": "1.0.15",
+      "build": "h2ffa867_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libde265-1.0.15-h2ffa867_0.conda",
+      "sha256": "13747fa634f7f16d7f222b7d3869e3c1aab9d3a2791edeb2fc632a87663950e0",
+      "md5": "7c718ee6d8497702145612fa0898a12d",
+      "size": 277861
+    },
+    {
+      "name": "libdeflate",
+      "version": "1.26",
+      "build": "h72bfca4_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libdeflate-1.26-h72bfca4_0.conda",
+      "sha256": "f9c75ef67dbcc8e3c255d37e32948550bc8aa6752102c181686630b9ede96b8d",
+      "md5": "3f49c4c4ebcdb9fa285e5c73441063c1",
+      "size": 55312
+    },
+    {
+      "name": "libexpat",
+      "version": "2.9.0",
+      "build": "h6111c0a_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.9.0-h6111c0a_0.conda",
+      "sha256": "b155c524118f751ad8b1c823397bab8b7f715f7e3ca10479925867a7e23e7e9d",
+      "md5": "f85a1fda9a2758a7aef2a7787d9c0203",
+      "size": 69681
+    },
+    {
+      "name": "libffi",
+      "version": "3.7.0",
+      "build": "h47dc5ef_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libffi-3.7.0-h47dc5ef_1.conda",
+      "sha256": "2783389a7b9dda04c62cc54c6bbeb03dd3cef24b3fc642715d02a3fa19464a9a",
+      "md5": "216bbcc23c11e9695b3db4a8771d76eb",
+      "size": 43637
+    },
+    {
+      "name": "libfreetype",
+      "version": "2.14.3",
+      "build": "hce30654_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libfreetype-2.14.3-hce30654_2.conda",
+      "sha256": "19ce8bd320414cb6b9889ecbf48a3ded848b0d1068b76ff6bea099bd7387d6f3",
+      "md5": "ee1fc5bba400ff0cae27fbf141a1ae0c",
+      "size": 8367
+    },
+    {
+      "name": "libfreetype6",
+      "version": "2.14.3",
+      "build": "h2ed5691_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libfreetype6-2.14.3-h2ed5691_2.conda",
+      "sha256": "d9b203d6484ad491b5b5f33d49a9d7a91189d776a9adae53d2b63af18ec11e6a",
+      "md5": "881cfb44ea02cc9849f612725a959660",
+      "size": 340923
+    },
+    {
+      "name": "libgcc",
+      "version": "16.2.0",
+      "build": "h3cf6597_7",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libgcc-16.2.0-h3cf6597_7.conda",
+      "sha256": "deacf62bd6cbbe05eb085dd69a2ca120053597c37066d53c8f7cf6815f26e9eb",
+      "md5": "f100c8baeb0c816052b0d43948555bf6",
+      "size": 365973
+    },
+    {
+      "name": "libgd",
+      "version": "2.3.3",
+      "build": "hb2c3a21_11",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libgd-2.3.3-hb2c3a21_11.conda",
+      "sha256": "be038eb8dfe296509aee2df21184c72cb76285b0340448525664bc396aa6146d",
+      "md5": "4581aa3cfcd1a90967ed02d4a9f3db4b",
+      "size": 156868
+    },
+    {
+      "name": "libgfortran",
+      "version": "16.2.0",
+      "build": "h07b0088_7",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libgfortran-16.2.0-h07b0088_7.conda",
+      "sha256": "a5b4b63d0ef4c7c59c37225b9f0307b5cd2a3a8499b2a40b6ddd2b9f072712a8",
+      "md5": "2efa9518e126c501a7c7d638b2fa3a21",
+      "size": 99745
+    },
+    {
+      "name": "libgfortran5",
+      "version": "16.2.0",
+      "build": "hdb7a957_7",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libgfortran5-16.2.0-hdb7a957_7.conda",
+      "sha256": "19297e5cf39de976cdd1a46499a4e15fdf54d249d3231f3b2a9d43af3be0bc66",
+      "md5": "c9d80dd8775b8fe76e825d63d8ccaf1b",
+      "size": 554793
+    },
+    {
+      "name": "libglib",
+      "version": "2.90.0",
+      "build": "hccd281b_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libglib-2.90.0-hccd281b_0.conda",
+      "sha256": "4ec64c476881b31f211842952f192208a3af0925a596da227f4d97fb9a63e0ac",
+      "md5": "8f63a5f35547d0c6d819830ebe0d3245",
+      "size": 4489939
+    },
+    {
+      "name": "libheif",
+      "version": "1.19.7",
+      "build": "gpl_h79e6334_100",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libheif-1.19.7-gpl_h79e6334_100.conda",
+      "sha256": "19384a0c0922cbded842e1fa14d8c40a344cb735d1d85598b11f67dc0cd1f4cc",
+      "md5": "4f5369442ff2de5983831d321f584eb4",
+      "size": 442619
+    },
+    {
+      "name": "libiconv",
+      "version": "1.18",
+      "build": "he4c29f2_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libiconv-1.18-he4c29f2_3.conda",
+      "sha256": "689a14968267f2f97c07112fca5636e7d756036b9aee969911267c20bd3eea1f",
+      "md5": "17f4744c0873e9f77ac9b5cd0a27c187",
+      "size": 750816
+    },
+    {
+      "name": "libintl",
+      "version": "0.25.1",
+      "build": "hae62183_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libintl-0.25.1-hae62183_2.conda",
+      "sha256": "b43c6645e668f86d04d5c06d6dc17efe921bbd9244be4b77946d56fb950a3fcc",
+      "md5": "a3a4193101bc5427e6cf8be81d5eeddf",
+      "size": 90024
+    },
+    {
+      "name": "libjpeg-turbo",
+      "version": "3.2.1",
+      "build": "hb001647_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libjpeg-turbo-3.2.1-hb001647_0.conda",
+      "sha256": "957469c69b3b9c9e6ae48dc1267c5c9dfe0db9e1aefa5fa9abf9798224aa23c9",
+      "md5": "d420b10837f3b64259b1febf263b5f7a",
+      "size": 555606
+    },
+    {
+      "name": "liblzma",
+      "version": "5.8.3",
+      "build": "h8088a28_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/liblzma-5.8.3-h8088a28_1.conda",
+      "sha256": "23d0630046a3e8b164d8f80f2b74ed2605af2e7050ab9913018056402fae4311",
+      "md5": "8ab10323068b107661a4b9a4af84f3b5",
+      "size": 91720
+    },
+    {
+      "name": "liblzma-devel",
+      "version": "5.8.3",
+      "build": "h8088a28_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/liblzma-devel-5.8.3-h8088a28_1.conda",
+      "sha256": "dc1b1369813f946ac40207222f439f40f6c4c9b5eac6746f61676d819b247282",
+      "md5": "2f003d60c66aa780d26c5aec7ee1c94d",
+      "size": 118908
+    },
+    {
+      "name": "libpng",
+      "version": "1.6.59",
+      "build": "hf5e6511_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libpng-1.6.59-hf5e6511_0.conda",
+      "sha256": "4de4dc4cb7432c328c1eaf4f7cc9c6b48c073eab1e9c6723d4533e6d57e7d595",
+      "md5": "4f99571d5354c39f2621b8b6e3a9afa3",
+      "size": 290299
+    },
+    {
+      "name": "librsvg",
+      "version": "2.58.4",
+      "build": "h266df6f_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/librsvg-2.58.4-h266df6f_3.conda",
+      "sha256": "0ec066d7f22bcd9acb6ca48b2e6a15e9be4f94e67cb55b0a2c05a37ac13f9315",
+      "md5": "95d6ad8fb7a2542679c08ce52fafbb6c",
+      "size": 4607782
+    },
+    {
+      "name": "libtiff",
+      "version": "4.7.2",
+      "build": "h87d37ca_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libtiff-4.7.2-h87d37ca_2.conda",
+      "sha256": "3c1cf481a60ed8598093641b3a41ee1a7bb78413029ec566a238927504e941bd",
+      "md5": "ac0e529ed6020472c12f740602e58ab5",
+      "size": 380333
+    },
+    {
+      "name": "libwebp",
+      "version": "1.6.0",
+      "build": "hc0253d1_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libwebp-1.6.0-hc0253d1_0.conda",
+      "sha256": "a2ed07c20ea34224f4b1f47acece03ae5ef97dbd4481ec649eecdf0d3b780bc3",
+      "md5": "9aaaf3669a32f6ebb63c445cc19fdc64",
+      "size": 89030
+    },
+    {
+      "name": "libwebp-base",
+      "version": "1.6.0",
+      "build": "h202fb40_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libwebp-base-1.6.0-h202fb40_1.conda",
+      "sha256": "0ff54650d470c7e54cbeffdd53a8c063e055a7bcf784388c0385ce5c4741b0f4",
+      "md5": "168a13e329259710b28277abc1395b8e",
+      "size": 294522
+    },
+    {
+      "name": "libxcb",
+      "version": "1.17.0",
+      "build": "hbffa61f_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libxcb-1.17.0-hbffa61f_3.conda",
+      "sha256": "0964d8d97845e890097ed71df1dc8b9932bee4d65e098da0c5f1e4ba158fee22",
+      "md5": "610adb90d0cc230d5c16a48fbaf06b57",
+      "size": 326316
+    },
+    {
+      "name": "libxml2",
+      "version": "2.13.9",
+      "build": "h4a9ca0c_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libxml2-2.13.9-h4a9ca0c_0.conda",
+      "sha256": "7ab9b3033f29ac262cd3c846887e5b512f5916c3074d10f298627d67b7a32334",
+      "md5": "763c7e76295bf142145d5821f251b884",
+      "size": 581379
+    },
+    {
+      "name": "libzlib",
+      "version": "1.3.2",
+      "build": "h8088a28_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda",
+      "sha256": "a18fa5d5bac452401459f966cf0d872224e8080c4ff93c77e168d43ab42ef9d7",
+      "md5": "f39288f0ea63ae962e1a2e4f355a0d75",
+      "size": 47822
+    },
+    {
+      "name": "llvm-openmp",
+      "version": "23.1.6",
+      "build": "hdb3d66b_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/llvm-openmp-23.1.6-hdb3d66b_0.conda",
+      "sha256": "b777843f1ced814ea99adf79ece75947ef70ed1570e7c3bf5b5633133a496b9b",
+      "md5": "983d351f44cc5fbd22aa40fdc791cbd1",
+      "size": 287949
+    },
+    {
+      "name": "openjpeg",
+      "version": "2.5.4",
+      "build": "h4d1e80c_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/openjpeg-2.5.4-h4d1e80c_2.conda",
+      "sha256": "e71bd04b5d0e39f39a3c039d021d3b76cd65bee3032e7f859ab7082f0ace8be5",
+      "md5": "487d92910109a711fdb77631bf1aabf0",
+      "size": 377958
+    },
+    {
+      "name": "pango",
+      "version": "1.56.4",
+      "build": "h875632e_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/pango-1.56.4-h875632e_0.conda",
+      "sha256": "705484ad60adee86cab1aad3d2d8def03a699ece438c864e8ac995f6f66401a6",
+      "md5": "7d57f8b4b7acfc75c777bc231f0d31be",
+      "size": 426931
+    },
+    {
+      "name": "pcre2",
+      "version": "10.47",
+      "build": "he63d830_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/pcre2-10.47-he63d830_1.conda",
+      "sha256": "f8c415329b542e1fca1ff2917b80e687c18302dfa0353530668b90cb225b494f",
+      "md5": "5ab90033816cbe4097e8a297e5179f67",
+      "size": 851704
+    },
+    {
+      "name": "pixman",
+      "version": "0.46.4",
+      "build": "h784d473_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/pixman-0.46.4-h784d473_3.conda",
+      "sha256": "4779cd57231ce2e96fac643fcbdd4a6f51a57986264545445574e9c4acf526d3",
+      "md5": "9a99c0b60efe41c194d01c182d000733",
+      "size": 198717
+    },
+    {
+      "name": "pkg-config",
+      "version": "0.29.2",
+      "build": "he0b766d_1013",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/pkg-config-0.29.2-he0b766d_1013.conda",
+      "sha256": "a9be4e8eddb816ab4e8fe1836ed140012cd2008ef3fa28fa21bd2c89db3455bb",
+      "md5": "ab638a9427a61fa1347b75918bfda1ea",
+      "size": 273899
+    },
+    {
+      "name": "pthread-stubs",
+      "version": "0.4",
+      "build": "hb001647_1004",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/pthread-stubs-0.4-hb001647_1004.conda",
+      "sha256": "3f79452dbda3febaf7053486e4844fa945accf4d74eac4169e2c4d5dc5e4dd0b",
+      "md5": "f0833c4a0b68798f50935dd83384c705",
+      "size": 9662
+    },
+    {
+      "name": "rav1e",
+      "version": "0.8.1",
+      "build": "hee76137_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/rav1e-0.8.1-hee76137_2.conda",
+      "sha256": "e0e436deb51c0de1f93762a529f077a74d23b0e12e78c30a90b0f46f87fc2461",
+      "md5": "2cdeea4fd51e3c2940979fb963263dca",
+      "size": 875400
+    },
+    {
+      "name": "svt-av1",
+      "version": "4.0.1",
+      "build": "h0cb729a_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/svt-av1-4.0.1-h0cb729a_0.conda",
+      "sha256": "bdef3c1c4d2a396ad4f7dc64c5e9a02d4c5a21ff93ed07a33e49574de5d2d18d",
+      "md5": "8badc3bf16b62272aa2458f138223821",
+      "size": 1456245
+    },
+    {
+      "name": "x265",
+      "version": "3.5",
+      "build": "h55d2f36_4",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/x265-3.5-h55d2f36_4.conda",
+      "sha256": "78850cd685004b1c5e41c2dd0a4fd1c9e3dd150279da8d99925832983ba82688",
+      "md5": "7c78b3dc0fda0813f8bc7915c8c64355",
+      "size": 990585
+    },
+    {
+      "name": "xorg-libice",
+      "version": "1.1.2",
+      "build": "h1a92334_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libice-1.1.2-h1a92334_0.conda",
+      "sha256": "be24e2ec7ba805fa4cee908ea102b828049f542b6471ec1d8325e17d9c7c89ca",
+      "md5": "a999957a858c60b096137cde7dbb64b7",
+      "size": 52540
+    },
+    {
+      "name": "xorg-libsm",
+      "version": "1.2.6",
+      "build": "h1a92334_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libsm-1.2.6-h1a92334_1.conda",
+      "sha256": "d0dfde0622631aeb7bf875bc601b66a953a3644ff887076d55cebdcf16a6e061",
+      "md5": "e123019080169553e15feec42ce74116",
+      "size": 28699
+    },
+    {
+      "name": "xorg-libx11",
+      "version": "1.8.14",
+      "build": "hbffa61f_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libx11-1.8.14-hbffa61f_0.conda",
+      "sha256": "ae54cdc415a16054bbe41d256a7725b5bc493e26dfff5e27245f0b0ac878c9d5",
+      "md5": "eb7fc152a9a671b2d1ccdf0d93b9d25a",
+      "size": 759849
+    },
+    {
+      "name": "xorg-libxau",
+      "version": "1.0.12",
+      "build": "hb001647_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxau-1.0.12-hb001647_2.conda",
+      "sha256": "cde7cecabb662b435e6537591e5845e870a0648887542d3e538c9f6c20dd6be5",
+      "md5": "610f557e75d6a0d3f676914da5822227",
+      "size": 17325
+    },
+    {
+      "name": "xorg-libxdmcp",
+      "version": "1.1.5",
+      "build": "hb001647_2",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxdmcp-1.1.5-hb001647_2.conda",
+      "sha256": "30240b39d7b956e8f7a8231ffa0c1fce097124e40b3eb48a523d13d3937e3194",
+      "md5": "14a26fe87734f988eed32abf6afd4c3e",
+      "size": 21021
+    },
+    {
+      "name": "xorg-libxext",
+      "version": "1.3.7",
+      "build": "hb001647_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxext-1.3.7-hb001647_1.conda",
+      "sha256": "17df0f498ae9018958faa52f8b4c171fd01711d25c8ee6a72671741b8047feea",
+      "md5": "2a9acad1cd4dc5e76f4f2acabd0a639d",
+      "size": 44697
+    },
+    {
+      "name": "xorg-libxrender",
+      "version": "0.9.13",
+      "build": "hb001647_0",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxrender-0.9.13-hb001647_0.conda",
+      "sha256": "8de1c83b82a8f4ba1456fbe1a17ae959c8225d8a56de12be1a392a5d73cbb7c8",
+      "md5": "c9b44a9d5bf7224606859a623556e802",
+      "size": 29877
+    },
+    {
+      "name": "xorg-libxt",
+      "version": "1.3.1",
+      "build": "hb001647_1",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/xorg-libxt-1.3.1-hb001647_1.conda",
+      "sha256": "cf896717611de9608a000664b7020bb56d2ac1298b2222c356756f7f76c5e4fb",
+      "md5": "34a2c031108034b169b6981e4f2941a4",
+      "size": 187427
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "build": "h8088a28_3",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda",
+      "sha256": "ab46d85e4fcffff1b1c5cac517afa40b7ae784cf76fc9da1f55f6a6934291eb6",
+      "md5": "2c966485853aa27985fbec7e3fcc4e77",
+      "size": 81744
+    },
+    {
+      "name": "zstd",
+      "version": "1.5.7",
+      "build": "hf451053_7",
+      "url": "https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda",
+      "sha256": "da867f5092eb0cb746d353694f0098031fd9817a4ce7d5743121209ae0f406ca",
+      "md5": "4ec2684c73812cc2c3d78379384a39cc",
+      "size": 433687
+    }
+  ],
+  "texlive": {
+    "year": 2025,
+    "repository": "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final",
+    "installerSha256": "311df9f1477fd90c520159d1feddc2d6270f010d8349d1f6bdb9461a93b48a5c",
+    "scheme": "basic",
+    "extraPackages": [
+      "geometry",
+      "booktabs",
+      "multirow",
+      "amsmath",
+      "amsfonts",
+      "was",
+      "xcolor",
+      "cjk",
+      "arphic"
+    ],
+    "localDatabaseSha256": "c134164ff8bdcf4cfc96bbc6a6a5586c6a2e746fb47ac96e86c20732c368bf12",
+    "gpgSignatureVerified": false,
+    "packages": [
+      {
+        "name": "ae",
+        "revision": "15878",
+        "containersize": "57348",
+        "containerchecksum": "6b1c57d5bd3f0959e611659f979ed42b81e397a182d09b3482e98865196077334a9796777aa112ff367b97c232859d4f9637730dcd2654e6232c577d2f59c39a"
+      },
+      {
+        "name": "amscls",
+        "revision": "77677",
+        "containersize": "32244",
+        "containerchecksum": "4cdddd807a88957f9c22eec97c05414ae3841eabbeb23e7aa6e059d4e168454051031cd23870fc17739fb8fe7acdd0199668d12cbda6ba24af3b5e79f3b77b48"
+      },
+      {
+        "name": "amsfonts",
+        "revision": "77677",
+        "containersize": "3626288",
+        "containerchecksum": "6f60ae687e26b34e0335565453246a8850fd1a254213ca2adfdc281ef2496cf291f04ebfde2966b01e9e57d98e13dffac4122ad1b3c9a48d381f918eb52f9336"
+      },
+      {
+        "name": "amsmath",
+        "revision": "78116",
+        "containersize": "31636",
+        "containerchecksum": "45d5b1dfb9e80394c331b727117d84fc12bb1a4a9c0b934f2dff29bdf84d9d0ff30557e0cbdde479461c579a3accb86c47c44661108871a744191291fdf7df1d"
+      },
+      {
+        "name": "arphic",
+        "revision": "15878",
+        "containersize": "27383316",
+        "containerchecksum": "2d4c0f91dd483df95bf91056e4d7cbc28b681fc9f42704cdbff297ceb4f8110affbed879cc8b15061c309764e1fdcce01fd47c2d742df441ed191f83a065538b"
+      },
+      {
+        "name": "atbegshi",
+        "revision": "77677",
+        "containersize": "4736",
+        "containerchecksum": "2896f2100b4acd735c5333e130ff85a4be52c26746b920ef5900be303bf15994ec04ff94bf17a15008ce46a24556bf1119364d6026a272b119875462247949ef"
+      },
+      {
+        "name": "atveryend",
+        "revision": "77677",
+        "containersize": "1172",
+        "containerchecksum": "d9290c3cd0481d3c22c7c9e6584bafa980d0466d89535694048f89d243cf3cbe029ef75d51f3734efa165cc7150c307542d11f8ca3288ac84bfea52b8c8741dc"
+      },
+      {
+        "name": "auxhook",
+        "revision": "77677",
+        "containersize": "1668",
+        "containerchecksum": "c37a70820ea2b2cea1b59b4dc54cc29d8b197e97c6cc420cafe89d3d29ac7e1597b5dee0ea7beb93a2304516df45f75056a91c2b1ca82c07640126fa262354f3"
+      },
+      {
+        "name": "babel",
+        "revision": "77821",
+        "containersize": "243580",
+        "containerchecksum": "3b85869a0ab1c1ff541d795a5219c65413e0224ef7b858c383fda15d6d9618b6a8bad1095af6708c86e12bf65d92cec6dc698bc30be6c239bed53ec6f130045e"
+      },
+      {
+        "name": "babel-english",
+        "revision": "77677",
+        "containersize": "3032",
+        "containerchecksum": "503c2741a17ceae727c3e784d6b0020001025d135b24ad9a550316ab20b55f94341136e6d9ba6b9c384b1a272a16ac97b9d9678915f82d5809bef59a66eed466"
+      },
+      {
+        "name": "babelbib",
+        "revision": "76790",
+        "containersize": "27244",
+        "containerchecksum": "78a76d174eade2a6baae13dd52cf7a25c824f832e7925804abf9e35846655f9eadf5430531e7e2f512e8b8b902dabac7b3a66e3f8dd58ece8bc544421412fbc7"
+      },
+      {
+        "name": "bibtex",
+        "revision": "77677",
+        "containersize": "14896",
+        "containerchecksum": "cc81600961153f15b213a0de9482e744990598ea0861fc5a05127ac0bad68738ca57dedb2309b65739ec5ac709c6b22c97b2db53b25d91ab9306ae1753493c52"
+      },
+      {
+        "name": "bibtex.universal-darwin",
+        "revision": "73806",
+        "containersize": "179180",
+        "containerchecksum": "b711a2c2923b464d82e9e330977e6ea91821ebd097da587de07efe485375acf3adc26e9d1f09cd1aa1a2eb3039970da3a94617249b006b52e0128f4a415ca2fe"
+      },
+      {
+        "name": "bigintcalc",
+        "revision": "77677",
+        "containersize": "6520",
+        "containerchecksum": "e95f15ab3515e45d2d40d96f56ba29b942b27533af900899de1c109e780a16b4edde1b1e78d45b03d47712b72cfe040b66ef9f6f6165295b642940538f393699"
+      },
+      {
+        "name": "bitset",
+        "revision": "77677",
+        "containersize": "5724",
+        "containerchecksum": "d9115bfcaee29b7517d38d9187b44c026e099519eab7122346c16e9ce8f0e38be1a4b3444b14a7fc1424c23e4b73086ffff1982109c6b5913ab10864468a51c4"
+      },
+      {
+        "name": "bookmark",
+        "revision": "77677",
+        "containersize": "8036",
+        "containerchecksum": "4fc2080a53725707ffeed9d6bae7f7585fe1543925a479fc261be46901e9abf580001cb4ffdbd4c4dd7ff5f6bede1cfc81a900880f9426d165a72f5bb36664ad"
+      },
+      {
+        "name": "booktabs",
+        "revision": "77677",
+        "containersize": "2208",
+        "containerchecksum": "e8e69f00b08f3177ae91d2d3c1750a296caef7baaa087410e0b425765e3a8f7a26222f97563621951d557e3ab5cace465cf620fd63c4a2a610af87e6ebb75748"
+      },
+      {
+        "name": "carlisle",
+        "revision": "59577",
+        "containersize": "8688",
+        "containerchecksum": "345c61b7eb6637e73a66b5f9183ec39188d4e2ffdd418f12d8ae70394f447eaf8a5d8c62e1adfa515ab7879e1afac4163957ae0b6facafd9ae6ad6f300acbe03"
+      },
+      {
+        "name": "cjk",
+        "revision": "60865",
+        "containersize": "58480",
+        "containerchecksum": "b13712912e479dab68cab9027042be8cb11047ebf9c034f532c857e83d28f19dfea5a1748685cfe1847c7372f2d0982f79736525694d937c88962c5262094585"
+      },
+      {
+        "name": "cm",
+        "revision": "57963",
+        "containersize": "238064",
+        "containerchecksum": "e65b2096ca183ca21d8ff987489223bc98750fcbaf4f9f9a9996f5153a76c5587d1ad77693234d02f80753b8b8cb86fd957514f82065bd7aab9eb64bad9003a3"
+      },
+      {
+        "name": "cns",
+        "revision": "45677",
+        "containersize": "2985692",
+        "containerchecksum": "0b3645da07e0fc9482cfeddd93f949e18dc12b6aa02e5a6c45669f3d5f7f25d5fa7ff4992f40b9b71894e21b5b1855999ba8e1b130be27e8b7001444ed30db0f"
+      },
+      {
+        "name": "collection-basic",
+        "revision": "72890",
+        "containersize": "632",
+        "containerchecksum": "f944ce8811b92e0d4df114f660567e3d1522e83051e0dce222f92af8085e93e876ad00614c45e2658e56fb7137343526a93c4066450d8fd7d41b00075d6b9293"
+      },
+      {
+        "name": "collection-latex",
+        "revision": "77034",
+        "containersize": "724",
+        "containerchecksum": "5947c04975cd5fed3e856320bbd7808c943a47c3a32cbf0560080751da2f2fb315ad380c63f500d108e112f81219a67b2c36a5811f7b233231f34ba669425f67"
+      },
+      {
+        "name": "colorprofiles",
+        "revision": "49086",
+        "containersize": "87972",
+        "containerchecksum": "49be492e62fcd615b08bb6a32767cac54a9535ab859d2a27d1c84788d4e168df2a10133e5408ab1bd3a802ffa8465a61c4144cd9cbafc6fa98f995cb7af89381"
+      },
+      {
+        "name": "colortbl",
+        "revision": "77677",
+        "containersize": "3748",
+        "containerchecksum": "4bcd1ccf3c3000e30f4004855b8f80f2295f93376a39d294abba623acdbc507f550a330fa8fa91dae1612187d4b8ba9de75122568136a8356eab0e15b84e1311"
+      },
+      {
+        "name": "dehyph",
+        "revision": "48599",
+        "containersize": "46556",
+        "containerchecksum": "2dc4ee5b4389549c032f3a4d87740ab3c5e296a1ef109a6b673656a82ca4c317ca774f39f61417568b8ccbeac787c4058184fc893d53799bbf0b042ba5aca9a2"
+      },
+      {
+        "name": "dvipdfmx",
+        "revision": "76377",
+        "containersize": "26976",
+        "containerchecksum": "83dc7dd26a4d85683dbc5f17781b2f6fa03b90bc1ebca28facc92f7366e3e3a701f3501704c6a5afb03c2c666ecf4d658e9abb31e5f6a034ba5f2ea3a1666fad"
+      },
+      {
+        "name": "dvipdfmx.universal-darwin",
+        "revision": "74936",
+        "containersize": "812000",
+        "containerchecksum": "0f6c82beee74ffeaa3174e3e61d50c1e47b701fc7e4c8ef71cda708c212725ea6009f9d51a36d8ce8dd7909da025e1b341447a1136972a4b7a30fb55d78c6633"
+      },
+      {
+        "name": "dvips",
+        "revision": "73850",
+        "containersize": "58076",
+        "containerchecksum": "cc938ebf2fbeca40d430bc43a6b66dce9f6410a63459b6c9debdf537b0765b25d8024293d0ebb19adaa6a282f5302e3796779ba16357115e588a1264a46edce9"
+      },
+      {
+        "name": "dvips.universal-darwin",
+        "revision": "73806",
+        "containersize": "297100",
+        "containerchecksum": "0f3d2bf205022b8189c893a6859b36b5ad8d65f3dbe87fa47f017d934a1289e3881ce452e771f5d30d7cd30fa866da0305d7eb8e23055d2219f5035ea2a25e18"
+      },
+      {
+        "name": "ec",
+        "revision": "25033",
+        "containersize": "263716",
+        "containerchecksum": "a967804b42bcc11e766d5b74de28c54d167625d2b108a34bc5e49351533ddcfe3334e4a7a34966f8d159bbde6a80f84b4d216553ce03fbcfb7a4b6267574538f"
+      },
+      {
+        "name": "enctex",
+        "revision": "34957",
+        "containersize": "23748",
+        "containerchecksum": "e6dc0988bd10dcefd63db2a57999637b63187d8a234c46dcb148e9dfe8388800e61237d7b58d271b735d2658d40c1f81016b5018e239d556fb9615d35b4129a0"
+      },
+      {
+        "name": "epstopdf",
+        "revision": "71782",
+        "containersize": "14936",
+        "containerchecksum": "323b20d556be6e076303045a1484190c08deac0da6a9d31a0a4f24ec96da2f0fd159260b3a5e456500ee15727fff19d1dbc7e8c893adf88571f5ecf656d5afbd"
+      },
+      {
+        "name": "epstopdf-pkg",
+        "revision": "77677",
+        "containersize": "4200",
+        "containerchecksum": "e9f159b536cfe01b49e724bb4d0c05a631d0ec4da64139887ae3a9ebc589375caaa2a7a6bc03ad5c71f0ac7c3cefdd2928e58c7ead8eb74e80fdd9581a74c4be"
+      },
+      {
+        "name": "epstopdf.universal-darwin",
+        "revision": "57908",
+        "containersize": "364",
+        "containerchecksum": "9c9a2e56d91c80e9f2938f16565017a7db0e828c987a9dd5b56aad28dc3c26d9057d7ea74011b215fcff5857981d75d7b7bdc0a3fecb83c7d3205261beda5c29"
+      },
+      {
+        "name": "etex",
+        "revision": "73850",
+        "containersize": "11572",
+        "containerchecksum": "78bec7371541769eeb3e9d8dda666be6557091f824cb93960e7ad083ce54a90012524b16c0294cfcdadf475b2707db0e32437f70b085270359232267f184b1d3"
+      },
+      {
+        "name": "etex-pkg",
+        "revision": "77677",
+        "containersize": "6040",
+        "containerchecksum": "c826f2e8678600344f4e760616180454e0a91f02e192d7315bc742b5fc00ca617b6d990e4597df39d8c0374e7439265cd65cf0c4efd791c7a57a53794163212f"
+      },
+      {
+        "name": "etexcmds",
+        "revision": "78116",
+        "containersize": "2460",
+        "containerchecksum": "910672e62cab056995203ec1f7528ce80150b768b663bfa0e3f027ecae21a8ac24270c05780f71e5fbbca7bc123e37f1014469a17975d05841a8a19154dec71b"
+      },
+      {
+        "name": "etoolbox",
+        "revision": "77677",
+        "containersize": "8780",
+        "containerchecksum": "b2b3c5b29498553088b7a86a9e088c0f1a66daf354680beb30e0c4730b17a0917764d583c1b2af2f3a06c734a49de60b2087b9d7ea0e931e888d73f74e515e78"
+      },
+      {
+        "name": "extractbb",
+        "revision": "73916",
+        "containersize": "5964",
+        "containerchecksum": "316aeff9d1455426f486f297e8791d7f74ce0f0e3012b4ef098820fe8e6d78b37b8d174e9eb1e704e66b93815301c6d6ebd7340cd803b6dc04e655509279a454"
+      },
+      {
+        "name": "extractbb.universal-darwin",
+        "revision": "72890",
+        "containersize": "344",
+        "containerchecksum": "25268d447e110755df190e46be731648131a9e0c5e22b1d719836215c4f9178a5f699eb4f644646e0e062b01ece1580466e447b48c6dadbdd124ec51dd8d0d8c"
+      },
+      {
+        "name": "fancyhdr",
+        "revision": "78116",
+        "containersize": "8412",
+        "containerchecksum": "232aae9c526e548bd73f43a2f6b887be3641967445159208c9b4b0f5769c06d68c549a5a73dc48345eb391192ebd24e470e8004b431a7f38fe207471b8834835"
+      },
+      {
+        "name": "firstaid",
+        "revision": "76740",
+        "containersize": "5184",
+        "containerchecksum": "a9c52037430294b047a5d069a8e15f7c1864dc1d9b0d420f0ac3716f0deefa76bb68141d601d9397a788eb16f0055a489da7f2fed5405c493e0210f997bfc2a9"
+      },
+      {
+        "name": "fix2col",
+        "revision": "38770",
+        "containersize": "2684",
+        "containerchecksum": "b3f096a64fcea6c6b2864d4e8a86733afb852f3decae4704e6c275c41e1295622f1eb1c8db0e0d33a29e369a9b757495477c9ebcf82ae0003c4316967c03f0dc"
+      },
+      {
+        "name": "fonts-tlwg",
+        "revision": "60817",
+        "containersize": "5031944",
+        "containerchecksum": "3b1894d677b63c88010fe583381ff7c0c8a7c5c6753e62e166ffa8ae7f18d6a521b12a4e57f16634855f3b807605407cfad110eb405a3ad334f8a14bfacb6338"
+      },
+      {
+        "name": "garuda-c90",
+        "revision": "60832",
+        "containersize": "3416",
+        "containerchecksum": "a806538598cae0365968ab20936631a052dc65f9f6056c39197f7b1c7a5aad717a7a8b72ed2a1af347f8ce91f27d7dcd74b758db8f01fc7810a8d658990bcc28"
+      },
+      {
+        "name": "geometry",
+        "revision": "77677",
+        "containersize": "8720",
+        "containerchecksum": "83ab6691fa711f70c8dfb57a3042e555e3658ee95014a5e2ef7e5be130ce544817b89194d623e2b258d1d24942591e7d3f06e751698ba5ca62b3f2542f888d36"
+      },
+      {
+        "name": "gettitlestring",
+        "revision": "77677",
+        "containersize": "2792",
+        "containerchecksum": "ff35c71d4d742d1e4d727e3447ca43857a944aec9b7301f68bcf3ea01d0eaab2458f8f4f76437d55d98a10a2c1bad68ff4fd8ba3330baeb0f7ef9792ab224815"
+      },
+      {
+        "name": "glyphlist",
+        "revision": "54074",
+        "containersize": "24764",
+        "containerchecksum": "c050808623d162ffbfba8742c9aee6c92555717eb3ed0a0cfb0e3cd6696c4f6d940aa494582011e6d0becc3c5572ddccac2598ac8d521b58a323768272f9125a"
+      },
+      {
+        "name": "graphics",
+        "revision": "75374",
+        "containersize": "15980",
+        "containerchecksum": "be003ee31cd33508d5ba8549848776b292a9c54d143dbbbb61254aa3fec331223b372ea163d8ba08a09766e929d33bb6e53c857c19e9370c28915e3cc94448fc"
+      },
+      {
+        "name": "graphics-cfg",
+        "revision": "41448",
+        "containersize": "1160",
+        "containerchecksum": "e1015d360b56f63f1b9790daf16e2101e6af995bd1e45288ea604ae94e20196cab22e7e54d318aa79fa386123032a928be70a57154d409321e04f03ecf97ab75"
+      },
+      {
+        "name": "graphics-def",
+        "revision": "76719",
+        "containersize": "10992",
+        "containerchecksum": "5fedc5bd4ac2313c920b23addb5753f6f90ec5def0b9f7e8fa6b31248c01a5246331f0d266d367d806931f61e824925099d9bf61f805f81c21385007f7f832b3"
+      },
+      {
+        "name": "grfext",
+        "revision": "77677",
+        "containersize": "2328",
+        "containerchecksum": "9b008a2fa836c6e6bce517bb0b768a9df5e76069c52d360f16458cf57182e40f4cd084fd6ecd8a10a7697981111989190b7d55859688d8f32ae618823b5bfd69"
+      },
+      {
+        "name": "grffile",
+        "revision": "78116",
+        "containersize": "3860",
+        "containerchecksum": "881200bcbf8fe10f5227fde79ced27539f230ac6d7424c92d6bf63670d8ce3c209ee38d722ce341bf896e1d18c52c5db8949bde7c665a0cdf17322faaff1f62d"
+      },
+      {
+        "name": "hopatch",
+        "revision": "65491",
+        "containersize": "2184",
+        "containerchecksum": "6c0f9549ce0321d9080cd0dfd3062eab47722bedac79293a14019c25edfdca7afd0cd6bd3b7be67a99a93ea0b347ac798a7b24909886d300e7085ca67d1a5c42"
+      },
+      {
+        "name": "hycolor",
+        "revision": "77677",
+        "containersize": "4052",
+        "containerchecksum": "5f4b8730e468da55c792a41520c434685b38beaa74314da9db8c4ad284f2fb62f960435b48e3684a78dd822de82bb15ec78cd1364974275c365ce9364c820405"
+      },
+      {
+        "name": "hypcap",
+        "revision": "77677",
+        "containersize": "2032",
+        "containerchecksum": "f8a83ec6ed374c881277872900b7a59eb68263dd7cfb68f781217346c0fceec862c7c5500c1b54532a2405af2c799434dae75caedff54de2b7ac97606c0661c4"
+      },
+      {
+        "name": "hyperref",
+        "revision": "77677",
+        "containersize": "89088",
+        "containerchecksum": "2396dbbf8b1d15359af6bed98b72e4962155d822886e08652f9464e99bbd2592f6f53e8a246d1bcd0042311341eff2aefc7dfeac8288745e0de9c5bbbfcfe7f8"
+      },
+      {
+        "name": "hyph-utf8",
+        "revision": "74823",
+        "containersize": "15988",
+        "containerchecksum": "132d7658db67b71e82123cbe8054f5766858a1c405966c82b6f76ab43b9b967429cb74ee081405dd3e690af0d0479482499b0cd882445489dd65bce69ad77bd1"
+      },
+      {
+        "name": "hyphen-base",
+        "revision": "74125",
+        "containersize": "22636",
+        "containerchecksum": "004e08de194563dd70c02a487465728bdf9bf235a01793495e048df7674581fe9641d0077bbe1d3fbdc982273da7d29a17abe462d2387dd5c6390bfcf3630770"
+      },
+      {
+        "name": "hyphen-english",
+        "revision": "73410",
+        "containersize": "41380",
+        "containerchecksum": "45ef57447251eca794998f373651ca85429f347396185b3d9b8d0467062dd77b1f2dd94090b9e393f52e5cf503ea7cf344bf61785072b4740d99a77fab4b1f0e"
+      },
+      {
+        "name": "hyphenex",
+        "revision": "57387",
+        "containersize": "8700",
+        "containerchecksum": "77ad574e0786d7cd8e7d731fa7666a6a531b29a914759ecbb9b5d6e5f62e9ec9027aae7e3b9ffd62bd918bb0354c41e865779b044381bc1b7256528eddb34754"
+      },
+      {
+        "name": "ifplatform",
+        "revision": "77677",
+        "containersize": "2008",
+        "containerchecksum": "efa7dd7a7bdf685c7557e594524fc015c4fc080dd95ce3f008a4894187e1496b029d0da9fad57edb48dd73a7da6e54a78ab68483df8e581c0ac978111585f813"
+      },
+      {
+        "name": "iftex",
+        "revision": "77677",
+        "containersize": "3256",
+        "containerchecksum": "b958d8285b1ce12010034fbea4c3155a7f44c8aecefd16559581e24cace453dc6b25ab5a40a2340940fa9e540da5a5a8e46ab5a726cd1b7aad8f0996afea1553"
+      },
+      {
+        "name": "infwarerr",
+        "revision": "77677",
+        "containersize": "2656",
+        "containerchecksum": "eb441377de3ad2055b61a5170391209ce669f3dc345bdf86efa9de8b2936db6e13e73a83b26e925e3a492219261dec2c0dc35397b4de2533846a39d5804e5876"
+      },
+      {
+        "name": "intcalc",
+        "revision": "77677",
+        "containersize": "5448",
+        "containerchecksum": "35cc89fb58761ae3afe91c11cbb4e4694b48baa80f06dfb00fb347b0252238d18c10d7ce2db8f0cce761d655e62da88c3fdc73dd4d5890784f8a69604fe5669f"
+      },
+      {
+        "name": "knuth-lib",
+        "revision": "57963",
+        "containersize": "30508",
+        "containerchecksum": "47d50b1966dc5a3adf4921c297d9ed5917035e917098154fc08d1c72ebd0ba70ebfa41735c7ae52c5087d62242bcfa9b0b49914c6da4f392e2d4c56a6d72807d"
+      },
+      {
+        "name": "knuth-local",
+        "revision": "57963",
+        "containersize": "23156",
+        "containerchecksum": "91962f359e8b2f668130a6511e7fafad26a0c4c14a46f715172aa28723f743e08c50be666cadafd7a591f2283daec4fdd45039afc714115077667b66e67cedb5"
+      },
+      {
+        "name": "kpathsea",
+        "revision": "75425",
+        "containersize": "33128",
+        "containerchecksum": "77af79f31614f265ac43611b18b4ed35da0ada30263f78e7b23c434538e1c67fd1fdd1693c89ea5d53fb2964b7e4eece713e28e6a2d50ff2a2a63e1e20165f34"
+      },
+      {
+        "name": "kpathsea.universal-darwin",
+        "revision": "73806",
+        "containersize": "84944",
+        "containerchecksum": "c1d08a88667caa69a9b5dd7e6bb559fce2f3c5a4c4f9f7e059c5207847dff1254cbc43a6a80b51223b9d3f58e6d24a53bd0763a650f682f9551c76ed7850242b"
+      },
+      {
+        "name": "kvdefinekeys",
+        "revision": "77677",
+        "containersize": "2104",
+        "containerchecksum": "d4e75bb8f4662243f33b78fbcc42f595e84e26c915e69c3c4bc1502ad270410eee8602e32cb9efa19c3fa6af5f2067b4a2dae32ff876093ff16ff1cf35092096"
+      },
+      {
+        "name": "kvoptions",
+        "revision": "77677",
+        "containersize": "7192",
+        "containerchecksum": "a86e9948dca5cfd6ea06844b453a2e622af79d319837484bded0e5875fca8c990c09ded664149d6d0a4a9f9803670eb39dd5acea35e33314fdb282a159efb898"
+      },
+      {
+        "name": "kvsetkeys",
+        "revision": "77677",
+        "containersize": "3580",
+        "containerchecksum": "dacc4c995caaea57f78e0563ad9d54ecc1bf933e24680ba6a4a7b1b410e5cd619ae600570bb0ba8554ba4edc13fa2cc33675ef84401d391792d15b3a2f1a77f6"
+      },
+      {
+        "name": "l3backend",
+        "revision": "76924",
+        "containersize": "16544",
+        "containerchecksum": "dbc3f7b699ca69504c61b207286daeffe0da699ad2a6439fa271691b5b825b156a4a3e1e67b423daaa86a011bd671d56259ca7e285e2bd9d15131b5a88ee6865"
+      },
+      {
+        "name": "l3kernel",
+        "revision": "77438",
+        "containersize": "188720",
+        "containerchecksum": "def3bb6f94a0b78d8e27d7d6ca1cddf2cb480164c32a84dae5c5d05f79d7ebecd9ca5a4f4554c55a32092a342c6341a9e618c246ff0a1bcffba33565c09d8669"
+      },
+      {
+        "name": "l3packages",
+        "revision": "76637",
+        "containersize": "20448",
+        "containerchecksum": "47a7365cb7d3c00ccc6a88917d7500d45cc5c1eb5faa6a6ea9b263dfe43426284fa6f2091a7f20b6a8cc82313ec8248f6137f97853c0a36049ca0f20a13cdc8c"
+      },
+      {
+        "name": "latex",
+        "revision": "76924",
+        "containersize": "260056",
+        "containerchecksum": "4ac48b1a1d59365d5efe06897bb7db085931ceffc77b6076d74d664ba7af1bf171b0af4e9408ebff236c29b80c9567dcb25ff81020a035ccd2f2e1b9ca31cd46"
+      },
+      {
+        "name": "latex-bin",
+        "revision": "77033",
+        "containersize": "600",
+        "containerchecksum": "e992f71fd145ad3451c9ba6a0b8a07fb8ddd635aa32f6dd4386a901e2ddd3a7ee9d9ef108bd4618a52876c6809c0583ed71984bce393f6f3233a45b5a3edf2b4"
+      },
+      {
+        "name": "latex-bin.universal-darwin",
+        "revision": "57908",
+        "containersize": "376",
+        "containerchecksum": "45abdf9fec79500491f0f3c5511aa2a8a25521ee9bf648e9f81ea667c194aac2bdf76267e0f4276cfbd70e4b8f3c1f109129c77030138ba43f51f4e6e0d291f8"
+      },
+      {
+        "name": "latex-fonts",
+        "revision": "28888",
+        "containersize": "17972",
+        "containerchecksum": "98549dd0c7b29511abc3a1a6b6803a86af0b48121d47e292066f3b67e4b5847efbb7025352c1ec996778c7ea3a5cba552385e9b4dfd6ab005d716f503e37a26e"
+      },
+      {
+        "name": "latex-lab",
+        "revision": "76739",
+        "containersize": "56400",
+        "containerchecksum": "b16fc432bc8c7c15cb3ca21b73bea3592a5fa4a099e124264412ca9ca6a2b31d9d2781d9c02b21b3d0386c2429d764680942e26e6422d1819a948a71a3939712"
+      },
+      {
+        "name": "latexconfig",
+        "revision": "68923",
+        "containersize": "2240",
+        "containerchecksum": "22e233cad5742691da573249b3f9cd4ea0c6ccf4e31a757837d710ca863e0cccd089106e523e40fb541255f3795d963273ccdf70211f19ff3caecb30d7fefcbe"
+      },
+      {
+        "name": "letltxmacro",
+        "revision": "77677",
+        "containersize": "2084",
+        "containerchecksum": "ba4c7d6422153428336a861dad72be6d261da55b6859c4a0eca7ad150a60723b2a195f83d72780e992aaa4412a8455c4c310d72830b9b23a969edeead7af9562"
+      },
+      {
+        "name": "lm",
+        "revision": "77677",
+        "containersize": "11944800",
+        "containerchecksum": "bacdb541c99bcf1b25fdfd87094a98ce48642e534e0017676fccdc81843f9f1e64af271180589a96513915dfa15a782458e151c760ddb26929a29ba0b9e141ef"
+      },
+      {
+        "name": "ltxcmds",
+        "revision": "77677",
+        "containersize": "4132",
+        "containerchecksum": "9206308fed3c14f21ced9c5ed7873943201e42217cedeb8fa5b14bddcc5e6720e36a1b63db340b1afccaf500c1406c7c5891c8e3d8e687f85ea4ea52dd80dc66"
+      },
+      {
+        "name": "ltxmisc",
+        "revision": "75878",
+        "containersize": "15364",
+        "containerchecksum": "a6c3d5debd34d02becaae98c7ae68d8df206307695ff01bef002b724bcd45c47a933564263b635c717109aaa663d2cb16157e4a0c4ca3552df9e076d8c3508c2"
+      },
+      {
+        "name": "lua-alt-getopt",
+        "revision": "56414",
+        "containersize": "2008",
+        "containerchecksum": "60ad4731ac61f9b5c4360bb3d0c6475e2abd358418e20bed29cc94761fdfb97fcf02829b9785e559ca6052a1e82ee7f0b104b166592b9fd87237679ac3caa2e6"
+      },
+      {
+        "name": "lua-uni-algos",
+        "revision": "76195",
+        "containersize": "12332",
+        "containerchecksum": "50022083eb3659c994e571d9bd9c9a916b9b47e34c2776e73515afdff0361b49fac8da59c1532a578a5518c70236983be4bbb2412845a30064d421ba3c85bf66"
+      },
+      {
+        "name": "luahbtex",
+        "revision": "73848",
+        "containersize": "460",
+        "containerchecksum": "9c9ff51255befd74735dfdecfc4c7d1fdb184e8dbf10e34311601f1ec39dd414e179e3f290ea296d40d8f0a02ea3f9df24a733d4d6b9738a24a3d5ea9e669975"
+      },
+      {
+        "name": "luahbtex.universal-darwin",
+        "revision": "74677",
+        "containersize": "4393824",
+        "containerchecksum": "9427bde2bd97a1de73fd25218818e343495c724d8079d4d14900b85925b1bdd6104552c03df2abde05ac5571e4a6c7208fde59cbd9a5876dedf788c1cb156bf7"
+      },
+      {
+        "name": "lualibs",
+        "revision": "67994",
+        "containersize": "133320",
+        "containerchecksum": "4387311fb78a29d63959114e401a2b97a8743a50c76a22163e0d14f15cd7b51a50f4be7a19232b32fa4152eac71c73fbeebcb8e38fee3bfc997aaea37bef78bf"
+      },
+      {
+        "name": "luaotfload",
+        "revision": "74324",
+        "containersize": "623572",
+        "containerchecksum": "4300e5f4b3fe37babb12cc36cc5a130c1a0f246db6e3b8955813c62f41b698e5a08443eb7b41c8afe4fab08184e508838e1a4210206240e53a50b7b66f736bf6"
+      },
+      {
+        "name": "luaotfload.universal-darwin",
+        "revision": "57908",
+        "containersize": "348",
+        "containerchecksum": "4dd3c702670e73d04eea57bf563a015a719461d388c496074cbef47b1bcd728b1e33306363057f100f3d50cc29ce9d3ffa471d2948a6352ee5f6140a8b001935"
+      },
+      {
+        "name": "luatex",
+        "revision": "76924",
+        "containersize": "9840",
+        "containerchecksum": "5a502ea42eb0d23c9575e3e9f6e46e0ebb8bb8034ea912deaa16616f23ae81a34d9372537c3099058ce1a65af4df0d39e20fa81b59bba68ffc75ebfded7a6d25"
+      },
+      {
+        "name": "luatex.universal-darwin",
+        "revision": "74677",
+        "containersize": "3067912",
+        "containerchecksum": "3c66ced0c1ed0c00e5c4f7a35305d6228d5edd7cfe0917759a7ae273bc610f3d5e4d360d5db0236381143f5d7a27cc185c2d07a1c3d6ece74538a4480598608d"
+      },
+      {
+        "name": "makeindex",
+        "revision": "75712",
+        "containersize": "4600",
+        "containerchecksum": "6644e9c2818718ca9e1883e4782a25e0e2732292689418d511404b33dd61585ab19f2a60da1da152a251b21ad7bbdea5c62249a88466ee4deb95e15c496f3822"
+      },
+      {
+        "name": "makeindex.universal-darwin",
+        "revision": "73806",
+        "containersize": "95124",
+        "containerchecksum": "cf1c5b52f637e3d0f3d16aebdbd7f3d60255a69b0381dc834ac41a92c752d38428cbe401a82669bd2e495872ebe55fa17de905dcb921966a766b0b72f2248fd0"
+      },
+      {
+        "name": "metafont",
+        "revision": "73848",
+        "containersize": "8824",
+        "containerchecksum": "e2c384d133cb315f894815ba06dcfa04b1477203cd0db06df78753ffefda88253489f1fa80612ae46f14b792b928bd0cc1400e1c7481609766c8ddef9278a7f3"
+      },
+      {
+        "name": "metafont.universal-darwin",
+        "revision": "74380",
+        "containersize": "474536",
+        "containerchecksum": "bc866f84a4b96b5d63bbc50b18bad854896ea8518f158fedac905041d2c3199ad6e6419c81ce81d11235b5fd6ed120f7ee3c9a18144f2fc260ae5e6a71429d62"
+      },
+      {
+        "name": "mflogo",
+        "revision": "77677",
+        "containersize": "1592",
+        "containerchecksum": "ab1776dffb38d9db87ae4b5026cdb98beba74ce3aba8633b04702bc6d90ec3544fb04ef6843a74bc98cd272b39a290d1797ab479fab1558ad12a31abb12e3416"
+      },
+      {
+        "name": "mfnfss",
+        "revision": "77677",
+        "containersize": "2124",
+        "containerchecksum": "05f6f0d8cfd5413718a9a3149a0fa351b39bb4b3a4f39acde9ae6c8d568d7740b7b7abcca86941cefd09bf147d1b28e88fb2980fc3c46fff0977f45afd652eb6"
+      },
+      {
+        "name": "mfware",
+        "revision": "77677",
+        "containersize": "3308",
+        "containerchecksum": "1b401513eb655edfb59cb05ce50271078efd326b2ecd11c04b8fc0d12ded2fd41d19145d5f9452c18b2d583d157d05c83f618c6bf02e4bde518eb57bb49053f8"
+      },
+      {
+        "name": "mfware.universal-darwin",
+        "revision": "73806",
+        "containersize": "250396",
+        "containerchecksum": "70ff0edcacc14f78e86cf464e0b1e274442f67f7090e0ef78eea5a3b68984545e6545eba7212f627e65528f0b82f5e8c8993c257d69e60a4227e6a6d2613da18"
+      },
+      {
+        "name": "modes",
+        "revision": "77365",
+        "containersize": "27464",
+        "containerchecksum": "8cc8477bb125e5a8254283e54cddb5ce1a8d1b968b89bf5ba6f2d28c1d91cdbaac61d47322db0803c2a6d82ecbe00da65be511e5898136e94640e9cb414f9302"
+      },
+      {
+        "name": "mptopdf",
+        "revision": "78011",
+        "containersize": "37308",
+        "containerchecksum": "76e75d8658d6ffcb09148aff95f0469f94b65cb8452a497af5ceb86fda14499c6b4e5f0f4f8c81b6f384cb3541a105d73ef2e6ec201331718bf36947cd0e8e40"
+      },
+      {
+        "name": "mptopdf.universal-darwin",
+        "revision": "57908",
+        "containersize": "348",
+        "containerchecksum": "e1db87239f7a3bb48c7c65646f4a0da75c369c402a29ba28441eb35610a0a150c8bb2606a9f9273023870838480e6ac1c1469b5d3cf9436f3f2b00704f995453"
+      },
+      {
+        "name": "multirow",
+        "revision": "77677",
+        "containersize": "2844",
+        "containerchecksum": "28ee4cc5168a5b981e78c0eff8f4483d0c36538f8e6fe8fa724c0b5e04f02a0c8fe5246148ff2d6d13cbc7d6251726fac4307b056a4332fb4715600933e3928c"
+      },
+      {
+        "name": "natbib",
+        "revision": "77677",
+        "containersize": "16604",
+        "containerchecksum": "c8704de4bbf6981070c9a8cf15aa2d95f6a3571673864e75740079de5dedf6afa87a6eef7ee4704fadb3f6edfabdc765bcd2fd58466dd4a5f86665fa231a1100"
+      },
+      {
+        "name": "norasi-c90",
+        "revision": "60831",
+        "containersize": "8716",
+        "containerchecksum": "5f65927546348815b07c93003a2b0922403d274bfa3d1665d4649c9dbc737df924958c2fd61c1d06cd5e7c1862aff392c8d1e9d827f4ae79e70d9b76467f651d"
+      },
+      {
+        "name": "oberdiek",
+        "revision": "71916",
+        "containersize": "35540",
+        "containerchecksum": "aeb4e0a7cec967e08e29f40bd4033f6d35b6210660e11cfa75a226d132e9997a9ac681729c99c35bc460f0c6a812c7994e489c64ddcb07b12e2434ed56fc8a01"
+      },
+      {
+        "name": "pagesel",
+        "revision": "77677",
+        "containersize": "2492",
+        "containerchecksum": "ff37ebccebdea4807b177dabdc48c86696d59becda4bfcdccc8f69ea10bb6c6ba51ab757223041efb22b43419c62de9db21480a3701058b380fa8d30518963b1"
+      },
+      {
+        "name": "pdfescape",
+        "revision": "77677",
+        "containersize": "4252",
+        "containerchecksum": "c539bed6b18cb6f710d4b2928613d2ea37ce995119455106fd72b1a2803c0cbf869660a8ee5f0ee2063a2fbd85ae9b3e22ba4f55e48a541cab073e98b35bd4e4"
+      },
+      {
+        "name": "pdftex",
+        "revision": "74113",
+        "containersize": "39588",
+        "containerchecksum": "12150665a45d81682a7d355d02f98f1e9035dd720b81622717eafad2973a504c5f648d50e73c521e2dca984ff69afe2fbe0ac8255912478a7ddf2b568740a225"
+      },
+      {
+        "name": "pdftex.universal-darwin",
+        "revision": "75293",
+        "containersize": "1695652",
+        "containerchecksum": "35337bf76e98be93b3c9067f6677d408a153759615711695f6cebdab0032b3656e53c7d336dfca69d3eff30ae3d03f84c1c0fb9f1c92315ac933ab5f86315623"
+      },
+      {
+        "name": "pdftexcmds",
+        "revision": "77677",
+        "containersize": "6324",
+        "containerchecksum": "36778bf7472189a6b78bf2627571210f319b6201ac80e2f5d2f3d29fc93e35dcab5402e50436218cbc48c8be7706da876ad64f7795a31ee8172de51b308be3d4"
+      },
+      {
+        "name": "plain",
+        "revision": "75712",
+        "containersize": "29116",
+        "containerchecksum": "797e0566127d23302d5713031b7edc0a8dd8041b0911219c1a5d80e91a49ec80b59fbe2f7ed16253b8976a52f045ae0878807a4eab1913314e91de12f9bd26d8"
+      },
+      {
+        "name": "pslatex",
+        "revision": "67469",
+        "containersize": "5832",
+        "containerchecksum": "b08cbb8ed7a4b89b9018b5b31bbaaf8ae9c520ffbf47b54d239b30ca67a26e138206c1f2f9951f8cc5da49357c0eca9a3df9eda4f02119355cf2be0a85c3a825"
+      },
+      {
+        "name": "psnfss",
+        "revision": "77677",
+        "containersize": "11948",
+        "containerchecksum": "dd1dc8477e1e530b2e91be931066729520f9cc2543afaaf53031fdaf9f0d63f8c78a04f421df5e18090185bbb69e4757ba489b744bb1b654fac461fab0d05e72"
+      },
+      {
+        "name": "pspicture",
+        "revision": "15878",
+        "containersize": "1804",
+        "containerchecksum": "139d160fa67dbb7cc932fc75dba80dd46a55a1dd5973b27a6a5dd38a6035cb367441b178acaf3c11859ad60103283774ee5e2623a083a0336d5c2ff74a7b82fd"
+      },
+      {
+        "name": "refcount",
+        "revision": "77677",
+        "containersize": "3052",
+        "containerchecksum": "ed3b4cd4df204e3b34743b4e469ea97a19fe17c35083a89f4d84f6fccce0064d8d2786799d28d0052b9d5c4a5b0c2f1e48c46d0212de214e5af68afa17f5f2f5"
+      },
+      {
+        "name": "rerunfilecheck",
+        "revision": "77677",
+        "containersize": "3144",
+        "containerchecksum": "c70f019cc5aed5cb83c6861517f51956cd5203fe330fb2590c9ce948e038028ecb086cf29fc4b80948f581a2c873f2e11850e33d86e714a3ba1c606160e7f986"
+      },
+      {
+        "name": "scheme-basic",
+        "revision": "54191",
+        "containersize": "440",
+        "containerchecksum": "027a1cd0dd4fc5da2427864bb49fc885a00bec6e8a74da24ce9cd781c69bf4288ddfc3c790307ed48052a8fc00c1989d3939b253da6638370adbb1c43348749b"
+      },
+      {
+        "name": "scheme-infraonly",
+        "revision": "54191",
+        "containersize": "464",
+        "containerchecksum": "f3e449bf0b34deb9ae776685f386245c4ca9644f2175ae51e9c62faa00e3cfac30fa2aa07fbd83b15b21d487ca368c09a18742d2434047783350698ced3b20b9"
+      },
+      {
+        "name": "scheme-minimal",
+        "revision": "54191",
+        "containersize": "424",
+        "containerchecksum": "ac177b74d9d5b9fa599831275a4084a0eeb7b764a6ed837d8f14f8391f0e6c0757f7b2d4a8e71868e0c8ea4d497f29d78c4c73fb9e6311dbecf29626516bbf82"
+      },
+      {
+        "name": "stringenc",
+        "revision": "77677",
+        "containersize": "23368",
+        "containerchecksum": "02b88c695d02cb777d107cd3a230af438cb566c0c427928fc0be261ca0f606a738538a72696383217a201568b19510b12536cdeb0dc372870db326d4b33cbcc1"
+      },
+      {
+        "name": "symbol",
+        "revision": "77161",
+        "containersize": "36104",
+        "containerchecksum": "058eb735dc19f76b9431069de9f5ce2fcbeb1d52a1e49906744e824c48567c0e9c76dc09dec6d078e5c3c79caa08f1cabad8933f9dcfec47b5385d62328154b5"
+      },
+      {
+        "name": "tex",
+        "revision": "73848",
+        "containersize": "896",
+        "containerchecksum": "c34dbfbc3448646d090984574f1d30a4ddb338e44a7db0b7a25a4727afd7e3d5d4833b84146b0aca9513a5fbdfb0325adf082c6f82925a5993bccdd7a5f1864a"
+      },
+      {
+        "name": "tex-ini-files",
+        "revision": "73863",
+        "containersize": "4400",
+        "containerchecksum": "4f7e5478e1037d28237567cdd10ecbb59758e1b309662e29a30bc3ef7e8b1a38c7ce80c54e48ddfef497db4a5016b2ec96889be1587f67f6630b883759d9463e"
+      },
+      {
+        "name": "tex.universal-darwin",
+        "revision": "74380",
+        "containersize": "438420",
+        "containerchecksum": "0c9b9a894efac6ae33fa98c3c56ff06dc396ae789ecc798bc48001f8524c3258298ee1bfebe7876f95a80f4a13ca787a3c31d9be067ab59a6ce9566c5c5756f7"
+      },
+      {
+        "name": "texlive-common",
+        "revision": "75685",
+        "containersize": "348",
+        "containerchecksum": "baca87fa47db1e4fcdeb32c9b92db8d9190d43e9e46fb2959918f58cea7b1c7e08ad6aea59e709ae671addc6bacbe9ee3216f8a440be26a1e0c83c4d5b9ddd72"
+      },
+      {
+        "name": "texlive-en",
+        "revision": "74120",
+        "containersize": "276",
+        "containerchecksum": "53508d85f3544c3d35fcdff050dd888a8bf09418c7f461c3acba60f189b2bacab4d37fbc37edd43fa28fa174155bb3e974999a8c2a314b9ea16ff762aad03255"
+      },
+      {
+        "name": "texlive-msg-translations",
+        "revision": "77642",
+        "containersize": "153432",
+        "containerchecksum": "977021a23d075a37f748a9a0216e804858149a81995072aa20335c3addd618368f089bb16bf9485e68a82a513b3281d748ffd980b2c332893b8ba05987d41eb4"
+      },
+      {
+        "name": "texlive-scripts",
+        "revision": "78221",
+        "containersize": "115224",
+        "containerchecksum": "7b3365e054384d1acd91eb50d34c43dbd7d7ea7bcc98eee91ccc62c6ede11b32c1bdebfa34593eda672b13918059e895e3aa969948d988b578a1482e2712efbb"
+      },
+      {
+        "name": "texlive-scripts-extra",
+        "revision": "76585",
+        "containersize": "22020",
+        "containerchecksum": "3fa911cdae9ce0982b91f5c30fe53c5cde3c0c3330b050cd564fe7707eabc831918e59edf6e705ab2a508061ae30d5f081c151340033c5a9617991ea11d9e66c"
+      },
+      {
+        "name": "texlive-scripts-extra.universal-darwin",
+        "revision": "71749",
+        "containersize": "912",
+        "containerchecksum": "07a00a45067dfe0338eb09eda96a6b172a53076c71cd4ff7af5dbefff122ca88d04f101265ff8cfa7b522f8b9a4c727d5faa53639fdc7fdcc3f7fea13e16453b"
+      },
+      {
+        "name": "texlive-scripts.universal-darwin",
+        "revision": "64356",
+        "containersize": "580",
+        "containerchecksum": "b690e013b2fffec8c1380d5050c185631efc3fc3b7bf159ab6de770fbe98c2353ab42ffae97971c0412f99b566aee06d81030d2bcf5d712c6cabc028b6cc2985"
+      },
+      {
+        "name": "texlive.infra",
+        "revision": "76780",
+        "containersize": "419208",
+        "containerchecksum": "d7c0409b4af94f6c5874b72bbacdc431c46495d8406d73f4aff376692e6a4f541e54ccee1a7179dc423a095a9208149afb1f1e8a331911806f58ed26ef028d5c"
+      },
+      {
+        "name": "texlive.infra.universal-darwin",
+        "revision": "70811",
+        "containersize": "308364",
+        "containerchecksum": "3dde77d9741572de25bdb99ea4d3ed77bccdd09000bb30513c2e443eae58aadae6ce972e42fede96a1f8f418c9b26693e17f0f4bb7e0c4d790a107cc117542d1"
+      },
+      {
+        "name": "tlshell",
+        "revision": "75412",
+        "containersize": "33144",
+        "containerchecksum": "b69a7b528e3222bc4f1c27f0b400b964868ecfe4f7161edf887e6170dcea3ab621326dc4b441332ed56ce04512a31efbb77ea6e4fb90da9aede9e99e2db19abc"
+      },
+      {
+        "name": "tlshell.universal-darwin",
+        "revision": "57908",
+        "containersize": "340",
+        "containerchecksum": "9fcea90dca834d70cecd252d345479728f092a8b3aae2d1ddd19b8a016ef5cc50117ca6e3374c3ff6ac38e7e986f8f9384e55386d9d5e29b25d0a402e5558b4b"
+      },
+      {
+        "name": "tools",
+        "revision": "76708",
+        "containersize": "47548",
+        "containerchecksum": "83d87be518e6634c4b62bc5683c2c3618999c92b234f66c74ef836552348a186dc8dd8969885b8562bfc579bf2b871f0e2474c3848981a743fe2a247dd2cee42"
+      },
+      {
+        "name": "uhc",
+        "revision": "16791",
+        "containersize": "3600148",
+        "containerchecksum": "b5e722e7a72d2efcd89c969c10291779a2885603817374e4318f59b4042b8890df967503016d08a91e30ba8cbbc6f1838843644f06cf44766a7096efdd3bf905"
+      },
+      {
+        "name": "unicode-data",
+        "revision": "76413",
+        "containersize": "316692",
+        "containerchecksum": "217639c4d4dd58714db6b581cf94beb90015061ab6d20a7531845edd3765082f746c43f7e9c5607bea3ece07c46565775f1b8947ad8c19ae7fff9daeb7235a5d"
+      },
+      {
+        "name": "uniquecounter",
+        "revision": "77677",
+        "containersize": "2284",
+        "containerchecksum": "387b4b896ce18d29534ea1aab569f344dfb627687ccb4d2e8985500b8cc999ed031e0d16d0db10cb2e4b8beafbaeeee6011316602f2a2175aeb381395a5adfcf"
+      },
+      {
+        "name": "url",
+        "revision": "77677",
+        "containersize": "5516",
+        "containerchecksum": "30da38393373578949beeff9453c294281d7549a3758b5961f2db86ec233ca2329d2ea17f7d0074cdfbf89734a2c3c5fef4632be708e78884bc1a2fbd3c81778"
+      },
+      {
+        "name": "wadalab",
+        "revision": "42428",
+        "containersize": "17772744",
+        "containerchecksum": "2d603ccfa92e8ef9abe91f5afaf490c7c8476061679f7a54c22879bb90b4d874f9e0e533e25aafb94fee2ff512f689ec96d25ed7ed42d0ae90c5e05985daadeb"
+      },
+      {
+        "name": "was",
+        "revision": "64691",
+        "containersize": "1856",
+        "containerchecksum": "1e434b13cf6cbaabb173b34334e046055366a9ec844207460a852a0066963fbdde6288e94979e873811b4e66140f07b6cf2e8526ec47a050efbfaf4836edfcb1"
+      },
+      {
+        "name": "xcolor",
+        "revision": "77677",
+        "containersize": "18296",
+        "containerchecksum": "dd516a3bcd38118711c37fbaa37c202e97608efe28c087e3e372167e7737be9fe6391638894f68a39dea2b41dd2ffc18d9a4b8f854225ba006f5fb4467798def"
+      },
+      {
+        "name": "xdvi",
+        "revision": "62387",
+        "containersize": "6816",
+        "containerchecksum": "57024e05928f45e253e236d7e8c6b9cef07359c1cabc10b3f6ac13a9b98dc04530517d8d66b20cefaeced793fbc57a5373c226fb3d26186ba3bb7eaadb0f4ef2"
+      },
+      {
+        "name": "xdvi.universal-darwin",
+        "revision": "74152",
+        "containersize": "999508",
+        "containerchecksum": "3776a1fd471453595b09c1a3c9d94b92fa4393be8c4150d1f17624689fee1c6981ecb40e400d9eda4aff929aaf8ee6fed016f656a928c00cd39ed2586c4833fa"
+      },
+      {
+        "name": "zapfding",
+        "revision": "77161",
+        "containersize": "46940",
+        "containerchecksum": "20b91c6136a12eb88b104d1171e1c9d7f09f592f70231404af9eadeee2c29d00e957a4628697649436476fd5385a39843bef0007959897c87a6789af3ab21eb5"
+      }
+    ]
+  },
+  "offlineResources": {
+    "modules": [
+      {
+        "name": "bleu",
+        "repository": "evaluate-metric/bleu",
+        "revision": "4bc9d73a0ebdfcb960e09da5166c86591fc219b0",
+        "classModule": "evaluate_modules.metrics.evaluate-metric--bleu.9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76.bleu",
+        "identicalSentenceResult": {
+          "bleu": 1.0,
+          "precisions": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "brevity_penalty": 1.0,
+          "length_ratio": 1.0,
+          "translation_length": 6,
+          "reference_length": 6
+        }
+      },
+      {
+        "name": "meteor",
+        "repository": "evaluate-metric/meteor",
+        "revision": "e866ec6c49e478357a321b0dc2411f34f83da621",
+        "classModule": "evaluate_modules.metrics.evaluate-metric--meteor.e7ed321a1b44c34fa4679192809db2cee7e3bd4bba0fe8b76061d807706c2374.meteor",
+        "identicalSentenceResult": {
+          "meteor": 0.9976851851851852
+        }
+      }
+    ],
+    "files": [
+      {
+        "path": "cache/nltk/corpora/omw-1.4.zip",
+        "bytes": 26634772,
+        "sha256": "3b941e664852f3297b6040236626065796a2aaf7d7f9eec8779a3beaa1096c2d"
+      },
+      {
+        "path": "cache/nltk/corpora/wordnet.zip",
+        "bytes": 10775600,
+        "sha256": "cbda5ea6eef7f36a97a43d4a75f85e07fccbb4f23657d27b4ccbc93e2646ab59"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/.DS_Store",
+        "bytes": 6148,
+        "sha256": "24344a0387309358be715e1b803ec962c9a0800fd7b60a2492a681db81f91873"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/README",
+        "bytes": 8574,
+        "sha256": "d3251cae66a9359bd68c039e3a46172a05ca9df0b27dcdfa23ae594d68d27ec4"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/czech.pickle",
+        "bytes": 1119050,
+        "sha256": "64b0734b6fbe8e8d7cac79f48d1dd9f853824e57c4e3594dadd74ba2c1d97f50"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/danish.pickle",
+        "bytes": 1191710,
+        "sha256": "6189c7dd254e29e2bd406a7f6a4336297c8953214792466a790ea4444223ceb3"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/dutch.pickle",
+        "bytes": 693759,
+        "sha256": "fda0d6a13f02e8898daec7fe923da88e25abe081bcfa755c0e015075c215fe4c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/english.pickle",
+        "bytes": 406697,
+        "sha256": "5cad3758596392364e3be9803dbd7ebeda384b68937b488a01365f5551bb942c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/estonian.pickle",
+        "bytes": 1499502,
+        "sha256": "b364f72538d17b146a98009ad239a8096ce6c0a8b02958c0bc776ecd0c58a25f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/finnish.pickle",
+        "bytes": 1852226,
+        "sha256": "6a4b5ff5500ee851c456f9dd40d5fc0d8c1859c88eb3178de1317d26b7d22833"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/french.pickle",
+        "bytes": 553575,
+        "sha256": "28e3a4cd2971989b3cb9fd3433a6f15d17981e464db2be039364313b5de94f29"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/german.pickle",
+        "bytes": 1463575,
+        "sha256": "ddcbbe85e2042a019b1a6e37fd8c153286c38ba201fae0f5bfd9a3f74abae25c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/greek.pickle",
+        "bytes": 876006,
+        "sha256": "85dabc44ab90a5f208ef37ff6b4892ebe7e740f71fb4da47cfd95417ca3e22fd"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/italian.pickle",
+        "bytes": 615089,
+        "sha256": "68a94007b1e4ffdc4d1a190185ca5442c3dafeb17ab39d30329e84cd74a43947"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/malayalam.pickle",
+        "bytes": 221207,
+        "sha256": "1f8cf58acbdb7f472ac40affc13663be42dafb47c15030c11ade0444c9e0e53d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/norwegian.pickle",
+        "bytes": 1181271,
+        "sha256": "4ff7a46d1438b311457d15d7763060b8d3270852c1850fd788c5cee194dc4a1d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/polish.pickle",
+        "bytes": 1738386,
+        "sha256": "624900ae3ddfb4854a98c5d3b8b1c9bb719975f33fee61ce1441dab9f8a00718"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/portuguese.pickle",
+        "bytes": 611919,
+        "sha256": "02a0b7b25c3c7471e1791b66a31bbb530afbb0160aee4fcecf0107652067b4a1"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/russian.pickle",
+        "bytes": 33020,
+        "sha256": "549762f8190024d89b511472df21a3a135eee5d9233e63ac244db737c2c61d7e"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/slovene.pickle",
+        "bytes": 734444,
+        "sha256": "52ef2cc0ed27d79b3aa635cbbc40ad811883a75a4b8a8be1ae406972870fd864"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/spanish.pickle",
+        "bytes": 562337,
+        "sha256": "164a50fadc5a49f8ec7426eae11d3111ee752b48a3ef373d47745011192a5984"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/swedish.pickle",
+        "bytes": 979681,
+        "sha256": "b0f7d538bfd5266633b09e842cd92e9e0ac10f1d923bf211e1497972ddc47318"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/PY3/turkish.pickle",
+        "bytes": 1017038,
+        "sha256": "ae68ef5863728ac5332e87eb1f6bae772ff32a13a4caa2b01a5c68103e853c5b"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/README",
+        "bytes": 8574,
+        "sha256": "d3251cae66a9359bd68c039e3a46172a05ca9df0b27dcdfa23ae594d68d27ec4"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/czech.pickle",
+        "bytes": 1265552,
+        "sha256": "5ba73d293c7d7953956bcf02f3695ec5c1f0d527f2a3c38097f5593394fa1690"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/danish.pickle",
+        "bytes": 1264725,
+        "sha256": "ea29760a0a9197f52ca59e78aeafc5a6f55d05258faf7db1709b2b9eb321ef20"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/dutch.pickle",
+        "bytes": 742624,
+        "sha256": "4a8e26b3d68c45c38e594d19e2d5677447bfdcaa636d3b1e7acfed0e9272d73c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/english.pickle",
+        "bytes": 433305,
+        "sha256": "dda37972ae88998a6fd3e3ec002697a6bd362b32d050fda7d7ca5276873092aa"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/estonian.pickle",
+        "bytes": 1596714,
+        "sha256": "3867fee26a36bdb197c64362aa13ac683f5f33fa4d0d225a5d56707582a55a1d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/finnish.pickle",
+        "bytes": 1951656,
+        "sha256": "1a9e17b3d5b4df76345d812b8a65b1da0767eda5086eadcc11e625eef0942835"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/french.pickle",
+        "bytes": 583482,
+        "sha256": "de05f3d5647d3d2296626fb83f68428e4c6ad6e05a00ed4694c8bdc8f2f197ee"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/german.pickle",
+        "bytes": 1526714,
+        "sha256": "eab497fa085413130c8fd0fb13b929128930afe2f6a26ea8715c95df7088e97c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/greek.pickle",
+        "bytes": 1953106,
+        "sha256": "21752a6762fad5cfe46fb5c45fad9a85484a0e8e81c67e6af6fb973cfc27d67c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/italian.pickle",
+        "bytes": 658331,
+        "sha256": "dcb2717d7be5f26e860a92e05acf69b1123a5f4527cd7a269a9ab9e9e668c805"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/malayalam.pickle",
+        "bytes": 221207,
+        "sha256": "1f8cf58acbdb7f472ac40affc13663be42dafb47c15030c11ade0444c9e0e53d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/norwegian.pickle",
+        "bytes": 1259779,
+        "sha256": "e4a97f8f9a03a0338dd746bcc89a0ae0f54ae43b835fa37d83e279e1ca794faf"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/polish.pickle",
+        "bytes": 2042451,
+        "sha256": "16127b6d10933427a3e90fb20e9be53e1fb371ff79a730c1030734ed80b90c92"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/portuguese.pickle",
+        "bytes": 649051,
+        "sha256": "bb01bf7c79a4eadc2178bbd209665139a0e4b38f2d1c44fef097de93955140e0"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/russian.pickle",
+        "bytes": 33027,
+        "sha256": "bc984432fbe31f7000014f8047502476889169c60f09be5413ca09276b16c909"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/slovene.pickle",
+        "bytes": 832867,
+        "sha256": "7dac650212b3787b39996c01bd2084115493e6f6ec390bab61f767525b08b8ea"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/spanish.pickle",
+        "bytes": 597831,
+        "sha256": "271dc6027c4aae056f72a9bfab5645cf67e198bf4f972895844e40f5989ccdc3"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/swedish.pickle",
+        "bytes": 1034496,
+        "sha256": "40d50ebdad6caa87715f2e300b1217ec92c42de205a543cc4a56903bd2c9acfa"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt/turkish.pickle",
+        "bytes": 1225013,
+        "sha256": "d3ae47d76501d027698809d12e75292c9c392910488543342802f95db9765ccc"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt.zip",
+        "bytes": 13905355,
+        "sha256": "51c3078994aeaf650bfc8e028be4fb42b4a0d177d41c012b6a983979653660ec"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/README",
+        "bytes": 8574,
+        "sha256": "d3251cae66a9359bd68c039e3a46172a05ca9df0b27dcdfa23ae594d68d27ec4"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/czech/abbrev_types.txt",
+        "bytes": 462,
+        "sha256": "8eb1feb5a6a46f9bd8f6a5ae58e218428a65b459b5ebd61668d83fa80acfc329"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/czech/collocations.tab",
+        "bytes": 1390,
+        "sha256": "fd58f549658c8389be32577e232187be9376c79708f66c60388a84916c8f3f3d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/czech/ortho_context.tab",
+        "bytes": 684150,
+        "sha256": "451cb1a68a03ba88ced1247e6bb48c442e87dce1c9f463104618fac509866cd4"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/czech/sent_starters.txt",
+        "bytes": 352,
+        "sha256": "42f1de18ab29f9842113b87ec020202c0c25316c97d37f968435a7c7ee3018ca"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/danish/abbrev_types.txt",
+        "bytes": 1130,
+        "sha256": "4a358b26b7ba372cab3cedeb43b4e99a76ae9d01150493964141eb42a62e4a6e"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/danish/collocations.tab",
+        "bytes": 1693,
+        "sha256": "b003d3b839afd47afa81d64620a1cf15b75b944212a7f3ee6a7571f041ae02ec"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/danish/ortho_context.tab",
+        "bytes": 743835,
+        "sha256": "59d7ccda7b1eef6cbcddb6d2f1930c255a5d43600e66e32eff28eab8190c0727"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/danish/sent_starters.txt",
+        "bytes": 415,
+        "sha256": "f8dd41bdb1bb633574b22d38205e1c073639a0b80cb9591964bf92d84317527f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/dutch/abbrev_types.txt",
+        "bytes": 434,
+        "sha256": "dcd4af07101692c986049ba07abcd6b7c1a2464ef4e46a932cf92d6e220388dd"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/dutch/collocations.tab",
+        "bytes": 623,
+        "sha256": "9a013563bce4637595a6db9d2eeb0ab3f68685d704ae20d97ad718aa91afbe4a"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/dutch/ortho_context.tab",
+        "bytes": 428403,
+        "sha256": "e2077b5748564a9666e437c0a96ea9c5bed0fe3ab5c756535584785d3af20fc9"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/dutch/sent_starters.txt",
+        "bytes": 310,
+        "sha256": "734454acc5952d91a1dfaca8cdfdabb715d8cdd35789c749528639d80751f45c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/english/abbrev_types.txt",
+        "bytes": 619,
+        "sha256": "92a3e070f43d9b4c5534758ca40ad7343b04e7e29bfe0c2eb658a39445a4f779"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/english/collocations.tab",
+        "bytes": 594,
+        "sha256": "8e2da1225e4dd2cc9dba261ee231ccb134859e21b46006e7f472c5ee269af0cf"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/english/ortho_context.tab",
+        "bytes": 236303,
+        "sha256": "4bbcca25ed3d3f06c02402abf8419b9f033b8adc06e7b482eca4e45f81a5dc4c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/english/sent_starters.txt",
+        "bytes": 241,
+        "sha256": "f3f8535483e1dba487241b764945168123bca3209a9645e59acd1225dc76edac"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/estonian/abbrev_types.txt",
+        "bytes": 224,
+        "sha256": "0307878fb32af1e21d8f3ba0644e39c89602f2f8aa4e4304943f7e9e0fd081b2"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/estonian/collocations.tab",
+        "bytes": 1825,
+        "sha256": "f1400a7ebf3c82a3d5aac886eb5bf06a1a840946cf052bb1532da7c25094797f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/estonian/ortho_context.tab",
+        "bytes": 936992,
+        "sha256": "768b7e6e2ba93ff096e244af175c343b1a73463c4a1b99beebe6a9aa57ea1d78"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/estonian/sent_starters.txt",
+        "bytes": 679,
+        "sha256": "7ade7bb8ca7c527aac09517a6efbdf4f749e9a9fc0e43d2856c58be847030c83"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/finnish/abbrev_types.txt",
+        "bytes": 484,
+        "sha256": "7829baabcb5d69e26232839a1f5b6bc6d12b0e59b7f0a65f6ab1c163acbeb800"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/finnish/collocations.tab",
+        "bytes": 3046,
+        "sha256": "4d717a1b4d1fb7108ca9c9ed2cc63f8b4813cfaf73819e96fce79495ddc48292"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/finnish/ortho_context.tab",
+        "bytes": 1189717,
+        "sha256": "43e55a8bfa977561337a09105c570036df11346c6f91e57d8631520eefb26167"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/finnish/sent_starters.txt",
+        "bytes": 810,
+        "sha256": "ab81cf3b774ef068ac98adb99fcb3b1a05caf0423bdfa302bdc285e15597567f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/french/abbrev_types.txt",
+        "bytes": 245,
+        "sha256": "01747ecfed08830d582d8c94634b63a36da316c0a67feec2871cf03f0dd5c657"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/french/collocations.tab",
+        "bytes": 334,
+        "sha256": "8ddf150ef5a0d22694e7c4d807f80b6d55da731ca81ea139633f560b378af990"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/french/ortho_context.tab",
+        "bytes": 334275,
+        "sha256": "7090ef4292647d4fe137159bd768a5304015d0614d59fdcfc30b2389634365ac"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/french/sent_starters.txt",
+        "bytes": 233,
+        "sha256": "b45a1ebdae9cdf46cf2e8be016b4718bf4f825445fc783d445faf0cfb2d569f8"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/german/abbrev_types.txt",
+        "bytes": 246,
+        "sha256": "259e5d78bc9d61a12d55ba47552c4e9c5ca08364d78a4669e864fd6de86818e3"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/german/collocations.tab",
+        "bytes": 527,
+        "sha256": "f77bd513f42e8179f5c932111c312be353d5913387d0bfe90a95c109111bca25"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/german/ortho_context.tab",
+        "bytes": 943500,
+        "sha256": "023887e78cfb919f1a00f9a96a88f42131582748cf833fd469490ee66596307c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/german/sent_starters.txt",
+        "bytes": 762,
+        "sha256": "fe4b63edbdd33f78ba0a755f035680a864948b145ae82fc99072440a62a77acd"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/greek/abbrev_types.txt",
+        "bytes": 570,
+        "sha256": "0d56253b7ebc83f0f2403479bcf2b8ea51ffdea89ee60e34018eb32e4750d683"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/greek/collocations.tab",
+        "bytes": 118,
+        "sha256": "0fd732534d56177c80874125ca894ae60aee7b052ee2865a405b454cfd737a6f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/greek/ortho_context.tab",
+        "bytes": 632838,
+        "sha256": "a87e4467791f974f808c0d396f6c82cd3a014d4fb4458a2287e2fcbce7084e9c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/greek/sent_starters.txt",
+        "bytes": 567,
+        "sha256": "1a450aec85164e3fbfeb814768c9f120abd7139726af5bb5e2a577096739ca8e"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/italian/abbrev_types.txt",
+        "bytes": 534,
+        "sha256": "5d406f6bfb35e55f6bea282bf148bdcc9e4677860eb01a8e67c34b894274ac50"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/italian/collocations.tab",
+        "bytes": 53,
+        "sha256": "8167b58a049bb04de8d692ed33d72963503a061717cd37cacb33bb2d00669caf"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/italian/ortho_context.tab",
+        "bytes": 369822,
+        "sha256": "462ffd48bc1c9b86efe66d04d826cd1e7a5745be871b8121759ed2920a967370"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/italian/sent_starters.txt",
+        "bytes": 208,
+        "sha256": "4dc2cdfda34d4f286e5875d6b62b148771a799a71f0d45b504da23cb61b59d51"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/malayalam/abbrev_types.txt",
+        "bytes": 4714,
+        "sha256": "1ea2cd01629c8cbeac0799d39383e10c4d6948734c255d37e3ceda550ba62464"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/malayalam/collocations.tab",
+        "bytes": 3422,
+        "sha256": "71bc38e42133f288c660a338169d8858944135282ad4166a2c5d23cc8a06ed73"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/malayalam/ortho_context.tab",
+        "bytes": 118161,
+        "sha256": "5289e43f46ef3679f4ebbed95ef1fad5b64dd7aa8957042adb2b661cc6ae4425"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/malayalam/sent_starters.txt",
+        "bytes": 106,
+        "sha256": "918c902aa9d0b72700410258274ae335da51148fee7fc27095ab4114b23a245c"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/norwegian/abbrev_types.txt",
+        "bytes": 496,
+        "sha256": "beced74076edabe64f45effb823012d1396db41f35fa1d8be2ac6b69bf7bc40f"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/norwegian/collocations.tab",
+        "bytes": 869,
+        "sha256": "9c815b01e2f7518552b53f09012644df1fa0d8c7642baff9dc5f61e85e0be422"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/norwegian/ortho_context.tab",
+        "bytes": 734070,
+        "sha256": "57ea2aa129de6ae414cd0cbecba8b2399c4fde775a2145776a7e8f1023f3f183"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/norwegian/sent_starters.txt",
+        "bytes": 378,
+        "sha256": "2b49ef0f0c2e1b4e8b06aee1172e4d88ce6ad01486fe4182cff6fc443a73ddeb"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/polish/abbrev_types.txt",
+        "bytes": 973,
+        "sha256": "426ea37ca486d0dcc3653653c613d853d0bb3929037f8ee6bf6c12ddae873aa1"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/polish/collocations.tab",
+        "bytes": 1101,
+        "sha256": "961653f0606d85ecb8a760cad4f69df123f010bc4b35de0253feb2d7869666b4"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/polish/ortho_context.tab",
+        "bytes": 1066577,
+        "sha256": "f770804067012ee5707ffc65d90523180e09bab09230a49251777be821a1a4f6"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/polish/sent_starters.txt",
+        "bytes": 518,
+        "sha256": "8564076ae22be3d549a3f097a18458ac2967d65bd28dad7cc223c53f5ce27d1b"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/portuguese/abbrev_types.txt",
+        "bytes": 301,
+        "sha256": "cd5c3cf9c4c8b766bc9edbc96444b0e2189b837b26c583aa2cce83a18e4285f5"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/portuguese/collocations.tab",
+        "bytes": 64,
+        "sha256": "a150d2ca3b8bd9d87cd25f2e1d2142607cdf9344efe914bd034af6017a16d841"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/portuguese/ortho_context.tab",
+        "bytes": 363124,
+        "sha256": "2d9c143f7b322fc74738a21e0b2b04feed1668245ac93e5a8e5399e6e0d8ed8a"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/portuguese/sent_starters.txt",
+        "bytes": 209,
+        "sha256": "7b7f4a1586b1df8592bf294c8dd0d19aaf90740d78ce3b40a31eff2b9669d15e"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/russian/abbrev_types.txt",
+        "bytes": 15363,
+        "sha256": "75191526be516a9918948fe3ad46f6c2c4dee14314359a899b8c2ebf496cb631"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/russian/collocations.tab",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/russian/ortho_context.tab",
+        "bytes": 10,
+        "sha256": "b296cba91006569d3ef79eb2cff2378bf5be5b75e9e83ea119b883d3c3ee69b6"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/russian/sent_starters.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/slovene/abbrev_types.txt",
+        "bytes": 280,
+        "sha256": "b1d6b16d1d2b3c0c4132c1528b9843d1557f7f544044db27f4e8d2d6985faf2b"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/slovene/collocations.tab",
+        "bytes": 1131,
+        "sha256": "4c10daafdff496e369f3a8809bebf187abc851df630457ae93c7ca4fda350651"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/slovene/ortho_context.tab",
+        "bytes": 445129,
+        "sha256": "3ba826bdd7e5543af7af8e317d4652ba8b47fd812157855a6274ec1387a46b3e"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/slovene/sent_starters.txt",
+        "bytes": 358,
+        "sha256": "85ae14dadef3c4c9f753491d84919abb10e09003adfe248794d4a597fabc5793"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/spanish/abbrev_types.txt",
+        "bytes": 234,
+        "sha256": "246a4b3efbad45b63eb9672b718574b535acef6d656f24dc17a46d13a38efba1"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/spanish/collocations.tab",
+        "bytes": 74,
+        "sha256": "fa5ea7dbf61f2b1c12180d660a3012c9faaf4962eb12549d77af95e2a40be65d"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/spanish/ortho_context.tab",
+        "bytes": 337707,
+        "sha256": "1346ecfc57b26174987ffa9bd4a2558a66f46592a513da3859648790351df370"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/spanish/sent_starters.txt",
+        "bytes": 289,
+        "sha256": "4d4f7380ba16380b6158e9e8ead6973c52f27e3c9c88af63f15a41c490998319"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/swedish/abbrev_types.txt",
+        "bytes": 208,
+        "sha256": "1e1a78bd5e7fd6e7eb4b15b751a23d441cda845d5fc0b631958177b2f504da00"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/swedish/collocations.tab",
+        "bytes": 136,
+        "sha256": "bd2260433c94617ba7cf6102e4c1035099a72e5a2f6b60734639252e41633c04"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/swedish/ortho_context.tab",
+        "bytes": 616904,
+        "sha256": "d48c5705d0570993628e539ca211f05cdb5aad7adfcc6ed7b24310941bfac9f8"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/swedish/sent_starters.txt",
+        "bytes": 295,
+        "sha256": "6f0f7a6773f7488a23bafc6c29e7d4554e792d89c6b7a89fbd6a83bec85ef767"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/turkish/abbrev_types.txt",
+        "bytes": 424,
+        "sha256": "de56078c5eeb3fe07e24eab67c4aaf44e2181cbe80edd976cb1622819599d6fd"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/turkish/collocations.tab",
+        "bytes": 273,
+        "sha256": "061ce2981776a8f875da4f24bebd7e138f8da1d9057b43d07f580148ec106a33"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/turkish/ortho_context.tab",
+        "bytes": 642682,
+        "sha256": "fc214227f99d5ea3ee70d208df16b1984eab375d1946ed379061c6cf5c1718be"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab/turkish/sent_starters.txt",
+        "bytes": 613,
+        "sha256": "93239fb55b5d2ae6d945a84a94e118ba8a816326b17cdc11ba8111bea0c97828"
+      },
+      {
+        "path": "cache/nltk/tokenizers/punkt_tab.zip",
+        "bytes": 4319076,
+        "sha256": "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106"
+      },
+      {
+        "path": "cache/huggingface/modules/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76/bleu.json",
+        "bytes": 477,
+        "sha256": "410a303f2f6700bd6ce875dde68e97a48dff5267c1359272b18f14acf3bcd846"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76/bleu.py",
+        "bytes": 5937,
+        "sha256": "41aebd59ddb0306117c049edf6a2f71b978cf0c5cce1da63f0e1551987f34315"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76/nmt_bleu.py",
+        "bytes": 4071,
+        "sha256": "d35b20182f82f22f1c31232df1d25977328cf011178fcd381c2d82ee4116b40b"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/9e0985c1200e367cce45605ce0ecb5ede079894e0f24f54613fca08eeb8aff76/tokenizer_13a.py",
+        "bytes": 3344,
+        "sha256": "496ba6b982897605ca52ac06595a0e59496c8563e26a28b47f14a0cfba725a91"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--bleu.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--meteor/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--meteor/e7ed321a1b44c34fa4679192809db2cee7e3bd4bba0fe8b76061d807706c2374/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--meteor/e7ed321a1b44c34fa4679192809db2cee7e3bd4bba0fe8b76061d807706c2374/meteor.json",
+        "bytes": 481,
+        "sha256": "0bf8ac0301f9916bd5ddc852cfb83d3e38596d223c5ff5501f1a7e2487bc7735"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--meteor/e7ed321a1b44c34fa4679192809db2cee7e3bd4bba0fe8b76061d807706c2374/meteor.py",
+        "bytes": 7021,
+        "sha256": "561ce07a903d1a1d1ad68fa03c346633eb7d0cd2620a368d025229ce03093960"
+      },
+      {
+        "path": "cache/huggingface/modules/evaluate_modules/metrics/evaluate-metric--meteor.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "pythonSourceBuilds": {
+    "packages": [
+      "lxml==4.9.1",
+      "pylatexenc==2.10",
+      "func-timeout==4.3.5"
+    ],
+    "buildIsolation": false,
+    "setuptools": "80.9.0",
+    "wheel": "0.45.1"
+  }
+}
