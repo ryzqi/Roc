@@ -1,3 +1,4 @@
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import {lstat, mkdir, opendir, readFile, readdir, realpath} from 'node:fs/promises';
 import {dirname, isAbsolute, join, relative, sep} from 'node:path';
 import {release} from 'node:os';
@@ -162,8 +163,7 @@ export async function installOvisPackages(input: Input,
     signal.throwIfAborted();
     return {runtime: target, packages, operations};
   } catch (error) {
-    if (error instanceof Error && 'code' in error && ['research_process_kill_failed', 'research_process_supervision_failed',
-      'research_process_completion_failed'].includes(String(error.code))) lease.quarantine();
+    if (hasUnprovenResearchProcessExit(error)) lease.quarantine();
     throw error;
   } finally {lease.release();}
 }

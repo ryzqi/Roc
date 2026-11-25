@@ -1,7 +1,8 @@
 import {before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {execFile} from 'node:child_process';
+import {execFile, spawn} from 'node:child_process';
+import {once} from 'node:events';
 import {promisify} from 'node:util';
 import {lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile} from 'node:fs/promises';
 import {basename, join, relative} from 'node:path';
@@ -136,13 +137,48 @@ test('exclusive publication refuses a competing selection and cleans its own com
 
 test('failed preparations retain unproven worker state without being adopted or deleted', async () => {
   await fixture(async ({root, input, manager}) => {
+    const failure = new AggregateError([new Error('wrapped', {cause:
+      Object.assign(new Error('supervision failed'), {code: 'research_process_supervision_failed'})})], 'unproven');
     const store = manager({prepare: async () => {
       await mkdir(join(root, 'ovis-install-ABC123')); await writeFile(join(root, 'ovis-install-ABC123/worker'), 'retain');
-      throw Object.assign(new Error('supervision failed'), {code: 'research_process_supervision_failed'});
+      throw failure;
     }});
-    await assert.rejects(store.install(input), {code: 'research_process_supervision_failed'});
-    assert.equal(store.busy, false); assert.equal(await store.installed(), false);
-    await store.remove(); assert.deepEqual(await readdir(root), ['ovis-install-ABC123']);
+    await assert.rejects(store.install(input), error => error === failure);
+    assert.equal(store.busy, true);
+    for (const operation of [() => store.installed(), () => store.install(input), () => store.acquire(signal), () => store.remove()]) {
+      await assert.rejects(operation(), /installation_busy/);
+    }
+    assert.equal(await readFile(join(root, 'ovis-install-ABC123/worker'), 'utf8'), 'retain');
+    assert.equal((await readdir(root)).filter(name => name.startsWith('.ovis-in-use-')).length, 1);
+  });
+});
+
+test('another host and a restarted host cannot mutate or acquire a model after its owner is killed', {timeout: 30000}, async () => {
+  await fixture(async ({root, input, manager, specification}) => {
+    const store = manager(), installed = await store.install(input);
+    const child = spawn(process.execPath, ['--input-type=module', '-e', `
+      import {importTypeScriptModule} from './scripts/lib/bundle-ts.mjs';
+      const {OvisInstallationManager} = await importTypeScriptModule('src/main/plugins/research/ovis-installation-manager.ts', {platform: 'node'});
+      const store = new OvisInstallationManager(process.argv[1], process.argv[2]);
+      const lease = await store.acquire(new AbortController().signal);
+      process.send('acquired');
+      setInterval(() => {}, 1000);
+    `, root, specification], {stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
+    let stderr = ''; child.stderr.on('data', data => {stderr += data;});
+    const closed = once(child, 'close');
+    try {
+      assert.deepEqual(await Promise.race([once(child, 'message'), closed.then(() => {throw new Error(stderr);})]), ['acquired', undefined]);
+      for (const operation of [() => store.acquire(signal), () => store.install(input), () => store.remove()]) {
+        await assert.rejects(operation(), /previous_operation_unresolved/);
+      }
+      child.kill('SIGKILL'); await closed;
+      // This manager has no in-memory lease from the dead child. The on-disk
+      // marker still forbids assuming the child Worker has also exited.
+      for (const operation of [() => store.acquire(signal), () => store.install(input), () => store.remove()]) {
+        await assert.rejects(operation(), /previous_operation_unresolved/);
+      }
+      assert.equal(await readFile(join(installed.installation.root, 'model-8bit/weights'), 'utf8'), 'weights');
+    } finally {if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed;}
   });
 });
 

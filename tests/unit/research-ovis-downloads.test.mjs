@@ -66,7 +66,8 @@ test('unproven consumer process exit retains its input bundle for supervised rec
   const parent = await mkdtemp('/private/tmp/roc-ovis-download-test-');
   try {
     await assert.rejects(api.withOvisDownloads({parent, assets, signal: new AbortController().signal}, async () => {
-      throw Object.assign(new Error('unproven'), {code: 'research_process_completion_failed'});
+      throw new Error('unproven wrapper', {cause: new AggregateError([
+        Object.assign(new Error('unproven'), {code: 'research_process_completion_failed'})])});
     }, async (_url, _sha, path) => {await writeFile(path, content); return path;}), /unproven/);
     const [directory] = await readdir(parent);
     assert.deepEqual(await readFile(join(parent, directory, assets[0].path)), content);

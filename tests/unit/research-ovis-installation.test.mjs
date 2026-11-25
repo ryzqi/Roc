@@ -17,10 +17,12 @@ test('cancelled, failed and unproven preparations preserve existing generations 
     await assert.rejects(prepareOvisInstallation(input, async () => {throw new Error('offline');}), /offline/);
     assert.deepEqual(await readdir(parent), ['existing']);
     for (const code of ['research_process_kill_failed', 'research_process_supervision_failed', 'research_process_completion_failed']) {
+      const unproven = Object.assign(new Error(code), {code});
+      const wrapped = new AggregateError([new Error('cleanup wrapper', {cause: unproven})], 'wrapped');
       let failure;
-      try {await prepareOvisInstallation(input, async () => {throw Object.assign(new Error(code), {code});});}
+      try {await prepareOvisInstallation(input, async () => {throw wrapped;});}
       catch (error) {failure = error;}
-      assert.equal(failure?.code, code);
+      assert.equal(failure, wrapped);
       assert.ok(failure.retainedInstallation.startsWith(`${parent}/ovis-install-`));
       assert.ok((await readdir(parent)).some(name => name.startsWith('ovis-download-')));
       // No process was launched by this injected failure; only this fixture may clear these retained directories.

@@ -1,3 +1,4 @@
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import {createHash} from 'node:crypto';
 import {lstat, mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
 import {isAbsolute, join} from 'node:path';
@@ -114,8 +115,7 @@ export async function withOvisDownloads<T>(input: {parent: string; assets: reado
     input.signal.throwIfAborted();
     return await consume({root, assets, bytes});
   } catch (error) {
-    retain = error instanceof Error && 'code' in error && ['research_process_kill_failed',
-      'research_process_supervision_failed', 'research_process_completion_failed'].includes(String(error.code));
+    retain = hasUnprovenResearchProcessExit(error);
     throw error;
   } finally {
     if (!retain) {

@@ -1,3 +1,4 @@
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import { lstat, opendir, readlink, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { ToolResourceCoordinator, type ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
@@ -186,7 +187,7 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
       const observation = lease.release();
       return { ...result, admission: { waitMs: lease.waitMs, holdMs: observation.holdMs } };
     } catch (error) {
-      if (error instanceof ResearchProcessError && (error.code === 'research_process_kill_failed' || error.code === 'research_process_supervision_failed')) processCoordinator.quarantineResearchProcesses();
+      if (hasUnprovenResearchProcessExit(error)) processCoordinator.quarantineResearchProcesses();
       const observation = lease.release();
       if (error instanceof ResearchProcessError) error.admission = { waitMs: lease.waitMs, holdMs: observation.holdMs };
       throw error;

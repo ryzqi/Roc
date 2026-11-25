@@ -311,9 +311,9 @@ publication after a later parse fails.
 
 `process-exit-state.ts` follows causes and aggregate errors, including cycles.
 Unconfirmed Worker termination retains both the diagnostic inputs and model lease;
-model deletion or reinstallation remains blocked in the current main process.
-This reservation is currently in memory. Durable recovery after a main-process
-restart must be addressed before production registration. This parser remains
+model deletion or reinstallation remains blocked. The installation manager also
+keeps a durable operation marker across host restarts; see the
+[lifecycle recovery contract](research-ovis-lifecycle.md). This parser remains
 unregistered while the full P3 quality evaluation is pending.
 
 From the repository root, both focused batches passed22 tests each:

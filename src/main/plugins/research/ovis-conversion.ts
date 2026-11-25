@@ -1,3 +1,4 @@
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {lstat, mkdtemp, readFile, readdir, realpath, rm} from 'node:fs/promises';
@@ -17,8 +18,6 @@ const conversionSchema = z.object({status: z.literal('converted-unvalidated'), i
   quantization: z.object({bits: z.literal(8), group_size: z.literal(64), mode: z.literal('affine'), method: z.literal('rtn')}).strict(),
   visionDtype: z.literal('bfloat16'), visionTensors: z.literal(153), quantizedLanguageModules: z.literal(187),
   totalTensors: z.literal(847)}).strict();
-const unprovenExitCodes = new Set(['research_process_kill_failed', 'research_process_supervision_failed',
-  'research_process_completion_failed']);
 
 const bootstrap = String.raw`import ctypes, hashlib, json, runpy, sys
 request = json.loads(sys.stdin.read())
@@ -143,7 +142,7 @@ export async function convertOvisModel(input: OvisConversionInput,
     await verifySource(source, signal);
     return {model: output, conversion, process: result};
   } catch (error) {
-    if (error instanceof Error && 'code' in error && unprovenExitCodes.has(String(error.code))) safeToClean = false;
+    if (hasUnprovenResearchProcessExit(error)) safeToClean = false;
     throw error;
   } finally {if (safeToClean) await rm(cache, {recursive: true});}
 }

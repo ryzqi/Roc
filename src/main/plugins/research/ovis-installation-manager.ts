@@ -7,6 +7,8 @@ import {ovisModelIdentitySchema} from '../../../shared/schemas/research-ovis';
 import {inspectOvisInstallation, type OvisInstallationInspection} from './ovis-model-store';
 import {prepareOvisInstallation, type OvisInstallationInput, type OvisInstallationProgress} from './ovis-installation';
 import {readResearchFile} from './research-files';
+import {acquireOvisOperationReservation} from './ovis-operation-reservation';
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 
 const ownerSchema = z.object({device: z.number().int().nonnegative(), inode: z.number().int().positive()}).strict();
 type Owner = z.infer<typeof ownerSchema>;
@@ -19,7 +21,7 @@ const selectionSchema = z.object({version: z.literal(1), generation: z.string().
   pythonBase: z.string().refine(isAbsolute), identity: ovisModelIdentitySchema}).strict();
 type Selection = z.infer<typeof selectionSchema>;
 type Selected = {value: Selection; file: string};
-type SharedState = {mutation: boolean; readers: number; progress: OvisInstallationProgress | null; directory: Owner | null};
+type SharedState = {mutation: boolean; quarantined: boolean; readers: number; progress: OvisInstallationProgress | null; directory: Owner | null};
 const states = new Map<string, SharedState>();
 const errorCode = (error: unknown): string | undefined => (error as NodeJS.ErrnoException)?.code;
 type Dependencies = {prepare: typeof prepareOvisInstallation; inspect: typeof inspectOvisInstallation};
@@ -31,11 +33,11 @@ export class OvisInstallationManager {
     private readonly dependencies: Dependencies = {prepare: prepareOvisInstallation, inspect: inspectOvisInstallation}) {
     if (!isAbsolute(root) || !isAbsolute(specification)) throw new Error('research_ovis_absolute_path_required');
     const existing = states.get(root);
-    this.state = existing ?? {mutation: false, readers: 0, progress: null, directory: null};
+    this.state = existing ?? {mutation: false, quarantined: false, readers: 0, progress: null, directory: null};
     if (!existing) states.set(root, this.state);
   }
 
-  get busy(): boolean {return this.state.mutation || this.state.readers !== 0;}
+  get busy(): boolean {return this.state.mutation || this.state.quarantined || this.state.readers !== 0;}
   get progress(): OvisInstallationProgress | null {return this.state.progress ? {...this.state.progress} : null;}
 
   private async directory(create: boolean): Promise<Owner | null> {
@@ -103,19 +105,26 @@ export class OvisInstallationManager {
 
   /** Presence is not readiness: acquire performs complete verification before supplying a lease. */
   async installed(): Promise<boolean> {
-    if (this.state.mutation) throw new Error('research_ovis_installation_busy');
+    if (this.state.mutation || this.state.quarantined) throw new Error('research_ovis_installation_busy');
     this.state.readers++;
-    try {return (await this.selection()) !== null;}
-    finally {this.state.readers--;}
+    let reservation: Awaited<ReturnType<typeof acquireOvisOperationReservation>> | undefined;
+    try {
+      if (!await this.directory(false)) return false;
+      reservation = await acquireOvisOperationReservation(this.root);
+      return (await this.selection()) !== null;
+    } finally {reservation?.release(); this.state.readers--;}
   }
 
   async acquire(signal: AbortSignal): Promise<OvisInstallationInspection & {release: () => void}> {
     signal.throwIfAborted();
-    if (this.state.mutation) throw new Error('research_ovis_installation_busy');
+    if (this.state.mutation || this.state.quarantined) throw new Error('research_ovis_installation_busy');
     this.state.readers++;
+    let reservation: Awaited<ReturnType<typeof acquireOvisOperationReservation>> | undefined;
     let released = false;
-    const release = (): void => {if (!released) {released = true; this.state.readers--;}};
+    const release = (): void => {if (!released) {reservation?.release(); released = true; this.state.readers--;}};
     try {
+      if (!await this.directory(false)) throw new Error('research_ovis_installation_missing');
+      reservation = await acquireOvisOperationReservation(this.root);
       const selection = await this.selection();
       if (!selection) throw new Error('research_ovis_installation_missing');
       await this.ownedGeneration(selection.value);
@@ -132,10 +141,12 @@ export class OvisInstallationManager {
     if (this.busy) throw new Error('research_ovis_installation_busy');
     this.state.mutation = true;
     let prepared: Selection | null = null, published = false, temporaryOwner: Owner | null = null;
+    let reservation: Awaited<ReturnType<typeof acquireOvisOperationReservation>> | undefined;
     let failure: unknown;
     const temporary = join(this.root, `.active-${randomUUID()}.json`);
     try {
       const parent = (await this.directory(true))!;
+      reservation = await acquireOvisOperationReservation(this.root);
       if (await this.selection()) throw new Error('research_ovis_installation_already_selected');
       const result = await this.dependencies.prepare({...input, parent: this.root, specification: this.specification,
         onProgress: progress => {this.state.progress = {...progress}; input.onProgress?.({...progress});}});
@@ -160,7 +171,11 @@ export class OvisInstallationManager {
       await link(temporary, join(this.root, 'active.json'));
       published = true;
       return result;
-    } catch (error) {failure = error; throw error;}
+    } catch (error) {
+      failure = error;
+      if (hasUnprovenResearchProcessExit(error)) this.state.quarantined = true;
+      throw error;
+    }
     finally {
       const errors: unknown[] = [];
       try {
@@ -172,13 +187,16 @@ export class OvisInstallationManager {
           }
           await unlink(temporary);
         } catch (error) {errors.push(error);}
-        if (prepared && !published) {
+        if (prepared && !published && !this.state.quarantined) {
           try {
             const owned = await this.ownedGeneration(prepared, true);
             if (owned) await rm(owned, {recursive: true});
           } catch (error) {errors.push(error);}
         }
-      } finally {this.state.progress = null; this.state.mutation = false;}
+      } finally {
+        if (!this.state.quarantined) try {reservation?.release();} catch (error) {this.state.quarantined = true; errors.push(error);}
+        this.state.progress = null; this.state.mutation = false;
+      }
       if (errors.length) throw new AggregateError(failure === undefined ? errors : [failure, ...errors],
         'research_ovis_installation_cleanup_failed');
     }
@@ -188,7 +206,10 @@ export class OvisInstallationManager {
   async remove(): Promise<void> {
     if (this.busy) throw new Error('research_ovis_installation_busy');
     this.state.mutation = true;
+    let reservation: Awaited<ReturnType<typeof acquireOvisOperationReservation>> | undefined;
     try {
+      if (!await this.directory(false)) return;
+      reservation = await acquireOvisOperationReservation(this.root);
       const selection = await this.selection();
       if (!selection) return;
       const root = await this.ownedGeneration(selection.value, true);
@@ -196,6 +217,10 @@ export class OvisInstallationManager {
       if (root) await rm(root, {recursive: true});
       await this.assertSelectionFile(selection);
       await unlink(join(this.root, 'active.json'));
-    } finally {this.state.mutation = false;}
+    } finally {
+      try {reservation?.release();}
+      catch (error) {this.state.quarantined = true; throw error;}
+      finally {this.state.mutation = false;}
+    }
   }
 }

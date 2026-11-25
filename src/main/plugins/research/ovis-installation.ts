@@ -1,3 +1,4 @@
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import {constants} from 'node:fs';
 import {copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, writeFile} from 'node:fs/promises';
 import {isAbsolute, join, relative, sep} from 'node:path';
@@ -18,8 +19,6 @@ const inside = (root: string, path: string): boolean => {
   return name === '' || !isAbsolute(name) && name !== '..' && !name.startsWith(`..${sep}`);
 };
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-const unprovenExitCodes = new Set(['research_process_kill_failed', 'research_process_supervision_failed',
-  'research_process_completion_failed']);
 
 async function inventory(root: string, python: string, signal: AbortSignal): Promise<Record<string, InventoryEntry>> {
   const entries: Record<string, InventoryEntry> = {};
@@ -137,7 +136,7 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
     completed = true;
     return result;
   } catch (error) {
-    retain = error instanceof Error && 'code' in error && unprovenExitCodes.has(String(error.code));
+    retain = hasUnprovenResearchProcessExit(error);
     if (retain && error instanceof Error) Object.assign(error, {retainedInstallation: root});
     throw error;
   } finally {
