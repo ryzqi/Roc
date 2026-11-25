@@ -11,8 +11,9 @@ if (!values.inference || !values.output) throw new Error('--inference (completed
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const inference = resolve(values.inference), output = resolve(values.output);
 const bytes = await readFile(join(inference, 'report.json')), report = JSON.parse(bytes);
-assert.equal(report.status, 'completed'); assert.equal(report.variant, '8bit');
+assert.ok(['completed', 'invalid-output'].includes(report.status)); assert.equal(report.variant, '8bit');
 assert.ok(report.pages.length > 0); assert.equal(new Set(report.pages.map(page => page.id)).size, report.pages.length);
+assert.equal(report.status, report.pages.every(page => page.valid === true) ? 'completed' : 'invalid-output');
 const config = JSON.parse(await readFile('evaluation/ovis-evaluator/paired-inference.json'));
 assert.equal(report.revision, config.modelRevision); assert.equal(report.receiptSha256, config.installationReceiptSha256);
 assert.equal(report.evaluatorSha256, config.inferenceScriptSha256); assert.equal(report.promptSha256, config.settings.promptSha256);
@@ -37,16 +38,18 @@ const temporary = await mkdtemp(resolve('.runtime/ovis-structural-replay-'));
 try {
   for (const page of report.pages) {
     controller.signal.throwIfAborted();
-    const entry = {id: page.id, status: 'running'};
+    const entry = {id: page.id, status: 'running', inference: {valid: page.valid,
+      errors: page.errors, termination: page.termination, generationTokens: page.generationTokens}};
     summary.pages.push(entry);
     const root = await mkdtemp(join(temporary, 'page-'));
     try {
       assert.match(page.id, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u);
-      assert.equal(page.valid, true); assert.equal(page.termination.truncated, false);
       const image = await readFile(page.image), raw = await readFile(join(inference, `${page.id}.raw.txt`));
       const tokens = await readFile(join(inference, `${page.id}.tokens.json`));
       assert.equal(hash(image), page.sha256); assert.equal(hash(raw), page.rawSha256);
       Object.assign(entry, {sourceSha256: page.sha256, rawSha256: page.rawSha256, tokensSha256: hash(tokens)});
+      if (page.valid !== true) throw new Error('research_ovis_replay_invalid_model_output');
+      assert.equal(page.termination.truncated, false);
       const generation = {finishReason: page.termination.finishReason, generationTokens: page.generationTokens,
         tokenIds: JSON.parse(tokens)};
       const frame = {kind: 'image', page: 1, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT', width: page.width, height: page.height};
