@@ -239,9 +239,12 @@ async function readAtMost(response: IncomingMessage, maxBytes: number, signal?: 
   }
 }
 
-export async function fileSha256(path: string): Promise<string> {
+export async function fileSha256(path: string, signal?: AbortSignal): Promise<string> {
+  throwIfAborted(signal);
   const hash = createHash('sha256');
-  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  try { for await (const chunk of createReadStream(path, {signal})) hash.update(chunk); }
+  catch (error) { throwIfAborted(signal); throw error; }
+  throwIfAborted(signal);
   return hash.digest('hex');
 }
 
@@ -338,7 +341,8 @@ async function fetchChunk(
   }
 }
 
-async function assemble(partsDir: string, target: string, count: number): Promise<void> {
+async function assemble(partsDir: string, target: string, count: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
   const assembling = join(partsDir, 'assembled');
   if ((await pathInfo(assembling))?.isSymbolicLink()) fail('research_download_cache_symlink');
   const output = await open(assembling, 'w');
@@ -348,6 +352,7 @@ async function assemble(partsDir: string, target: string, count: number): Promis
       try {
         const buffer = Buffer.alloc(COPY_CHUNK);
         while (true) {
+          throwIfAborted(signal);
           const { bytesRead } = await source.read(buffer, 0, buffer.length, null);
           if (bytesRead === 0) break;
           await writeAll(output, buffer.subarray(0, bytesRead));
@@ -360,8 +365,11 @@ async function assemble(partsDir: string, target: string, count: number): Promis
   } finally {
     await output.close();
   }
+  throwIfAborted(signal);
   await rename(assembling, target);
 }
+
+export type DownloadProgress = {bytesDone: number; bytesTotal: number};
 
 export async function downloadRanges(
   remote: RemoteFile,
@@ -372,6 +380,7 @@ export async function downloadRanges(
     attempts?: number;
     delay?: (attempt: number) => Promise<void>;
     signal?: AbortSignal;
+    onProgress?: (progress: DownloadProgress) => void;
   } = {}
 ): Promise<void> {
   throwIfAborted(options.signal);
@@ -392,6 +401,8 @@ export async function downloadRanges(
   const count = Math.floor((remote.size + chunkSize - 1) / chunkSize);
   let next = 0;
   let completed = 0;
+  let completedBytes = 0;
+  options.onProgress?.({bytesDone: 0, bytesTotal: remote.size});
   const runWorker = async (): Promise<void> => {
     while (true) {
       const index = next;
@@ -399,6 +410,9 @@ export async function downloadRanges(
       if (index >= count) return;
       try {
         await fetchChunk(remote, join(partsDir, `${String(index).padStart(6, '0')}.part`), index, chunkSize, attempts, delay, signal);
+        completedBytes += Math.min(chunkSize, remote.size - index * chunkSize);
+        options.onProgress?.({bytesDone: completedBytes, bytesTotal: remote.size});
+        throwIfAborted(signal);
       } catch (error) {
         controller.abort(error);
         throw error;
@@ -409,15 +423,20 @@ export async function downloadRanges(
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(workers, count) }, () => runWorker()));
-  await assemble(partsDir, target, count);
+  // A rejected worker must not return control while peers can still write parts.
+  // Callers may immediately remove their owned staging directory on failure.
+  const workersResult = await Promise.allSettled(Array.from({ length: Math.min(workers, count) }, () => runWorker()));
+  const failure = workersResult.find(result => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw controller.signal.reason ?? failure.reason;
+  throwIfAborted(signal);
+  await assemble(partsDir, target, count, signal);
 }
 
 export async function downloadVerified(
   url: string,
   expectedSha256: string,
   target: string,
-  options: { expectedSize?: number; signal?: AbortSignal } = {}
+  options: { expectedSize?: number; signal?: AbortSignal; onProgress?: (progress: DownloadProgress) => void } = {}
 ): Promise<string> {
   throwIfAborted(options.signal);
   if (!/^[0-9a-f]{64}$/u.test(expectedSha256)) fail('research_download_digest_invalid');
@@ -428,12 +447,14 @@ export async function downloadVerified(
     if (options.expectedSize !== undefined && remote.size !== options.expectedSize) {
       fail('research_download_size_mismatch');
     }
-    await downloadRanges(remote, target, { signal: options.signal });
+    await downloadRanges(remote, target, { signal: options.signal, onProgress: options.onProgress });
   }
   const after = await lstat(target);
-  const digest = await fileSha256(target);
+  const digest = await fileSha256(target, options.signal);
   if ((options.expectedSize !== undefined && after.size !== options.expectedSize) || digest !== expectedSha256) {
     fail(`research_download_hash_mismatch:${basename(target)}`);
   }
+  throwIfAborted(options.signal);
+  options.onProgress?.({bytesDone: after.size, bytesTotal: after.size});
   return target;
 }
