@@ -17,6 +17,27 @@ installed if cancellation arrives after the publication point. Unproven worker
 exit failures retain their files and reservation for explicit diagnosis, including
 failures wrapped in causes or aggregate errors.
 
+Both library document parsing and project-directory indexing preserve the job's
+input/output directory when process termination is unproven. Ordinary parse
+failure and confirmed cancellation remove only the new job, preserving earlier
+published artifacts and indexes. The project-index regression covers all three
+unproven-exit codes through nested causes/aggregate errors, cancellation and
+service shutdown. It reproduces the former unconditional deletion before the
+fix; the combined lifecycle, release, incremental-index and publication batch
+passes 25 tests:
+
+```sh
+node --test tests/unit/research-index-process-lifecycle.test.mjs \
+  tests/unit/research-document-process-lifecycle.test.mjs \
+  tests/unit/research-index-release.test.mjs \
+  tests/unit/research-incremental-index.test.mjs \
+  tests/unit/research-scientific-project-publication.test.mjs
+```
+
+Evidence: `.artifacts/research-toolchain-p3/index-lifecycle-red.log` and
+`index-lifecycle-final.log`. The fixture does not launch an unresolved process;
+its simulated errors verify the consumers' retention decisions.
+
 `installed()` indicates a selection exists. It does not claim the payload is
 healthy or quality-qualified. `acquire()` reserves the generation before checking
 all recorded bytes, interpreter and inference identities, then returns an

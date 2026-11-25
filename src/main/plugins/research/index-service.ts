@@ -26,6 +26,7 @@ import type {ScientificGeneration} from './scientific-index-repository';
 import { embeddingKey, knowledgeId, type IndexJob, type IndexPayload } from './index-repository';
 import { indexFileSignature, indexDocumentBlocks, indexText, readIndexFile, scanChangedIndexFiles, scanIndexFiles, type IndexFileKind } from './index-files';
 import { maximumArtifactBytes } from './document-files';
+import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import { pruneResearchArtifacts } from './artifact-gc';
 import type { ResearchArtifactGcReport } from './artifact-gc';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath, researchWorkspace } from './research-files';
@@ -357,6 +358,7 @@ export class ResearchIndexService {
 
   private async process(job: IndexJob, signal: AbortSignal): Promise<void> {
     let work: string | null = null;
+    let retainWork = false;
     let scientific: ScientificGeneration | null = null;
     const trace = this.repository.processing.trace({trace_id: `index:${job.id}`, project_id: job.projectId,
       paper_id: knowledgeId(job.fileId), document_id: knowledgeId(job.fileId),
@@ -448,6 +450,7 @@ export class ResearchIndexService {
       }, {inputCount: payload.chunks.length, unit: 'chunks'}, () => payload.chunks.length);
       span.finish();
     } catch (error) {
+      retainWork = hasUnprovenResearchProcessExit(error);
       span.fail(error);
       const code = failureCode(error);
       if (scientific) this.repository.scientificIndex.fail(scientific.id, code, signal.aborted || this.closed);
@@ -455,7 +458,7 @@ export class ResearchIndexService {
       this.repository.indexing.failJob(job, code, signal.aborted || this.closed);
       if (running && (signal.aborted || this.closed)) this.repository.indexing.requestScan(job.projectId, job.input.force);
       if (!this.closed && !signal.aborted && ['research_index_source_changed', 'research_index_parser_changed', 'research_index_embedding_changed', 'research_index_workspace_changed', 'research_file_changed_during_read'].includes(code)) this.schedule(job.projectId, false);
-    } finally { if (work !== null) await rm(work, { recursive: true, force: true }); }
+    } finally { if (work !== null && !retainWork) await rm(work, { recursive: true, force: true }); }
   }
 
   /**
