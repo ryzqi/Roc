@@ -12,7 +12,9 @@ import subprocess
 import sys
 
 from quality_metrics import geometry_metrics, text_metrics
+from quality_acceptance import aggregate_source, source_metrics
 from runtime import configure, sha256
+from snapshot_runtime import inventory
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = Path(__file__).with_name("scoring.json")
@@ -212,9 +214,20 @@ def run_official(source: Path, output: Path, config_path: Path) -> int:
             process.wait()
 
 
+def summarize_text(rows: list[dict]) -> dict:
+    fields = ("characterEdits", "wordEdits", "goldCharacters", "predictionCharacters", "goldWords", "predictionWords", "goldTextBlocks")
+    totals = {field: sum(r["text"][field] for r in rows) for field in fields}
+    totals.update(pages=len(rows), applicableTextPages=sum(r["text"]["goldCharacters"] > 0 for r in rows),
+                  cer=totals["characterEdits"] / totals["goldCharacters"], wer=totals["wordEdits"] / totals["goldWords"],
+                  macroCer=sum(r["text"]["cer"] for r in rows if r["text"]["cer"] is not None) / sum(r["text"]["cer"] is not None for r in rows),
+                  macroWer=sum(r["text"]["wer"] for r in rows if r["text"]["wer"] is not None) / sum(r["text"]["wer"] is not None for r in rows))
+    return totals
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", type=Path, required=True)
+    parser.add_argument("--runtime-receipt", type=Path, required=True)
     parser.add_argument("--arm", choices=("gold-empty-baseline", "original-bf16", "8bit"), required=True)
     parser.add_argument("--inference", type=Path)
     parser.add_argument("--baseline", type=Path)
@@ -225,14 +238,27 @@ def main() -> None:
                                capture_output=True, check=True).stdout
     if committed != CONFIG_PATH.read_bytes():
         raise ValueError("Scoring configuration must match committed HEAD")
+    acceptance_path = CONFIG_PATH.with_name("acceptance-v2.json")
+    acceptance_bytes = subprocess.run(["git", "show", "HEAD:evaluation/ovis-evaluator/acceptance-v2.json"],
+                                      cwd=ROOT, capture_output=True, check=True).stdout
+    if acceptance_bytes != acceptance_path.read_bytes():
+        raise ValueError("Acceptance configuration must match committed HEAD")
     config = json.loads(CONFIG_PATH.read_text())
     paired, gold = cohort(config)
+    runtime_receipt_sha = sha256(args.runtime_receipt)
+    recorded = json.loads(args.runtime_receipt.read_text())
+    if inventory(args.runtime.absolute()) != recorded["files"]:
+        raise ValueError("Official evaluator runtime changed")
     source = configure(args.runtime)
     output = args.output.absolute()
     output.mkdir()
     predictions = output / "predictions"
     predictions.mkdir()
     source_identity = {"configurationSha256": sha256(CONFIG_PATH),
+        "runtimeReceiptSha256": runtime_receipt_sha,
+        "runtimeEntriesVerified": len(recorded["files"]),
+        "acceptanceSha256": sha256(acceptance_path),
+        "sourceMetricsSha256": sha256(Path(__file__).with_name("quality_acceptance.py")),
         "scriptSha256": sha256(Path(__file__)),
         "independentMetricsSha256": sha256(Path(__file__).with_name("quality_metrics.py")),
         "runtimeConfigurationSha256": sha256(Path(__file__).with_name("runtime.py")),
@@ -271,22 +297,23 @@ def main() -> None:
             raw = args.inference / f"{page['id']}.raw.txt"
             if sha256(raw) != metric["rawSha256"]:
                 raise ValueError("Inference output bytes differ")
-            if metric["valid"]:
-                blocks = strict_blocks(raw.read_text(encoding="utf-8"), categories)
+            termination = metric["termination"]
+            if (metric["valid"] and termination["eosObserved"] and not termination["truncated"]
+                    and termination["lastTokenId"] in settings["eosTokenIds"]):
+                try:
+                    blocks = strict_blocks(raw.read_text(encoding="utf-8"), categories)
+                except ValueError as error:
+                    errors = [f"invalid-model-document: {error}"]
             else:
-                errors = metric["errors"]
+                errors = metric["errors"] or ["incomplete-or-invalid-model-output"]
         name = Path(annotation["page_info"]["image_path"]).with_suffix(".md").name
         (predictions / name).write_text(markdown(blocks), encoding="utf-8")
         rows.append({"id": page["id"], "imagePath": page["imagePath"], "modelErrors": errors,
                      "text": text_metrics(annotation, blocks, config),
+                     "source": source_metrics(annotation, blocks, config),
                      "geometry": geometry_metrics(annotation, blocks, config)})
     write_json(output / "independent-page-metrics.json", rows)
-    fields = ("characterEdits", "wordEdits", "goldCharacters", "predictionCharacters", "goldWords", "predictionWords", "goldTextBlocks")
-    totals = {field: sum(r["text"][field] for r in rows) for field in fields}
-    totals.update(pages=len(rows), applicableTextPages=sum(r["text"]["goldCharacters"] > 0 for r in rows),
-                  cer=totals["characterEdits"] / totals["goldCharacters"], wer=totals["wordEdits"] / totals["goldWords"],
-                  macroCer=sum(r["text"]["cer"] for r in rows if r["text"]["cer"] is not None) / sum(r["text"]["cer"] is not None for r in rows),
-                  macroWer=sum(r["text"]["wer"] for r in rows if r["text"]["wer"] is not None) / sum(r["text"]["wer"] is not None for r in rows))
+    totals = summarize_text(rows)
     write_json(output / "independent-summary.json", totals)
     gold_path = output / "gold.json"
     write_json(gold_path, gold)
@@ -308,6 +335,8 @@ def main() -> None:
         **source_identity,
         "inferenceReportSha256": sha256(args.inference / "report.json") if args.inference else None,
         "goldSha256": sha256(gold_path), "pages": len(rows), "text": totals,
+        "source": aggregate_source([r["source"] for r in rows]),
+        "invalidPages": sum(bool(r["modelErrors"]) for r in rows),
         "officialCDM": metrics["display_formula"]["all"]["CDM"]["all"],
         "officialTEDS": metrics["table"]["all"]["TEDS"]["all"],
         "readingOrderQualified": False, "automaticAdoption": False})

@@ -86,14 +86,18 @@ All 347 pages remain in independent reports; invalid model output is an empty pr
 
 /usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
   .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_arm.py \
-  --runtime .runtime/ovis-evaluator --arm gold-empty-baseline \
+  --runtime .runtime/ovis-evaluator \
+  --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
+  --arm gold-empty-baseline \
   --output .artifacts/research-toolchain-p3/scoring-gold-baseline-recheck
 
 /usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
   .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_arm.py \
-  --runtime .runtime/ovis-evaluator --arm original-bf16 \
+  --runtime .runtime/ovis-evaluator \
+  --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
+  --arm original-bf16 \
   --inference .artifacts/research-toolchain-p3/paired-347/original-bf16 \
-  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-recheck \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit \
   --output .artifacts/research-toolchain-p3/scoring-original-bf16-recheck
 ```
 
@@ -113,3 +117,31 @@ That long-running baseline had loaded an earlier runner before denominator-audit
 ```
 
 This actual re-audit passed with status `qualified-gold-denominator` and explicitly reports the runner-file change during the original run. Use `scoring-gold-baseline-audit` as `--baseline` for subsequent arms. The audit neither reruns nor patches the official evaluator and refuses to overwrite either output or original evidence. The complete evaluator regression suite now passes 16/16, including original-evidence preservation and source-drift reporting. Model scores, reading order and independent backend parity remain separate gates.
+
+## User-approved quality acceptance v2
+
+The contract and retained v1 evidence are documented in [ACCEPTANCE.md](ACCEPTANCE.md).
+`score_backend_v2.py` verifies the committed input associations, exact decoded RGB
+pixels, frozen inference reports/raw outputs/EOS, all runtime receipt entries and
+upstream annotation identities. It scores all three existing arms without rerunning
+or repairing model inference. Gold subsets preserve original identifiers. Invalid
+model pages become empty predictions; evaluator failures invalidate the run.
+
+```sh
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_backend_v2.py \
+  --runtime .runtime/ovis-evaluator \
+  --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
+  --output .artifacts/research-toolchain-p3/quality-v2-backend
+
+.runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/compare_v2.py \
+  --scope backend \
+  --reference .artifacts/research-toolchain-p3/quality-v2-backend/official-mps/report.json \
+  --candidate .artifacts/research-toolchain-p3/quality-v2-backend/mlx-8bit/report.json \
+  --output .artifacts/research-toolchain-p3/quality-v2-backend-8bit.json
+```
+
+Compare `mlx-bf16` against the same official report as the other backend check.
+Complete-cohort `score_arm.py` now also emits v2 geometry and reading-order counts;
+use `compare_v2.py --scope quantization` with its two complete 347-page reports.
+All three comparisons are required. No single passing comparison enables parsing.

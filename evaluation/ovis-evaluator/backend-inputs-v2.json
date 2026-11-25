@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exact source and gold association for the three already frozen independent-reference images; no sample selection changes",
+  "pages": [
+    {
+      "id": "science-formulas-table",
+      "input": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-39/output/pages/page-1.png",
+        "sha256": "4fd0daf27acd399b12399208f95819f247fda0102a65614a244cdee75d2ea1b3"
+      },
+      "p0Receipt": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-39/receipt.json",
+        "sha256": "d64684f4faaec3d804acb587607d4fca225232f8f4752c7e649c78689bec54ec"
+      },
+      "pairedPageId": "scientific-006",
+      "sourceImage": {
+        "path": "evaluation/local/sources/ovis-ocr/images/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg",
+        "sha256": "2ae27f3a9284810bf7ce479ac8921359ccf00b7ebee1017b5e8da3e28ebe4af4"
+      },
+      "annotationImagePath": "docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg"
+    },
+    {
+      "id": "science-dense-tables",
+      "input": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-38/output/pages/page-1.png",
+        "sha256": "aed10e61cc4122e0315d38c09e9f96026f0c93af2a26c5cb15acf4fa596f75ba"
+      },
+      "p0Receipt": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-38/receipt.json",
+        "sha256": "7f28a702e2144a36c387f6d02918938d1acf719143a96a7cfb46ce90657754d8"
+      },
+      "pairedPageId": "scientific-005",
+      "sourceImage": {
+        "path": "evaluation/local/sources/ovis-ocr/images/docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg",
+        "sha256": "299daa711a9fa60bfb90d1f24f66c5352f5d6c1895ecc571a1e9879a105f9115"
+      },
+      "annotationImagePath": "docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg"
+    },
+    {
+      "id": "science-charts-captions",
+      "input": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-34/output/pages/page-1.png",
+        "sha256": "411e3d7d3ef8adb88b75ebbb2a2da4280ebea10f31c91cfbdcc47496f75e6433"
+      },
+      "p0Receipt": {
+        "path": ".artifacts/research-toolchain-p0/public-parser-2026-11-25T08-54-31.229Z-356c69d9/page-34/receipt.json",
+        "sha256": "09154eac6374eba34e552fbf33283ee07fbed40b29f60f1639c53f2f9ec553dc"
+      },
+      "pairedPageId": "scientific-001",
+      "sourceImage": {
+        "path": "evaluation/local/sources/ovis-ocr/images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg",
+        "sha256": "5fe73ef247263ce0b7fe8b6905ddc72cdd1f20f8c641c06bb624243e5acdb435"
+      },
+      "annotationImagePath": "docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg"
+    }
+  ]
+}
