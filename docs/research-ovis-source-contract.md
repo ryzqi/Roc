@@ -188,3 +188,49 @@ keep the captured source identity and reject changed locations.
 
 This contract prepares the downstream boundary. It does not register Ovis as a
 production parser or qualify the pending347-page evaluation.
+
+## Captured output to Paper IR
+
+`ovis-paper-content.ts` reads a completed PDF capture using the caller's pinned
+manifest hash, source hash and model identity. Every raster, raw-evidence file and
+crop must have the exact generated relative path, size and hash. Missing markers,
+changed files, symlinks, duplicate/out-of-range pages, mismatched crop identities
+and incomplete token sequences reject assembly. Saved derived blocks are ignored;
+the adapter reconstructs them from the original raw output. The reader does not
+start a Worker, change the capture or register a production parser.
+
+Prose and LaTeX retain their generated text. HTML tables retain their raw HTML and
+produce mechanical cell text; invalid structures stay explicit invalid objects.
+Figure content cannot supply a filesystem path or an invented textual description;
+only the source raster crops become image assets. Candidate geometry may suggest
+caption/reference relations, all of which remain candidates with page-only
+locations. No object number is inferred from a candidate caption. Original PDF
+text quadrilaterals are projected through the captured viewport for native-area
+coverage. OCR-area coverage and reading-order quality remain unknown, and the
+overall quality remains `review` with an explicit unverified-content warning.
+
+The content includes its capture hash and complete 8-bit model identity in the
+parse payload. The existing Paper IR builder and repository publish and reread
+its scientific objects without a separate IR format or legacy conversion. Raw
+capture evidence must remain alongside this derived content for inspection.
+
+Validation from the repository root:
+
+```sh
+node --test tests/unit/research-ovis-paper-content.test.mjs \
+  tests/unit/research-ovis-pdf-artifact.test.mjs \
+  tests/unit/research-ovis-document-adapter.test.mjs \
+  tests/unit/research-paper-ir-v2.test.mjs
+node scripts/research/verify-ovis-paper-content.mjs \
+  --capture .artifacts/research-toolchain-p3/pdf-artifact \
+  --output /absolute/new-evidence-directory
+pnpm build
+```
+
+The 26 boundary/IR regressions pass, including references to a formula on another
+actual page while keeping table cells separate by page. Replay of the actual 8-bit
+chart capture published 11 blocks, 2 figures and 5 candidate caption relations,
+and reread 14 IR objects with page-only locations. A second actual scientific PDF
+capture published 30 blocks, 7 equations and 1 table with 27 cells, and reread 70 IR
+objects. Both source captures remained unchanged. This verifies assembly and
+persistence, not full-cohort quality or production RAG adoption.
