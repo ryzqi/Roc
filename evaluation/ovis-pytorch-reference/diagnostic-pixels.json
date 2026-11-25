@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "scope": "diagnosis only: substitute exported MLX pixel_values into independent PyTorch MPS BF16; retain official tokens, masks, multimodal types and image grid",
+  "adoptionEligible": false,
+  "hypothesis": "pixel preprocessing rounding alone explains the observed output differences",
+  "intervention": "replace pixel_values only after verifying the original official tensors",
+  "identities": {
+    "mpsConfiguration": {
+      "path": "evaluation/ovis-pytorch-reference/parity-mps.json",
+      "sha256": "7f66fef28fb3093dc18550d898cbfc253b2847811a544dd163a1446ea4d64d9c"
+    },
+    "officialInputReport": {
+      "path": ".artifacts/research-toolchain-p3/pytorch-inputs/report.json",
+      "sha256": "d57fe55c382b05dc5fc2f50c84d54237736837ebb1439fa2a0bdae279998cbd8"
+    },
+    "mlxInputReport": {
+      "path": ".artifacts/research-toolchain-p3/mlx-inputs/report.json",
+      "sha256": "0cea1db80cbea70488cdf5a6e7d78f710c1ff0dc9b6473b81ae8fcec05f3a681"
+    },
+    "originalMpsReport": {
+      "path": ".artifacts/research-toolchain-p3/pytorch-reference-mps/report.json",
+      "sha256": "f272458b890ce1c97d717877e2c3f3577ce1f7ae7e274e0e15dce9814f444359"
+    }
+  }
+}
