@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "scope": "frozen 347-page scientific component quality; does not qualify complete PDFs, scientific scans or cross-page tables",
+  "cohort": {
+    "pages": 347,
+    "selectionPath": "evaluation/corpora/ovis-ocr/selection.json",
+    "selectionSha256": "0cf62fa337e8a008f842fa7939eaf54725be94074fcc95866fc859425fb6975f",
+    "sourceLockSha256": "423000834c4bbc9ac82fb239ffaf1e5a984c3c8dd3ef1ecf2134a1879bbe79e6",
+    "labelsPath": "evaluation/local/sources/ovis-ocr/labels.json",
+    "labelsSha256": "a45cd84b04ad8b793e775089640e6b681209abea33ead54c1828ddca35fae496",
+    "pairedConfigurationSha256": "0770efdb3cdd46c152572d7ac567835c5f382fe9ba4622e2a5e3abc8c6b63f41"
+  },
+  "text": {
+    "normalization": "Unicode NFC; collapse all Unicode whitespace runs to one ASCII space and strip ends; preserve case, punctuation, Markdown and inline LaTeX literally",
+    "goldIgnore": "exclude only ignore=true and categories outside mapping; retain every included nonempty text block",
+    "families": {
+      "body": {
+        "gold": [
+          "text_block",
+          "code_txt",
+          "code_algorithm",
+          "code_algorithm_caption",
+          "code_txt_caption"
+        ],
+        "prediction": [
+          "abstract",
+          "algorithm",
+          "aside_text",
+          "content",
+          "text",
+          "vertical_text"
+        ]
+      },
+      "title": {
+        "gold": [
+          "title"
+        ],
+        "prediction": [
+          "doc_title",
+          "paragraph_title"
+        ]
+      },
+      "reference": {
+        "gold": [
+          "reference"
+        ],
+        "prediction": [
+          "reference_content"
+        ]
+      },
+      "caption": {
+        "gold": [
+          "figure_caption",
+          "table_caption"
+        ],
+        "prediction": [
+          "figure_title"
+        ]
+      },
+      "footnote": {
+        "gold": [
+          "figure_footnote",
+          "table_footnote",
+          "page_footnote"
+        ],
+        "prediction": [
+          "footnote",
+          "vision_footnote"
+        ]
+      },
+      "header": {
+        "gold": [
+          "header"
+        ],
+        "prediction": [
+          "header"
+        ]
+      },
+      "footer": {
+        "gold": [
+          "footer"
+        ],
+        "prediction": [
+          "footer"
+        ]
+      },
+      "number": {
+        "gold": [
+          "page_number"
+        ],
+        "prediction": [
+          "number"
+        ]
+      },
+      "formula_number": {
+        "gold": [
+          "equation_caption"
+        ],
+        "prediction": [
+          "formula_number"
+        ]
+      }
+    },
+    "excludedNontextPredictionCategories": [
+      "chart",
+      "display_formula",
+      "footer_image",
+      "header_image",
+      "image",
+      "inline_formula",
+      "seal",
+      "table"
+    ],
+    "excludedNontextGoldCategories": [
+      "equation_isolated",
+      "equation_semantic",
+      "table",
+      "figure",
+      "abandon",
+      "chart_mask",
+      "list_group",
+      "need_mask",
+      "table_mask"
+    ],
+    "matching": {
+      "algorithm": "scipy.optimize.linear_sum_assignment on explicit (G+P)x(G+P) deletion/insertion augmented cost matrix per page and family",
+      "pairCost": "raw character Levenshtein distance of normalized contents; no division by candidate length",
+      "deletionCost": "normalized gold character length",
+      "insertionCost": "normalized prediction character length",
+      "dummyToDummyCost": 0,
+      "forbiddenCrossDummyCost": "total gold+prediction characters+1",
+      "sameAssignmentForCERandWER": true,
+      "emptyInputs": "all gold deletions or all prediction insertions",
+      "tieBreak": "fixed gold annotation order and original prediction block order; scipy1.10.1 deterministic result, no alternate matching search"
+    },
+    "cer": "sum character edits including unmatched prediction insertions / sum normalized gold characters; may exceed 1",
+    "wer": "same character-based assignment; sum whitespace-token Levenshtein edits including unmatched predictions / sum gold whitespace-token counts; Chinese whitespace WER is not segmented-language WER",
+    "aggregate": "micro totals plus macro over pages with nonempty gold; always emit all 347 page rows; zero-gold denominators remain null and insertion counts remain explicit",
+    "invalidOrMissingPrediction": "empty predicted page, retain page and all gold deletion errors; malformed/truncated raw bytes preserved",
+    "readingOrderDiagnostic": {
+      "status": "diagnostic only, no acceptance",
+      "gold": "body/title/reference blocks with explicit numeric order only; never invent order0",
+      "prediction": "original output order of matching families; unmatched retained",
+      "unorderedGold": "count per page/family; no-order headers/footers do not enter this diagnostic"
+    }
+  },
+  "official": {
+    "sourceRevision": "0ff4f3cfbcd45636cc6d9933a551036893f0d83c",
+    "markdownProjection": "join every valid structured block content in output order with two newlines; wrap display_formula content in $$ delimiters only if absent, inline_formula in $ only if absent; no content repair; invalid page is empty",
+    "matchMethod": "quick_match",
+    "matchWorkers": 1,
+    "cdmWorkers": 1,
+    "tedsWorkers": 1,
+    "quickMatchTimeoutSeconds": 300,
+    "pageMatchTimeoutSeconds": 420,
+    "fallbackMaxChunkSpan": 10,
+    "fallbackOrderPenalty": 0.1,
+    "metrics": [
+      "text.Edit_dist",
+      "display_formula.CDM",
+      "table.TEDS"
+    ],
+    "editDistanceIsCER": false,
+    "denominatorAudit": "derive expected applicable gold rows using unchanged official matcher with empty prediction pages before arm scores; compare page plus gt row identity with each arm; missing/shifted gold coverage invalidates quality acceptance; no silent exclusion",
+    "goldRendering": "every applicable CDM gold must produce nonzero glyph boxes; missing rendering is invalid evaluation, never a model score",
+    "extraPredictions": "report all unmatched structured blocks by category using independent maximum IoU assignment at IoU>=0.5 within explicit category family; this is geometric-unmatched evidence, not proof of hallucination",
+    "readingOrderQualified": false,
+    "readingOrderLimitation": "known perfect table fixture loses table position upstream; no acceptance based on that metric"
+  },
+  "extraBlockGeometry": {
+    "normalization": "gold poly bounding rectangle / page dimensions; predicted bbox /1000; no clipping",
+    "matching": "one-to-one maximum IoU assignment per family; only IoU>=0.5 pairs count",
+    "families": {
+      "body": {
+        "gold": [
+          "text_block",
+          "code_txt",
+          "code_algorithm",
+          "code_algorithm_caption",
+          "code_txt_caption"
+        ],
+        "prediction": [
+          "abstract",
+          "algorithm",
+          "aside_text",
+          "content",
+          "text",
+          "vertical_text"
+        ]
+      },
+      "title": {
+        "gold": [
+          "title"
+        ],
+        "prediction": [
+          "doc_title",
+          "paragraph_title"
+        ]
+      },
+      "reference": {
+        "gold": [
+          "reference"
+        ],
+        "prediction": [
+          "reference_content"
+        ]
+      },
+      "caption": {
+        "gold": [
+          "figure_caption",
+          "table_caption"
+        ],
+        "prediction": [
+          "figure_title"
+        ]
+      },
+      "footnote": {
+        "gold": [
+          "figure_footnote",
+          "table_footnote",
+          "page_footnote"
+        ],
+        "prediction": [
+          "footnote",
+          "vision_footnote"
+        ]
+      },
+      "header": {
+        "gold": [
+          "header"
+        ],
+        "prediction": [
+          "header"
+        ]
+      },
+      "footer": {
+        "gold": [
+          "footer"
+        ],
+        "prediction": [
+          "footer"
+        ]
+      },
+      "number": {
+        "gold": [
+          "page_number"
+        ],
+        "prediction": [
+          "number"
+        ]
+      },
+      "formula_number": {
+        "gold": [
+          "equation_caption"
+        ],
+        "prediction": [
+          "formula_number"
+        ]
+      },
+      "formula": {
+        "gold": [
+          "equation_isolated"
+        ],
+        "prediction": [
+          "display_formula",
+          "inline_formula"
+        ]
+      },
+      "table": {
+        "gold": [
+          "table"
+        ],
+        "prediction": [
+          "table"
+        ]
+      },
+      "visual": {
+        "gold": [
+          "figure"
+        ],
+        "prediction": [
+          "chart",
+          "footer_image",
+          "header_image",
+          "image",
+          "seal"
+        ]
+      }
+    }
+  },
+  "quantizationMargins": {
+    "cerCandidateMinusOriginalMaximum": 0.005,
+    "cdmCandidateMinusOriginalMinimum": -0.01,
+    "tedsCandidateMinusOriginalMinimum": -0.01
+  },
+  "performanceQualification": false,
+  "automaticAdoption": false
+}
