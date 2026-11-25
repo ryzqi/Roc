@@ -37,3 +37,54 @@ MLX 0.32.5 documents `set_memory_limit` as a **guideline**, not a hard allocatio
 limit. The probe records this explicitly. Process RSS and CPU are separately
 monitored by Roc. Temporary jobs and denial fixtures are removed on completion;
 the evidence JSON is retained and cannot be overwritten by the command.
+
+## Complete 8-bit inference
+
+```sh
+node evaluation/ovis-worker/infer.mjs \
+  /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
+  .artifacts/research-toolchain-p3/worker-full-scoped-cache
+```
+
+The complete model initially failed because Metal dynamically compiles kernels
+through Apple's MTLCompilerService, whose module cache is outside the job.
+`MTL_SHADER_CACHE_PATH` and `CLANG_MODULE_CACHE_PATH` did not redirect that cache
+on the tested machine. The worker now selects a private Darwin cache suffix
+before importing MLX. The supervisor permits compiler read/write extensions
+only for that explicitly writable cache and only for GPU jobs. Other writable
+paths and ordinary experiment jobs cannot issue extensions. The existing
+file/byte limits cover the cache. Its sole permitted symlink form is Metal's
+transient `com.apple.metalfe/.../*.pcm.lock` pointing to a hexadecimal lock name
+in the same directory; the auditor never follows the target.
+
+All four real model scenarios passed on this machine: two identical pages in
+one model load with identical raw hashes and EOS, cancellation after generated
+bytes, termination at a monitored 128 MiB RSS boundary, and successful restart
+after both failures. Every worker exited. The pinned inference script, receipt
+and runtime code hash were unchanged. The private job and cache were removed;
+outputs and the report remain under the command's output directory.
+
+The first successful pair took 36.29 / 25.49 seconds per page, with 1.41 seconds
+for model loading and sampled peak process RSS of 1,775,419,392 bytes. These are
+mixed-host-load observations, not performance qualification. The 4 GiB MLX
+allocation guideline and 6 GiB monitored worker RSS limit do not bound the
+system compiler service or establish support for lower-memory Macs. This
+one-page repeated fixture qualifies the worker lifecycle, not corpus accuracy.
+
+Checks from the repository root:
+
+```sh
+pnpm build
+node --test tests/integration/research-metal-compiler.test.mjs
+node --test tests/integration/research-process-resources.test.mjs \
+  tests/integration/research-process-guard.test.mjs \
+  tests/unit/research-compute-policy.test.mjs
+```
+
+Build passed; native Metal tests passed 3/3; supervisor regressions passed 29/29.
+The native tests directly check extension refusal, compile and execute a real
+32-element Metal kernel, and reject lock targets outside the cache and output
+symlinks. A separate MLX custom-kernel probe also passed alongside filesystem,
+network, executable and process-group denial checks. Evidence is retained in
+`metal-compiler-tests-final.log`, `metal-cache-supervisor-regressions.log`,
+`build-metal-cache.log` and `metal-cache-lock-scoped.json` under the P3 artifacts.

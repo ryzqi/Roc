@@ -1,5 +1,5 @@
-import { lstat, opendir, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { lstat, opendir, readlink, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { ToolResourceCoordinator, type ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
 import { assertResearchProcessResourceLimits,
   type ResearchProcessResourceLimits, type ResearchProcessResourceUsage } from './process-resources';
@@ -19,6 +19,8 @@ export type ResearchProcessRequest = {
   admission: Omit<ResearchProcessAdmissionRequest, 'gpu'>;
   terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
+  /** Metal's system compiler may receive access only to this writable job cache. */
+  metalCompilerCachePath?: string;
   networkAccess: 'none';
   additionalExecutables?: readonly string[];
   signal?: AbortSignal;
@@ -36,7 +38,7 @@ export type ResearchProcessWriteLimit = {
   maxEntries: number;
 };
 
-async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLimit[]): Promise<void> {
+async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLimit[], metalCompilerCachePath?: string): Promise<void> {
   const batchSize = process.env.ROC_PERF_PROCESS_SCAN_BATCH === '0' ? 1 : 8;
   type Observation =
     | { kind: 'stat'; path: string; info: import('node:fs').Stats }
@@ -63,9 +65,22 @@ async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLim
           throw observation.error;
         }
         const { info, path } = observation;
-        if (info.isSymbolicLink()) throw new Error('research_process_write_symlink');
+        if (info.isSymbolicLink()) {
+          // Apple's compiler uses a transient .pcm.lock symlink to a lock name in
+          // the same directory. Never follow it, and never permit this in output.
+          const local = relative(root, path);
+          if (limit.path !== metalCompilerCachePath || !local.startsWith(`com.apple.metalfe${sep}`) || !path.endsWith('.pcm.lock')) {
+            throw new Error('research_process_write_symlink');
+          }
+          const target = await readlink(path);
+          if (!isAbsolute(target) || basename(target).slice(0, basename(path).length + 1) !== `${basename(path)}-` ||
+              !/^[a-f0-9]+$/u.test(basename(target).slice(basename(path).length + 1)) ||
+              await realpath(dirname(target)) !== await realpath(dirname(path))) {
+            throw new Error('research_process_write_symlink');
+          }
+        }
         if (info.isDirectory()) stack.push(path);
-        else if (info.isFile()) {
+        else if (info.isFile() || info.isSymbolicLink()) {
           filesSeen += 1;
           bytesSeen += info.size;
           if (info.nlink !== 1 || !Number.isSafeInteger(bytesSeen) || filesSeen > limit.maxFiles || info.size > limit.maxFileBytes || bytesSeen > limit.maxTotalBytes) {
@@ -105,9 +120,12 @@ async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLim
   }
 }
 
-export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'additionalExecutables'>): Promise<string> {
+export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'additionalExecutables' | 'metalCompilerCachePath'>): Promise<string> {
   if (typeof request.allowGpuAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
   if (request.networkAccess !== 'none') throw new Error('research_process_network_policy_required');
+  if (request.metalCompilerCachePath !== undefined && (!request.allowGpuAcceleration || !request.writablePaths.includes(request.metalCompilerCachePath))) {
+    throw new Error('research_process_metal_cache_policy_invalid');
+  }
   const filter = async (path: string): Promise<string> => {
     if (!isAbsolute(path)) throw new Error('research_process_absolute_path_required');
     const resolved = await realpath(path);
@@ -117,6 +135,7 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
   const readable = await Promise.all([...request.readablePaths, request.command].map(filter));
   const writable = await Promise.all(request.writablePaths.map(filter));
   const executable = await Promise.all([request.command, ...(request.additionalExecutables ?? [])].map(filter));
+  const compilerCache = request.metalCompilerCachePath === undefined ? null : await filter(request.metalCompilerCachePath);
   return [
     '(version 1)', '(deny default)', '(import "system.sb")',
     '(allow mach-bootstrap)', '(allow syscall*)', '(allow process-fork)',
@@ -127,6 +146,9 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     `(allow file-read* ${[...readable, ...writable].join(' ')})`,
     `(allow file-map-executable ${readable.join(' ')})`,
     ...(writable.length === 0 ? [] : [`(allow file-write* ${writable.join(' ')})`]),
+    // MTLCompilerService consumes scoped read/write extensions for its module cache.
+    // Do not grant extension issuance for other writable paths or ordinary Python.
+    ...(compilerCache === null ? [] : [`(allow file-issue-extension (require-all ${compilerCache} (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))`]),
     '(deny file-write-create (subpath "/cores"))',
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
     // Jobs using the ORT CoreML provider need the Apple GPU/CoreML services. This permission is
@@ -193,5 +215,5 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
   }
   return await runSupervisedResearchProcess({ ...request,
     prepareProfile: () => researchSandboxProfile(request),
-    auditWrites: () => assertProcessWriteLimits(request.writeLimits) });
+    auditWrites: () => assertProcessWriteLimits(request.writeLimits, request.metalCompilerCachePath) });
 }
