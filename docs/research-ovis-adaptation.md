@@ -6,6 +6,12 @@ The reproducible installer is [prepare-ovis-ocr.py](../scripts/research/prepare-
 
 The actual installation at `~/.roc/research-models/ovisocr3-mlx-8bit` contains 187 affine 8-bit/group64 language modules and 153 unquantized BF16 vision tensors. Sizes: converted model 1,020,818,020 bytes; official source 1,728,965,773 bytes; private runtime 760,230,762 bytes; uv 28,309,040 bytes. Complete installation verification passed immediately after conversion and again after inference. Its immutable receipt remains `converted-unvalidated`.
 
+The later [immutable wheel download audit](../resources/ovis-downloads/README.md)
+establishes macOS **15**, not the source manifest's historical 14, as the minimum
+for these exact OpenCV/MLX Metal wheels. This is a dependency constraint, not
+runtime qualification on every macOS 15+ system. No frozen specification or
+running quality evaluation was changed by the audit.
+
 Measured on Apple M1 Pro, 32 GiB RAM, macOS 27.2.1. Three scientific pages from the P0 corpus ran serially under Seatbelt network denial, with identical input, prompt and generation-setting hashes:
 
 | Page content | BF16 seconds | 8-bit seconds |
