@@ -12,7 +12,7 @@ class BackendV2Tests(unittest.TestCase):
     def test_subset_uses_original_gold_ids_without_reindexing(self):
         identity = lambda image, index: json.dumps({"img_id": image, "gt_idx": index, "gt_position": 4})
         selected, other = identity("chosen.jpg", 9), identity("other.jpg", 1)
-        baseline = {"validEvaluatorGold": True, "configurationSha256": sha256(CONFIG_PATH),
+        baseline = {"validEvaluatorGold": True, "configurationSha256": sha256(CONFIG_PATH), "formulaIdentityVersion": 2,
                     "identities": {m: {selected: 1, other: 1} for m in ("text_block", "display_formula", "table")}}
         subset = subset_baseline(baseline, {"chosen.jpg"})
         self.assertEqual(subset["identities"]["table"], {selected: 1})

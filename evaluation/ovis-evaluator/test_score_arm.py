@@ -14,7 +14,8 @@ class DenominatorAuditTests(unittest.TestCase):
         (root / "gold.json").write_text('[{}]', encoding="utf-8")
         for metric in ("text_block", "display_formula", "table"):
             row = {"img_id": "page.jpg", "gt_idx": [0], "gt_position": [1],
-                   "gt_category_type": metric, "gt": "a", "img_id_cdm": "0"}
+                   "gt_category_type": "equation_isolated" if metric == "display_formula" else metric,
+                   "gt": "a", "img_id_cdm": "0"}
             (result / f"predictions_quick_match_{metric}_result.json").write_text(json.dumps([row]))
         box = result / "predictions_quick_match_display_formula/CDM/gt/bbox/0.jsonl"
         box.parent.mkdir(parents=True)

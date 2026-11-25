@@ -97,7 +97,7 @@ All 347 pages remain in independent reports; invalid model output is an empty pr
   --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
   --arm original-bf16 \
   --inference .artifacts/research-toolchain-p3/paired-347/original-bf16 \
-  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked \
   --output .artifacts/research-toolchain-p3/scoring-original-bf16-recheck
 ```
 
@@ -132,7 +132,8 @@ model pages become empty predictions; evaluator failures invalidate the run.
   .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_backend_v2.py \
   --runtime .runtime/ovis-evaluator \
   --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
-  --output .artifacts/research-toolchain-p3/quality-v2-backend
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked \
+  --output .artifacts/research-toolchain-p3/quality-v2-backend-recheck
 
 .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/compare_v2.py \
   --scope backend \
@@ -145,3 +146,22 @@ Compare `mlx-bf16` against the same official report as the other backend check.
 Complete-cohort `score_arm.py` now also emits v2 geometry and reading-order counts;
 use `compare_v2.py --scope quantization` with its two complete 347-page reports.
 All three comparisons are required. No single passing comparison enables parsing.
+
+The unchanged upstream formula matcher switches `gt_idx` between full-document
+and formula-only index spaces. Formula gold is therefore audited by exact gold
+string SHA-256, page, original position and category, with multiplicities. Text
+and table identities retain index/position auditing. No formula group, missing
+string, changed content, missing row or duplicate is silently accepted.
+`reaudit.py` creates a new baseline audit; `reaudit_backend_v2.py` creates new
+reports for already-scored backend arms without changing any original evidence.
+Its linked baseline check retains all original frozen index identities as well.
+
+```sh
+.runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/reaudit.py \
+  --source .artifacts/research-toolchain-p3/scoring-gold-baseline \
+  --output .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked
+.runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/reaudit_backend_v2.py \
+  --source .artifacts/research-toolchain-p3/quality-v2-backend \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked \
+  --output .artifacts/research-toolchain-p3/quality-v2-backend-audited
+```

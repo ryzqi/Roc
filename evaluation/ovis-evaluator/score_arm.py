@@ -15,6 +15,7 @@ from quality_metrics import geometry_metrics, text_metrics
 from quality_acceptance import aggregate_source, source_metrics
 from runtime import configure, sha256
 from snapshot_runtime import inventory
+from formula_identity import formula_gold_identities
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = Path(__file__).with_name("scoring.json")
@@ -142,18 +143,20 @@ def gold_identities(rows: list) -> Counter:
 def audit_official(output: Path, expected: Path | None):
     result = output / "result"
     identities, errors, coverage = {}, [], {}
+    legacy_formula_identities = {}
     for metric in ("text_block", "display_formula", "table"):
         path = result / f"predictions_quick_match_{metric}_result.json"
         rows = json.loads(path.read_text())
         # Upstream retains pure insertions as gt_idx=['']. They still contribute
         # to upstream metrics, but are not gold rows or failed gold renders.
         gold_rows = [row for row in rows if row.get("gt_idx") != [""]]
-        counts = gold_identities(gold_rows)
+        counts = formula_gold_identities(gold_rows) if metric == "display_formula" else gold_identities(gold_rows)
         identities[metric] = dict(sorted(counts.items()))
         coverage[metric] = {"matchedRows": len(rows), "pages": len({row["img_id"] for row in rows}),
                             "goldRows": len(gold_rows), "extraPredictionRows": len(rows) - len(gold_rows),
                             "identityCount": len(counts)}
         if metric == "display_formula":
+            legacy_formula_identities = dict(sorted(gold_identities(gold_rows).items()))
             invalid_gold = []
             for row in gold_rows:
                 path = result / "predictions_quick_match_display_formula/CDM/gt/bbox" / f"{row['img_id_cdm']}.jsonl"
@@ -175,6 +178,8 @@ def audit_official(output: Path, expected: Path | None):
                 errors.append({"kind": "evaluator-error", "metric": name, "details": debug})
     if expected:
         baseline = json.loads((expected / "denominator-audit.json").read_text())
+        if baseline.get("formulaIdentityVersion") != 2:
+            raise ValueError("A v2 formula-identity gold audit is required")
         if baseline["configurationSha256"] != sha256(CONFIG_PATH):
             raise ValueError("Expected denominator was created with another scoring configuration")
         for metric, observed in identities.items():
@@ -184,7 +189,9 @@ def audit_official(output: Path, expected: Path | None):
                                "missing": dict(want - got), "unexpected": dict(got - want)})
         if not baseline["validEvaluatorGold"]:
             errors.append({"kind": "baseline-gold-not-qualified", "details": baseline["errors"]})
-    return {"configurationSha256": sha256(CONFIG_PATH), "identities": identities, "coverage": coverage,
+    return {"configurationSha256": sha256(CONFIG_PATH), "formulaIdentityVersion": 2,
+            "legacyFormulaIdentities": legacy_formula_identities,
+            "identities": identities, "coverage": coverage,
             "validEvaluatorGold": not errors, "errors": errors, "readingOrderQualified": False}, metric_result
 
 
@@ -259,6 +266,7 @@ def main() -> None:
         "runtimeEntriesVerified": len(recorded["files"]),
         "acceptanceSha256": sha256(acceptance_path),
         "sourceMetricsSha256": sha256(Path(__file__).with_name("quality_acceptance.py")),
+        "formulaIdentitySha256": sha256(Path(__file__).with_name("formula_identity.py")),
         "scriptSha256": sha256(Path(__file__)),
         "independentMetricsSha256": sha256(Path(__file__).with_name("quality_metrics.py")),
         "runtimeConfigurationSha256": sha256(Path(__file__).with_name("runtime.py")),

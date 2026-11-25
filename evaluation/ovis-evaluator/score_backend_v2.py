@@ -79,8 +79,21 @@ def subset_baseline(baseline: dict, images: set[str]) -> dict:
                   for metric, values in baseline["identities"].items()}
     if any(not values for values in identities.values()):
         raise ValueError("Independent cohort must contain text, formula and table gold")
+    if baseline.get("formulaIdentityVersion") != 2:
+        raise ValueError("A v2 formula-identity gold audit is required")
     return {"configurationSha256": baseline["configurationSha256"], "validEvaluatorGold": True,
+            "formulaIdentityVersion": 2,
             "errors": [], "identities": identities, "images": sorted(images)}
+
+
+def verified_baseline(contract: dict, directory: Path) -> dict:
+    baseline = json.loads((directory / "denominator-audit.json").read_text())
+    original = json.loads((ROOT / contract["identities"]["goldBaselineAudit"]["path"]).read_text())
+    if (baseline.get("formulaIdentityVersion") != 2 or not baseline["validEvaluatorGold"]
+            or baseline["legacyFormulaIdentities"] != original["identities"]["display_formula"]
+            or any(baseline["identities"][m] != original["identities"][m] for m in ("text_block", "table"))):
+        raise ValueError("Re-audited baseline must retain every original frozen gold identity")
+    return baseline
 
 
 def read_blocks(directory: Path, page: dict, metric: dict, official: bool, categories: set) -> tuple[list, list]:
@@ -103,6 +116,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--runtime-receipt", type=Path, required=True)
+    parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     offline()
@@ -119,14 +133,15 @@ def main() -> None:
     source_paths = [CONTRACT, INPUTS, CONFIG_PATH, Path(__file__), HERE / "quality_acceptance.py",
                     HERE / "quality_metrics.py", HERE / "score_arm.py", HERE / "runtime.py",
                     HERE / "snapshot_runtime.py", HERE / "environment.lock.json"]
+    source_paths.append(HERE / "formula_identity.py")
     identity = {p.relative_to(ROOT).as_posix(): sha256(p) for p in source_paths}
     provenance = {"sourceFiles": identity, "acceptanceSha256": sha256(CONTRACT),
                   "runtimeReceiptSha256": runtime_receipt_sha, "runtimeEntriesVerified": len(recorded["files"]),
                   "inputAssociation": image_evidence, "network": "denied-by-seatbelt",
                   "performanceQualification": False, "automaticAdoption": False}
     write_json(output / "started.json", provenance)
-    baseline_item = contract["identities"]["goldBaselineAudit"]
-    baseline = json.loads((ROOT / baseline_item["path"]).read_text())
+    baseline = verified_baseline(contract, args.baseline)
+    provenance["baselineAuditSha256"] = sha256(args.baseline / "denominator-audit.json")
     subset = output / "subset-baseline"
     subset.mkdir()
     write_json(subset / "denominator-audit.json", subset_baseline(
