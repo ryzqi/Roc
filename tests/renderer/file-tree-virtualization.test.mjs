@@ -49,13 +49,15 @@ before(async () => {
         }};
         const root = createRoot(document.getElementById('root'));
         window.openedFiles = [];
+        window.deleteRequests = [];
         window.mountFileTree = () => flushSync(() => root.render(
           React.createElement(FileTreeView, {
             client,
             workspacePathKey: workspacePath,
             projectId: 'virtualized-tree-test',
             selectedPath: null,
-            onOpenFile: relativePath => window.openedFiles.push(relativePath)
+            onOpenFile: relativePath => window.openedFiles.push(relativePath),
+            onRequestDelete: relativePath => window.deleteRequests.push(relativePath)
           })
         ));
       `,
@@ -97,6 +99,15 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mountFileTree === 'function');
   await page.evaluate(() => window.mountFileTree());
   await page.getByTestId('file-tree-row-file-000.txt').waitFor();
+});
+
+test('virtualized rows request deletion for the clicked or keyboard-active file without opening it', async () => {
+  await page.getByTestId('file-tree-scroll').focus();
+  await page.keyboard.press('End');
+  await page.getByTestId('file-tree-row-file-299.txt').click({button: 'right'});
+  await page.keyboard.press('Meta+Backspace');
+  assert.deepEqual(await page.evaluate(() => window.deleteRequests), ['file-299.txt', 'file-299.txt']);
+  assert.deepEqual(await page.evaluate(() => window.openedFiles), []);
 });
 
 after(async () => {

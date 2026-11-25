@@ -126,7 +126,7 @@ export function WindowChrome({
       {inProject ? (
         <div className="flex min-w-0 items-center justify-end gap-2">
           <button type="button" onClick={onOpenGit} title={gitLabel} aria-label={`打开 Git 面板，${gitLabel}`}
-            className="no-drag chrome-control min-w-0 border-[0.5px] border-line" data-testid="titlebar-git">
+            className="no-drag chrome-control min-w-0" data-testid="titlebar-git">
             <GitBranch size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-git)]" />
             <span dir="ltr" className="hidden truncate font-mono min-[920px]:block" data-testid="titlebar-branch">{branch}</span>
             {gitChangeCount !== null && gitChangeCount > 0 ? <span dir="ltr" aria-hidden="true" className="tabular-nums">{gitChangeCount.toLocaleString('zh-CN')}</span> : null}

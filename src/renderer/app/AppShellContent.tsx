@@ -202,6 +202,9 @@ export function AppShellContent({client, windowState}: {client: RocClient; windo
             <ContextDrawer key={route.projectId} view={route.view} client={client} projectId={route.projectId}
               projects={projects} onOpenProject={openProject} binding={boundWorkspace} writable={projectWritable}
               openFile={route.openFile} onOpenFile={openFileInCanvas} previewRequest={panels.filePreview}
+              onFileDeleted={(relativePath) => {
+                if (route.openFile === relativePath) navigate({ ...route, openFile: null });
+              }}
               onPreviewRequestConsumed={() => panels.setFilePreview(null)} activeThreadId={assistantThreadId}
               onSelectThread={selectThread} onStartNewThread={() => selectThread(null)}
               onThreadDeleted={attention.deleteThread}

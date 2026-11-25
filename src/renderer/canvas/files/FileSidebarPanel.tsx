@@ -10,7 +10,8 @@ import { ModalShell } from '../../shell/ModalShell';
 import { BEFORE_NAVIGATE, type NavigationRequest } from '../../app/navigation-guard';
 import { joinRelative, parentRelative, checkRelativePath, pathRejectionMessage } from '../../workspace/paths';
 import { useFileNameSearch } from '../../workspace/use-file-search';
-import { writeTextFile } from '../../workspace/workspace-store';
+import { deleteWorkspaceFile, writeTextFile } from '../../workspace/workspace-store';
+import { workspaceDirectoryIndex } from '../../workspace/directory-index';
 import { FilePreview } from './FilePreview';
 import { FileTreeView } from './FileTreeView';
 
@@ -24,8 +25,8 @@ import { FileTreeView } from './FileTreeView';
  *   2. **Name search** — `files.searchByName` while a query is typed. This is the
  *      sidebar's search entry point; the ⌘K palette is the one that searches file
  *      *contents* as well (T3.4 draws that line explicitly).
- *   3. **New file** — an inline form, because creating a file is the one write
- *      action the file tree needs and a modal for one text field would be worse.
+ *   3. **New file** — an inline form for the file name. Deletion uses a separate
+ *      confirmation opened by context click or the file tree's keyboard actions.
  *
  * The new-file path is assembled from the open file's directory (or the workspace
  * root) and validated with the same `checkRelativePath` the data layer uses, so a
@@ -59,6 +60,7 @@ export type FileSidebarPanelProps = {
   writable: boolean;
   openFile: string | null;
   onOpenFile: (relativePath: string) => void;
+  onFileDeleted?: (relativePath: string) => void;
   /** A file another surface asked to preview; see `LeftSidebar`'s `SidebarFilesTab`. */
   previewRequest?: { relativePath: string; nonce: number } | null;
   /** Called once the request has been adopted, so the shell can clear it. See the adopt effect. */
@@ -72,6 +74,7 @@ export function FileSidebarPanel({
   writable,
   openFile,
   onOpenFile,
+  onFileDeleted,
   previewRequest = null,
   onPreviewRequestConsumed
 }: FileSidebarPanelProps): React.JSX.Element {
@@ -84,6 +87,12 @@ export function FileSidebarPanel({
     { label: '创建文件' }
   );
   const creatingRef = useRef(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ relativePath: string; workspace: string } | null>(null);
+  const deletingRef = useRef(false);
+  const deleteAction = useAsyncAction(
+    (relativePath: string) => deleteWorkspaceFile(client, relativePath),
+    { label: '删除文件' }
+  );
   const mountedRef = useRef(true);
   const workspaceRef = useRef(workspacePathKey);
   workspaceRef.current = workspacePathKey;
@@ -241,6 +250,26 @@ export function FileSidebarPanel({
 
   const targetDirectory = openFile === null ? '' : parentRelative(openFile);
 
+  const requestDelete = (relativePath: string): void => {
+    if (!writable || workspacePathKey === null || deletingRef.current) return;
+    deleteAction.reset();
+    setDeleteTarget({ relativePath, workspace: workspacePathKey });
+  };
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!writable || deleteTarget === null || deletingRef.current || deleteTarget.workspace !== workspacePathKey) return;
+    deletingRef.current = true;
+    const { relativePath, workspace } = deleteTarget;
+    const result = await deleteAction.run(relativePath);
+    deletingRef.current = false;
+    if (!mountedRef.current || workspaceRef.current !== workspace || !result.ok) return;
+    setDeleteTarget(null);
+    if (previewPath === relativePath) closePreview();
+    if (revealPath === relativePath) setRevealPath(null);
+    workspaceDirectoryIndex(client, workspace)?.invalidate(relativePath);
+    onFileDeleted?.(relativePath);
+  };
+
   const submitNewFile = async (): Promise<void> => {
     if (creatingRef.current || !writable || workspacePathKey === null) return;
     const name = draftName.trim();
@@ -377,6 +406,7 @@ export function FileSidebarPanel({
             projectId={projectId}
             selectedPath={openFile}
             onOpenFile={openFileForPreview}
+            onRequestDelete={writable ? requestDelete : undefined}
             revealPath={revealPath}
             rejectedPath={rejectedPath}
           />
@@ -420,6 +450,20 @@ export function FileSidebarPanel({
           </ul>
         )}
       </div>
+
+      <ConfirmDialog
+        open={writable && deleteTarget !== null && deleteTarget.workspace === workspacePathKey}
+        title="删除文件"
+        message={`确定删除「${deleteTarget?.relativePath ?? ''}」？`}
+        detail="文件将从工作目录中删除，删除前会保存恢复副本。"
+        confirmLabel={deleteAction.pending ? '删除中…' : '删除'}
+        tone="destructive"
+        pending={deleteAction.pending}
+        error={deleteAction.error}
+        onConfirm={confirmDelete}
+        onCancel={() => { if (!deletingRef.current) setDeleteTarget(null); }}
+        testId="file-delete-confirm"
+      />
 
       <ModalShell
         open={previewPath !== null}

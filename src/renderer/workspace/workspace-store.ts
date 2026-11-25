@@ -1,4 +1,5 @@
 import type {
+  FileDeleteResult,
   FileNameSearchResult,
   FilePreviewResult,
   FileSearchResult,
@@ -94,6 +95,13 @@ export function writeTextFile(
     return Promise.resolve(rejected);
   }
   return client.api.files.writeText(input);
+}
+
+/** Deletes only after the caller confirms; the backend saves a recovery point first. */
+export function deleteWorkspaceFile(client: RocClient, relativePath: string): Promise<IpcLikeResult<FileDeleteResult>> {
+  const rejected = reject<FileDeleteResult>(relativePath);
+  if (rejected !== null) return Promise.resolve(rejected);
+  return client.api.files.delete({ relativePath });
 }
 
 /** Content search (`files.search`): matches carry line/column/preview. */

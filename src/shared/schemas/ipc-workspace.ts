@@ -135,6 +135,12 @@ export const fileWriteResultSchema = z
   })
   .strict();
 
+export const fileDeleteRequestSchema = z.object({ relativePath: z.string().min(1) }).strict();
+
+export const fileDeleteResultSchema = z
+  .object({ relativePath: z.string(), recoveryPoint: recoveryPointSchema })
+  .strict();
+
 const gitStatusChangeSchema = z
   .object({
     porcelain: z.string(),

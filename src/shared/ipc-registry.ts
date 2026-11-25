@@ -381,6 +381,8 @@ import {researchExportInputsSchema} from './schemas/research-export-publication'
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputRequestSchema,
   researchProductionInputSchema } from './schemas/research-production-inputs';
 import {
+  fileDeleteRequestSchema,
+  fileDeleteResultSchema,
   fileDialogSelectionSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
@@ -1054,6 +1056,7 @@ export const ipcRegistry = {
     request({ key: 'filesPreview', channel: 'roc:files:preview', domain: 'files', method: 'preview', kind: 'plugin', capabilityName: 'files.preview', inputTransform: first, contract: methodContract(oneArg(filePreviewRequestSchema), filePreviewResultSchema) }),
     request({ key: 'filesPreviewPdf', channel: 'roc:files:preview-pdf', domain: 'files', method: 'previewPdf', kind: 'plugin', capabilityName: 'files.previewPdf', inputTransform: first, contract: methodContract(oneArg(filePdfPreviewRequestSchema), filePdfPreviewResultSchema) }),
     request({ key: 'filesWriteText', channel: 'roc:files:write-text', domain: 'files', method: 'writeText', kind: 'plugin', capabilityName: 'files.writeText', inputTransform: first, contract: methodContract(oneArg(fileWriteTextRequestSchema), fileWriteResultSchema) }),
+    request({ key: 'filesDelete', channel: 'roc:files:delete', domain: 'files', method: 'delete', kind: 'plugin', capabilityName: 'files.delete', inputTransform: first, contract: methodContract(oneArg(fileDeleteRequestSchema), fileDeleteResultSchema) }),
     request({ key: 'gitStatus', channel: 'roc:git:status', domain: 'git', method: 'status', kind: 'plugin', capabilityName: 'git.status', inputTransform: none, contract: methodContract(noArgs, gitStatusResultSchema) }),
     request({ key: 'gitDiffStat', channel: 'roc:git:diff-stat', domain: 'git', method: 'diffStat', kind: 'plugin', capabilityName: 'git.diffStat', inputTransform: none, contract: methodContract(noArgs, gitDiffStatResultSchema) }),
     request({ key: 'gitFileDiff', channel: 'roc:git:file-diff', domain: 'git', method: 'fileDiff', kind: 'plugin', capabilityName: 'git.fileDiff', inputTransform: first, contract: methodContract(oneArg(gitFileOperationRequestSchema), gitFileDiffResultSchema) }),

@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 
 import type {
+  fileDeleteResultSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
   filePdfPreviewRequestSchema,
@@ -35,7 +36,4 @@ export type FilesWorkbenchPdfPreviewResult = z.infer<typeof filePdfPreviewResult
 export type FileWriteTextRequest = z.infer<typeof fileWriteTextRequestSchema>;
 export type FileWriteResult = z.infer<typeof fileWriteResultSchema>;
 export type RecoveryPoint = FileWriteResult['recoveryPoint'];
-export type FileDeleteResult = {
-  relativePath: string;
-  recoveryPoint: RecoveryPoint;
-};
+export type FileDeleteResult = z.infer<typeof fileDeleteResultSchema>;

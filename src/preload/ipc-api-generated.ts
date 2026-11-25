@@ -602,7 +602,8 @@ export const rocApi: RocPreloadApi = {
     searchByName: (...args) => ipcRenderer.invoke(ipcChannels.filesSearchByName, ...args),
     preview: (...args) => ipcRenderer.invoke(ipcChannels.filesPreview, ...args),
     previewPdf: (...args) => ipcRenderer.invoke(ipcChannels.filesPreviewPdf, ...args),
-    writeText: (...args) => ipcRenderer.invoke(ipcChannels.filesWriteText, ...args)
+    writeText: (...args) => ipcRenderer.invoke(ipcChannels.filesWriteText, ...args),
+    delete: (...args) => ipcRenderer.invoke(ipcChannels.filesDelete, ...args)
   },
   git: {
     status: (...args) => ipcRenderer.invoke(ipcChannels.gitStatus, ...args),

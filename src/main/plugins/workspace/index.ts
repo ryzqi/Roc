@@ -6,6 +6,8 @@ import {
   deliveredResultSchema
 } from '../../../shared/schemas/ipc-core';
 import {
+  fileDeleteRequestSchema,
+  fileDeleteResultSchema,
   fileNameSearchRequestSchema,
   fileNameSearchResultSchema,
   filePdfPreviewRequestSchema,
@@ -44,7 +46,6 @@ import {
   workspaceSelectRequestSchema
 } from '../../../shared/schemas/ipc-workspace';
 import type {
-  FileDeleteResult,
   FileNameSearchRequest,
   WorkspaceSelectRequest
 } from '../../../shared/types';
@@ -86,7 +87,7 @@ const workspaceCapabilityDescriptors = [
   descriptor('files.preview', filePreviewRequestSchema, filePreviewResultSchema),
   descriptor('files.previewPdf', filePdfPreviewRequestSchema, filePdfPreviewResultSchema),
   descriptor('files.writeText', fileWriteTextRequestSchema, fileWriteResultSchema),
-  descriptor('files.delete', relativePathRequestSchema, z.custom<FileDeleteResult>()),
+  descriptor('files.delete', fileDeleteRequestSchema, fileDeleteResultSchema),
   descriptor('git.status', emptyInputSchema, gitStatusResultSchema),
   descriptor('git.diffStat', emptyInputSchema, gitDiffStatResultSchema),
   descriptor('git.fileDiff', gitFileOperationRequestSchema, gitFileDiffResultSchema),

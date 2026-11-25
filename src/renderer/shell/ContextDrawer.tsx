@@ -41,6 +41,7 @@ function WritingFiles({
   writable,
   openFile,
   onOpenFile,
+  onFileDeleted,
   onSelectWorkspace,
   workspacePending,
   workspaceError,
@@ -53,6 +54,7 @@ function WritingFiles({
   writable: boolean;
   openFile: string | null;
   onOpenFile: (relativePath: string) => void;
+  onFileDeleted?: (relativePath: string) => void;
   onSelectWorkspace: () => void;
   workspacePending: boolean;
   workspaceError: string | null;
@@ -129,6 +131,7 @@ function WritingFiles({
         writable={writable}
         openFile={openFile}
         onOpenFile={onOpenFile}
+        onFileDeleted={onFileDeleted}
         previewRequest={previewRequest}
         onPreviewRequestConsumed={onPreviewRequestConsumed}
       />

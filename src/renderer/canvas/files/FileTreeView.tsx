@@ -58,6 +58,8 @@ export type FileTreeViewProps = {
   /** Workspace-relative path of the file currently open in the preview. */
   selectedPath: string | null;
   onOpenFile: (relativePath: string) => void;
+  /** Omitted for read-only projects. Context click opens the caller's confirmation. */
+  onRequestDelete?: (relativePath: string) => void;
   /**
    * A path the sidebar wants revealed (expanded + focused) — used after opening a
    * search result, so the tree continues where the search left off.
@@ -149,6 +151,7 @@ export function FileTreeView({
   projectId,
   selectedPath,
   onOpenFile,
+  onRequestDelete,
   revealPath = null,
   rejectedPath = null
 }: FileTreeViewProps): React.JSX.Element {
@@ -297,6 +300,15 @@ export function FileTreeView({
         return;
       }
 
+      if (onRequestDelete && row.entry.type === 'file' && (
+        event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10') ||
+        event.key === 'Delete' || (event.metaKey && event.key === 'Backspace')
+      )) {
+        event.preventDefault();
+        onRequestDelete(row.entry.relativePath);
+        return;
+      }
+
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         moveFocusTo(clampRowIndex(tree.rows.length, index + 1));
@@ -366,7 +378,7 @@ export function FileTreeView({
         moveFocusTo(matched);
       }
     },
-    [activateRow, activeIndex, moveFocusTo, tree]
+    [activateRow, activeIndex, moveFocusTo, onRequestDelete, tree]
   );
 
   const renderRow = useCallback((_index: number, row: FileTreeRow): React.JSX.Element => (
@@ -383,8 +395,13 @@ export function FileTreeView({
       registerRef={registerRowRef}
       onActivate={() => activateRow(row)}
       onFocused={() => onRowFocused(row.entry.relativePath)}
+      onContextMenu={onRequestDelete && row.entry.type === 'file' ? (event) => {
+        event.preventDefault();
+        onRowFocused(row.entry.relativePath);
+        onRequestDelete(row.entry.relativePath);
+      } : undefined}
     />
-  ), [activePath, activateRow, onRowFocused, registerRowRef, selectedPath, tree.errors, tree.loading, tree.rows.length, treeFocused]);
+  ), [activePath, activateRow, onRequestDelete, onRowFocused, registerRowRef, selectedPath, tree.errors, tree.loading, tree.rows.length, treeFocused]);
 
   if (workspacePathKey === null) {
     return <EmptyState compact title="未选择工作区" testId="file-tree-no-workspace" />;
@@ -537,7 +554,8 @@ function TreeRow({
   error,
   registerRef,
   onActivate,
-  onFocused
+  onFocused,
+  onContextMenu
 }: {
   row: FileTreeRow;
   busy: boolean;
@@ -550,6 +568,7 @@ function TreeRow({
   registerRef: (relativePath: string, element: HTMLButtonElement | null) => void;
   onActivate: () => void;
   onFocused: () => void;
+  onContextMenu?: React.MouseEventHandler<HTMLButtonElement>;
 }): React.JSX.Element {
   const directory = row.entry.type === 'directory';
   const activeOutline = active && treeFocused
@@ -572,6 +591,7 @@ function TreeRow({
         data-testid={`file-tree-row-${row.entry.relativePath}`}
         onClick={onActivate}
         onFocus={onFocused}
+        onContextMenu={onContextMenu}
         className={
           selected
             ? `flex h-[var(--file-row-height)] w-full items-center gap-1 bg-accent-soft pr-2 text-left ${activeOutline}`
