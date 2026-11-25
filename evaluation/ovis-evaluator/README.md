@@ -156,6 +156,22 @@ string, changed content, missing row or duplicate is silently accepted.
 reports for already-scored backend arms without changing any original evidence.
 Its linked baseline check retains all original frozen index identities as well.
 
+`finish_paired.py` can wait for each complete arm of an already-running paired
+inference and score it serially under network denial. It captures scorer/config
+hashes before waiting, refuses source changes, preserves failure evidence and
+applies the frozen v2 comparison only after both347-page scorer audits pass.
+It never changes or restarts inference, adopts a model, or claims isolated
+performance. Use a new output directory; interruption retains completed work.
+
+```sh
+python3 -B evaluation/ovis-evaluator/finish_paired.py \
+  --runtime .runtime/ovis-evaluator \
+  --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
+  --inference .artifacts/research-toolchain-p3/paired-347 \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked \
+  --output .artifacts/research-toolchain-p3/quality-v2-paired
+```
+
 ```sh
 .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/reaudit.py \
   --source .artifacts/research-toolchain-p3/scoring-gold-baseline \
