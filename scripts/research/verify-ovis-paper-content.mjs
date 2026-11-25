@@ -2,17 +2,17 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
-import {join, resolve} from 'node:path';
+import {extname, join, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
 import {importTypeScriptModule} from '../lib/bundle-ts.mjs';
 
 const {values} = parseArgs({options: {capture: {type: 'string'}, output: {type: 'string'}}, strict: true});
-if (!values.capture || !values.output) throw new Error('--capture (verified actual PDF capture) and --output are required');
+if (!values.capture || !values.output) throw new Error('--capture (verified actual PDF/image capture) and --output are required');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const capture = resolve(values.capture), output = resolve(values.output);
 const reportBytes = await readFile(join(capture, 'report.json')), original = JSON.parse(reportBytes);
 assert.equal(original.status, 'passed'); assert.equal(original.process.exitCode, 0);
-assert.equal(hash(await readFile(join(capture, 'source.pdf'))), original.source.sha256);
+assert.equal(hash(await readFile(join(capture, `source${extname(original.source.path).toLowerCase()}`))), original.source.sha256);
 const modules = await Promise.all(['ovis-paper-content', 'paper-ir-builder', 'paper-ir-repository', 'paper-ir-validation']
   .map(name => importTypeScriptModule(`src/main/plugins/research/${name}.ts`, {platform: 'node'})));
 const [assembler, builder, repository, validator] = modules;

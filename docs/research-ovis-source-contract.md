@@ -122,15 +122,19 @@ inventory paths and lease cleanup. `pnpm typecheck` also passes. Evidence:
 node --test tests/unit/research-ovis-model-store.test.mjs
 ```
 
-## PDF source artifacts
+## PDF and image source artifacts
 
-`ovis-pdf-artifact.ts` prepares PDF evidence for the future parser without
+`ovis-source-artifact.ts` prepares source evidence for the future parser without
 registering a production route. It renders the selected actual PDF pages at
 scale2 through the existing bounded PDF.js6.5.438 path, records the measured
 rotation/CropBox/UserUnit frame and binds each PNG hash to the source PDF hash.
 One Worker processes the document's pages. Native text/items remain separate
 from generated content; neither matching words nor a plausible box implicitly
-verifies the generated region.
+verifies the generated region. Images use the shared `research-raster.ts` codec:
+PNG, JPEG, BMP, WebP and multi-page TIFF preserve their measured pixels and actual
+page numbers. The codec consumes the source bytes already pinned by the capture.
+Both the basic parser and Ovis use it; Ovis does not initialize Paddle to decode
+an image. Image evidence has an image coordinate frame and no native text layer.
 
 The artifact retains exact raw output, token sequence, input image, model
 identity, candidate geometry and source page. Figure/table crops are copied from
@@ -163,7 +167,7 @@ node --test tests/unit/research-ovis-pdf-artifact.test.mjs \
   tests/unit/research-ovis-document-adapter.test.mjs \
   tests/unit/research-pdf-raster-lifetime.test.mjs \
   tests/unit/research-pdf-native-text.test.mjs
-node scripts/research/verify-ovis-pdf-artifact.mjs \
+node scripts/research/verify-ovis-source-artifact.mjs \
   --installation /Users/Apple_501/.roc/research-models/ovisocr3-mlx-8bit \
   --source-relative ori_pdfs/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.pdf \
   --output /absolute/new-evidence-directory
@@ -191,7 +195,7 @@ production parser or qualify the pending347-page evaluation.
 
 ## Captured output to Paper IR
 
-`ovis-paper-content.ts` reads a completed PDF capture using the caller's pinned
+`ovis-paper-content.ts` reads a completed PDF or image capture using the caller's pinned
 manifest hash, source hash and model identity. Every raster, raw-evidence file and
 crop must have the exact generated relative path, size and hash. Missing markers,
 changed files, symlinks, duplicate/out-of-range pages, mismatched crop identities
@@ -208,6 +212,8 @@ locations. No object number is inferred from a candidate caption. Original PDF
 text quadrilaterals are projected through the captured viewport for native-area
 coverage. OCR-area coverage and reading-order quality remain unknown, and the
 overall quality remains `review` with an explicit unverified-content warning.
+Images cannot claim native text observations or PDF viewport transforms. A capture
+cannot mix PDF and image frames. Image reading-order quality remains unknown.
 
 The content includes its capture hash and complete 8-bit model identity in the
 parse payload. The existing Paper IR builder and repository publish and reread
@@ -234,3 +240,12 @@ and reread 14 IR objects with page-only locations. A second actual scientific PD
 capture published 30 blocks, 7 equations and 1 table with 27 cells, and reread 70 IR
 objects. Both source captures remained unchanged. This verifies assembly and
 persistence, not full-cohort quality or production RAG adoption.
+
+The shared image path passed 6 image boundary tests and 26 existing PDF/content/
+corpus regressions. PNG, JPEG, BMP and WebP pixels round-trip through the captured
+PNG; TIFF selection retains page 2 and rejects malformed or oversized pages
+before inference. A real frozen scientific JPEG completed 8-bit Worker inference
+and published/reread 14 IR objects (11 blocks, 2 figures, 5 candidate captions).
+Its source stayed unchanged, and Worker job/cache directories were removed.
+Evidence: `.artifacts/research-toolchain-p3/image-artifact/` and
+`.artifacts/research-toolchain-p3/paper-content-image/`. Full `pnpm build` passed.

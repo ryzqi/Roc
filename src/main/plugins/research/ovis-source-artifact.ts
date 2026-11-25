@@ -1,12 +1,13 @@
 import {createHash} from 'node:crypto';
 import {mkdir, readFile, rename, rm, writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {extname, join} from 'node:path';
 import {createCanvas, loadImage} from '@napi-rs/canvas';
 import {researchDocumentLimits} from '../../../shared/schemas/research-production';
 import {adaptOvisPage, type OvisAdaptedPage, type OvisSourceBinding} from './ovis-document-adapter';
 import {runOvisDocumentPages, type OvisWorkerInput, type OvisWorkerResult} from './ovis-worker';
 import {hashResearchFile, prepareResearchJob} from './research-job';
 import {extractResearchPdfPageNativeText, renderResearchPdfPage, withResearchPdf} from './pdf-render';
+import {decodeRasterDocument, imagePng} from './research-raster';
 
 const hash = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 const unprovenExitCodes = new Set(['research_process_kill_failed', 'research_process_supervision_failed',
@@ -14,24 +15,26 @@ const unprovenExitCodes = new Set(['research_process_kill_failed', 'research_pro
 type Asset = {path: string; sha256: string; bytes: number};
 type PageArtifact = {page: number; image: Asset; evidence: Asset;
   crops: Array<Asset & {blockId: string; rasterBox: [number, number, number, number]; verification: 'unverified'}>};
-export type OvisPdfArtifact = {
+export type OvisSourceArtifact = {
   contractVersion: 1; status: 'completed'; sourceHash: string; pageCount: number; selectedPages: number[];
   model: OvisWorkerInput['installation']['identity']; pages: PageArtifact[];
   sourceVerification: 'unverified'; process: OvisWorkerResult['process'];
 };
-export type OvisPdfArtifactInput = Pick<OvisWorkerInput, 'installation' | 'admission' | 'timeoutMs' | 'signal'> & {
-  projectRoot: string; sourcePath: string; outputDir: string;
-  /** Actual one-based PDF pages, strictly ascending. Null selects the entire PDF. */
+export type OvisSourceArtifactInput = Pick<OvisWorkerInput, 'installation' | 'admission' | 'timeoutMs' | 'signal'> & {
+  projectRoot: string; sourcePath: string; outputDir: string; sourceKind: 'pdf' | 'image';
+  /** Actual one-based PDF or image pages, strictly ascending. Null selects all pages. */
   pages: readonly number[] | null;
 };
 
-/** Retain source-bound PDF evidence for qualification. Not a registered parser or Paper IR publication. */
-export async function createOvisPdfArtifact(input: OvisPdfArtifactInput,
+/** Retain source-bound evidence for qualification. Not a registered parser or Paper IR publication. */
+export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
   run: (request: OvisWorkerInput) => Promise<OvisWorkerResult> = runOvisDocumentPages
-): Promise<OvisPdfArtifact> {
+): Promise<OvisSourceArtifact> {
   input.signal.throwIfAborted();
   if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs <= 0) throw new Error('research_ovis_request_invalid');
-  const job = await prepareResearchJob({...input, maxSourceBytes: 512 * 1024 ** 2, sourceExtensions: ['.pdf']});
+  if (input.sourceKind !== 'pdf' && input.sourceKind !== 'image') throw new Error('research_ovis_source_kind_invalid');
+  const job = await prepareResearchJob({...input, maxSourceBytes: 512 * 1024 ** 2,
+    sourceExtensions: input.sourceKind === 'pdf' ? ['.pdf'] : ['.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp']});
   // Exclusive creation protects an existing successful artifact, including a concurrent creator.
   await mkdir(job.output, {mode: 0o700});
   const deadline = new AbortController(), timer = setTimeout(() => deadline.abort(), input.timeoutMs);
@@ -55,13 +58,16 @@ export async function createOvisPdfArtifact(input: OvisPdfArtifactInput,
     if (hash(source) !== job.sourceHash) throw new Error('research_source_changed_during_parse');
     const requests: OvisWorkerInput['pages'][number][] = [];
     const rendered: Array<{image: Asset; native: Awaited<ReturnType<typeof extractResearchPdfPageNativeText>>}> = [];
-    const pageCount = await withResearchPdf(source, async pdf => {
-      const selected = input.pages === null ? Array.from({length: pdf.numPages}, (_, i) => i + 1) : [...input.pages];
+    const selection = (pageCount: number): number[] => {
+      const selected = input.pages === null ? Array.from({length: pageCount}, (_, i) => i + 1) : [...input.pages];
       if (!selected.length || selected.length > 500 || selected.some((page, index) =>
-        !Number.isSafeInteger(page) || page < 1 || page > pdf.numPages || (index > 0 && page <= selected[index - 1]))) {
+        !Number.isSafeInteger(page) || page < 1 || page > pageCount || (index > 0 && page <= selected[index - 1]))) {
         throw new Error('research_parse_page_range_invalid');
       }
-      for (const number of selected) {
+      return selected;
+    };
+    const pageCount = input.sourceKind === 'pdf' ? await withResearchPdf(source, async pdf => {
+      for (const number of selection(pdf.numPages)) {
         signal.throwIfAborted();
         const page = await pdf.getPage(number);
         try {
@@ -80,7 +86,21 @@ export async function createOvisPdfArtifact(input: OvisPdfArtifactInput,
         } finally {page.cleanup();}
       }
       return pdf.numPages;
-    });
+    }) : await (async () => {
+      const document = await decodeRasterDocument(source, extname(job.source));
+      await mkdir(join(job.output, 'pages'), {mode: 0o700});
+      for (const number of selection(document.pageCount)) {
+        signal.throwIfAborted();
+        const raster = await document.page(number);
+        const image = await store(`pages/page-${number}.png`, await imagePng(raster));
+        requests.push({imagePath: join(job.output, image.path), binding: {sourceHash: job.sourceHash,
+          inputImageSha256: image.sha256, model: input.installation.identity,
+          frame: {kind: 'image', page: number, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT',
+            width: raster.width, height: raster.height}}});
+        rendered.push({image, native: {text: '', items: []}});
+      }
+      return document.pageCount;
+    })();
     signal.throwIfAborted();
     const result = await run({...input, pages: requests, signal});
     signal.throwIfAborted();
@@ -128,7 +148,7 @@ export async function createOvisPdfArtifact(input: OvisPdfArtifactInput,
     }
     signal.throwIfAborted();
     if (await hashResearchFile(job.source) !== job.sourceHash) throw new Error('research_source_changed_during_parse');
-    const artifact: OvisPdfArtifact = {contractVersion: 1, status: 'completed', sourceHash: job.sourceHash, pageCount,
+    const artifact: OvisSourceArtifact = {contractVersion: 1, status: 'completed', sourceHash: job.sourceHash, pageCount,
       selectedPages: artifacts.map(page => page.page), model: input.installation.identity, pages: artifacts,
       sourceVerification: 'unverified', process: result.process};
     await store('manifest.json.part', Buffer.from(JSON.stringify(artifact) + '\n'), researchDocumentLimits.maxArtifactBytes);

@@ -17,7 +17,7 @@ import {assessPdfQuality, type QualityPage} from './pdf-quality-assessor';
 import {boundsOfPoints} from './pdf-native-text';
 import {buildPaperStructure, paperStructureVersion} from './paper-structure';
 
-export const ovisPaperContentVersion = 'roc-ovis-paper-content/1';
+export const ovisPaperContentVersion = 'roc-ovis-paper-content/2';
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const box = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 const asset = z.object({path: z.string(), sha256: hash, bytes: z.number().int().positive()}).strict();
@@ -66,7 +66,7 @@ function visualCandidates(blocks: Block[], pages: OvisAdaptedPage[]): Block[] {
   return result;
 }
 
-/** Read only a caller-pinned completed capture. This module neither runs inference nor registers a production parser. */
+/** Read only a caller-pinned completed PDF/image capture. Never starts inference or registers a production parser. */
 export async function readOvisPaperContent(input: {
   directory: string; manifestSha256: string; sourceHash: string; model: OvisModelIdentity; signal: AbortSignal;
 }): Promise<OvisPaperContent> {
@@ -102,12 +102,16 @@ export async function readOvisPaperContent(input: {
   };
   const pages: OvisAdaptedPage[] = [], blocks: Block[] = [], assets: OvisPaperContent['assets'] = [];
   const qualityInputs: QualityPage[] = [];
+  let sourceKind: 'pdf' | 'image' | undefined;
   for (const entry of manifest.pages) {
     const evidenceBytes = await read(entry.evidence, `evidence/page-${entry.page}.json`, limits.maxArtifactBytes);
     const evidence = evidenceSchema.parse(JSON.parse(evidenceBytes.toString('utf8'))), frame = evidence.frame;
-    if (frame.kind !== 'pdf' || frame.page !== entry.page || evidence.native.items.some(item => item.page !== entry.page)) {
+    if (sourceKind !== undefined && sourceKind !== frame.kind || frame.page !== entry.page ||
+        evidence.native.items.some(item => item.page !== entry.page) ||
+        frame.kind === 'image' && (evidence.native.text !== '' || evidence.native.items.length !== 0)) {
       throw new Error('research_ovis_source_binding_invalid');
     }
+    sourceKind = frame.kind;
     const page = adaptOvisPage(Buffer.from(evidence.raw, 'utf8'), {protocolVersion: evidence.protocolVersion,
       sourceHash: evidence.sourceHash, inputImageSha256: evidence.inputImageSha256, model: evidence.model,
       rawSha256: evidence.rawSha256, generation: evidence.generation, page: entry.page,
@@ -140,10 +144,12 @@ export async function readOvisPaperContent(input: {
     blocks.push(...tables);
     if (blocks.length > limits.maxBlocks || assets.length > limits.maxAssets) throw new Error('research_document_structure_invalid');
     // The capture retains original PDF coordinates. Project using this exact raster's viewport.
-    const [a, b, c, d, e, f] = frame.viewport.transform;
-    const nativeTextItems = evidence.native.items.map(item => ({page: item.page, text: item.text,
-      bbox: item.pdfQuad === null ? null : boundsOfPoints(item.pdfQuad.map(([x, y]) =>
-        [a * x + c * y + e, b * x + d * y + f]))}));
+    const nativeTextItems = frame.kind === 'pdf' ? evidence.native.items.map(item => {
+      const [a, b, c, d, e, f] = frame.viewport.transform;
+      return {page: item.page, text: item.text,
+        bbox: item.pdfQuad === null ? null : boundsOfPoints(item.pdfQuad.map(([x, y]) =>
+          [a * x + c * y + e, b * x + d * y + f]))};
+    }) : undefined;
     qualityInputs.push({page: entry.page, coordinateFrame: frame, nativeTextItems, regions: []});
   }
   input.signal.throwIfAborted();
@@ -151,8 +157,9 @@ export async function readOvisPaperContent(input: {
     ...(block.kind === 'formula' ? {formula: block.rawContent} : {})}))})));
   const enriched = researchParsedDocumentSchema.shape.blocks.parse(visualCandidates(equations, pages));
   const qualityPages = assessPdfQuality({blocks: enriched, pages: qualityInputs}).pages.map(page => ({...page,
-    status: 'review' as const, ocrCoverage: null,
-    warnings: [...new Set([...page.warnings, 'research_ovis_content_unverified', 'quality_ocr_geometry_unverified'])]}));
+    status: 'review' as const, ocrCoverage: null, readingOrderWarnings: null,
+    warnings: [...new Set([...page.warnings, 'research_ovis_content_unverified', 'quality_ocr_geometry_unverified',
+      'quality_reading_observation_missing'])]}));
   return {version: ovisPaperContentVersion, sourceHash: input.sourceHash, sourceManifestSha256: input.manifestSha256,
     model, sourceVerification: 'unverified', pageCount: manifest.pageCount, selectedPages: manifest.selectedPages,
     parserFingerprint: researchContentHash(JSON.stringify({version: ovisPaperContentVersion, model,

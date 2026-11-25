@@ -60,10 +60,13 @@ const {researchDocumentAnnotationTargetSchema, researchDocumentAnnotationCreateR
   await importTypeScriptModule('src/shared/schemas/research-document-annotations.ts', {
     platform: 'node', external: ['zod'], tempDir: join(repositoryRoot, '.runtime/tmp')
   });
-const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
+const { parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
   platform: 'node',
   external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
+});
+const {decodeRasterDocument} = await importTypeScriptModule('src/main/plugins/research/research-raster.ts', {
+  platform: 'node', external: ['@napi-rs/canvas'], tempDir: join(repositoryRoot, '.runtime/tmp')
 });
 
 function vectorOnlyPdf() {
@@ -670,7 +673,7 @@ test('research TIFF parser rejects invalid dimensions before pixel decode and cl
 
     const multipagePath = join(projectRoot, 'multipage-rgb.tif');
     await writeFile(multipagePath, await readFile(materialized.documents.tiff['multipage-rgb']));
-    const multipage = await decodeRasterDocument(multipagePath);
+    const multipage = await decodeRasterDocument(await readFile(multipagePath), '.tif');
     assert.equal(multipage.pageCount, 2);
     assert.deepEqual(Array.from((await multipage.page(1)).data), [0, 0, 0, 255]);
     assert.deepEqual(Array.from((await multipage.page(2)).data), [255, 255, 255, 255]);
@@ -678,7 +681,7 @@ test('research TIFF parser rejects invalid dimensions before pixel decode and cl
     const compressedPath = join(projectRoot, 'deflate-rgb-page.tif');
     await writeFile(compressedPath, await readFile(materialized.documents.tiff['deflate-rgb-page']));
     assert.equal(UTIF.decode(await readFile(compressedPath))[0].t259[0], 8);
-    const compressed = await decodeRasterDocument(compressedPath);
+    const compressed = await decodeRasterDocument(await readFile(compressedPath), '.tif');
     assert.deepEqual(Array.from((await compressed.page(1)).data), [10, 20, 30, 255, 40, 50, 60, 255]);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

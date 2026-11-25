@@ -9,7 +9,7 @@ import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
 let api, adapter;
 before(async () => {
-  api = await importTypeScriptModule('src/main/plugins/research/ovis-pdf-artifact.ts', {platform: 'node',
+  api = await importTypeScriptModule('src/main/plugins/research/ovis-source-artifact.ts', {platform: 'node',
     external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: '.runtime/tmp'});
   adapter = await importTypeScriptModule('src/main/plugins/research/ovis-document-adapter.ts', {platform: 'node'});
 });
@@ -32,7 +32,7 @@ async function fixture(operation) {
     }
     const sourcePath = join(root, 'source.pdf'); await writeFile(sourcePath, await doc.save());
     const controller = new AbortController();
-    await operation({root, controller, input: {projectRoot: root, sourcePath, outputDir: join(root, 'parsed'),
+    await operation({root, controller, input: {sourceKind: 'pdf', projectRoot: root, sourcePath, outputDir: join(root, 'parsed'),
       pages: null, installation: {root, pythonBase: root, inferenceScript: join(root, 'unused.py'), identity},
       signal: controller.signal, timeoutMs: 60000,
       admission: {projectId: 'ovis-pdf-fixture', priority: 'user', resourceClass: 'parse'}}});
@@ -62,7 +62,7 @@ async function pixels(image) {
 test('real rotated/cropped PDF binds actual rasters, preserves raw/native evidence and crops only source pixels', async () => {
   await fixture(async ({input}) => {
     let calls = 0;
-    const result = await api.createOvisPdfArtifact(input, async request => {calls++; return respond(request);});
+    const result = await api.createOvisSourceArtifact(input, async request => {calls++; return respond(request);});
     assert.equal(calls, 1); assert.equal(result.pageCount, 4); assert.deepEqual(result.selectedPages, [1, 2, 3, 4]);
     assert.equal(result.sourceHash, hash(await readFile(input.sourcePath)));
     assert.deepEqual(JSON.parse(await readFile(join(input.outputDir, 'manifest.json'), 'utf8')), result);
@@ -99,10 +99,10 @@ test('real rotated/cropped PDF binds actual rasters, preserves raw/native eviden
 
 test('noncontiguous selection preserves PDF page numbers; preexisting output is never overwritten', async () => {
   await fixture(async ({input}) => {
-    const result = await api.createOvisPdfArtifact({...input, pages: [2, 4]}, respond);
+    const result = await api.createOvisSourceArtifact({...input, pages: [2, 4]}, respond);
     assert.deepEqual(result.selectedPages, [2, 4]);
     const before = await readFile(join(input.outputDir, 'manifest.json'));
-    await assert.rejects(api.createOvisPdfArtifact(input, respond), /research_output_already_exists/);
+    await assert.rejects(api.createOvisSourceArtifact(input, respond), /research_output_already_exists/);
     assert.deepEqual(await readFile(join(input.outputDir, 'manifest.json')), before);
   });
 });
@@ -110,13 +110,13 @@ test('noncontiguous selection preserves PDF page numbers; preexisting output is 
 test('invalid selection, partial output, changed source or raster, and cancellation leave no completion artifact', async () => {
   await fixture(async ({input, controller}) => {
     for (const pages of [[], [0], [5], [2, 1], [1, 1]]) {
-      await assert.rejects(api.createOvisPdfArtifact({...input, pages}, () => assert.fail('must not start worker')),
+      await assert.rejects(api.createOvisSourceArtifact({...input, pages}, () => assert.fail('must not start worker')),
         /research_parse_page_range_invalid/);
       await absent(input.outputDir);
     }
     const original = await readFile(input.sourcePath);
     for (const mode of ['partial', 'source', 'raster', 'raw', 'cancel']) {
-      await assert.rejects(api.createOvisPdfArtifact({...input, pages: [1]}, async request => {
+      await assert.rejects(api.createOvisSourceArtifact({...input, pages: [1]}, async request => {
         const result = respond(request);
         if (mode === 'partial') result.pages = [];
         if (mode === 'source') await writeFile(input.sourcePath, 'changed PDF');
@@ -132,7 +132,7 @@ test('invalid selection, partial output, changed source or raster, and cancellat
 
 test('derived worker blocks are reconstructed from bound raw output, never trusted on their own', async () => {
   await fixture(async ({input}) => {
-    const artifact = await api.createOvisPdfArtifact({...input, pages: [1]}, request => {
+    const artifact = await api.createOvisSourceArtifact({...input, pages: [1]}, request => {
       const result = respond(request); result.pages[0].blocks = []; return result;
     });
     const evidence = JSON.parse(await readFile(join(input.outputDir, artifact.pages[0].evidence.path), 'utf8'));
@@ -143,7 +143,7 @@ test('derived worker blocks are reconstructed from bound raw output, never trust
 test('unproven worker exit retains its source rasters for recovery, without a success marker', async () => {
   await fixture(async ({input}) => {
     for (const code of ['research_process_kill_failed', 'research_process_supervision_failed', 'research_process_completion_failed']) {
-      await assert.rejects(api.createOvisPdfArtifact({...input, pages: [1]}, async () => {throw Object.assign(new Error(code), {code});}),
+      await assert.rejects(api.createOvisSourceArtifact({...input, pages: [1]}, async () => {throw Object.assign(new Error(code), {code});}),
         error => error.code === code);
       await access(join(input.outputDir, 'pages/page-1.png'));
       await absent(join(input.outputDir, 'manifest.json'));

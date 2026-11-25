@@ -9,7 +9,7 @@ import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 let capture, adapter, content, builder, repository, validator;
 before(async () => {
   [capture, adapter, content, builder, repository, validator] = await Promise.all([
-    'ovis-pdf-artifact', 'ovis-document-adapter', 'ovis-paper-content', 'paper-ir-builder',
+    'ovis-source-artifact', 'ovis-document-adapter', 'ovis-paper-content', 'paper-ir-builder',
     'paper-ir-repository', 'paper-ir-validation'].map(name => importTypeScriptModule(
       `src/main/plugins/research/${name}.ts`, {platform: 'node',
         external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: '.runtime/tmp'})));
@@ -38,7 +38,7 @@ async function fixture(operation, rawOutput = raw, pages = [2]) {
     for (let i = 1; i <= 3; i++) pdf.addPage([500, 700]).drawText(`Actual PDF page ${i}`, {x: 30, y: 600, font});
     const source = await pdf.save(), sourcePath = join(root, 'source.pdf'); await writeFile(sourcePath, source);
     const controller = new AbortController(), directory = join(root, 'capture');
-    await capture.createOvisPdfArtifact({projectRoot: root, sourcePath, outputDir: directory, pages,
+    await capture.createOvisSourceArtifact({projectRoot: root, sourcePath, outputDir: directory, pages, sourceKind: 'pdf',
       installation: {identity: model}, signal: controller.signal, timeoutMs: 60000,
       admission: {projectId: 'ovis-content-test', priority: 'user', resourceClass: 'parse'}}, async request => ({
       process: {exitCode: 0, stdout: '', stderr: ''}, pages: request.pages.map(({binding}) => {
