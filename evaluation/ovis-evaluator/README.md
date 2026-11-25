@@ -68,6 +68,33 @@ python3 -B evaluation/ovis-evaluator/run_paired.py \
   --output .artifacts/research-toolchain-p3/paired-347-recheck
 ```
 
-The 347-page run is inference evidence, not automatic quality acceptance. Independent official PyTorch parity, the final CER/WER/reading-order/coordinate contract and absolute resource gates remain separate requirements. Both current arms use the MLX adapter; matching them alone cannot establish official-model implementation parity. The frozen configuration records all gaps at run creation; subsequent user-approved skipped coverage is recorded above without altering that configuration.
+The 347-page run is inference evidence, not automatic quality acceptance. Independent official PyTorch parity, reading-order/coordinate acceptance and absolute resource gates remain separate requirements. Both current arms use the MLX adapter; matching them alone cannot establish official-model implementation parity. The frozen configuration records all gaps at run creation; subsequent scoring specifications and user-approved skipped coverage are recorded separately without altering that configuration.
 
 Other repository builds and Python tests ran on the same host during paired inference. Its latency and peak-memory observations therefore describe mixed host load and cannot qualify an exclusive-host P95 performance gate. Performance qualification requires a separate frozen-sample run after competing heavy work has finished.
+
+## Frozen quality scoring
+
+[`scoring.json`](scoring.json) was committed before quality scoring. It distinguishes independent CER/WER from the official scorer's normalized `Edit_dist`, whose denominator is the longer of gold and prediction. They are not interchangeable. `quality_metrics.py` retains every mapped nonempty gold text block, including captions, headers, footers, footnotes and page numbers. It matches within explicit category families using one-to-one raw-character Levenshtein cost with deletion/insertion nodes; unmatched predictions add insertion errors. CER and whitespace-token WER share that assignment. Unicode NFC and whitespace collapse are the only independent text normalization; punctuation, case, Markdown and inline LaTeX remain literal. Chinese whitespace-token WER is not a segmented-language WER.
+
+All 347 pages remain in independent reports; invalid model output is an empty prediction with all gold deletions. Micro totals and per-page macro values are emitted. The explicit-order body/title/reference concatenation is diagnostic only: 669 included text blocks have no order, mostly page furniture, and no synthetic order is invented. Geometry reports maximum-IoU matching within declared families at IoU >= 0.5; unmatched predicted regions are evidence to inspect, not proof of hallucination.
+
+`score_arm.py` requires OS network denial and the committed scoring configuration. It verifies complete inference page identities/order, raw bytes, model receipt, prompt and generation settings. It projects structured blocks to Markdown without content repair and invokes unchanged official parsing, matching, CDM and TEDS. Before comparing arms, an empty-prediction run establishes the exact applicable official gold-row identities. Missing or changed row identities, missing gold glyph rendering, scorer exceptions/timeouts, matcher timeout fallbacks or a changed page denominator invalidate official quality acceptance. Raw independent counts remain available for diagnosis. The runner owns the evaluator process group so cancellation also stops its renderer children.
+
+```sh
+.runtime/ovis-evaluator/venv/bin/python -B -m unittest discover \
+  -s evaluation/ovis-evaluator -p 'test_*.py' -v
+
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_arm.py \
+  --runtime .runtime/ovis-evaluator --arm gold-empty-baseline \
+  --output .artifacts/research-toolchain-p3/scoring-gold-baseline-recheck
+
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B evaluation/ovis-evaluator/score_arm.py \
+  --runtime .runtime/ovis-evaluator --arm original-bf16 \
+  --inference .artifacts/research-toolchain-p3/paired-347/original-bf16 \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-recheck \
+  --output .artifacts/research-toolchain-p3/scoring-original-bf16-recheck
+```
+
+Use `--arm 8bit` and its corresponding inference/output directory for the other arm. Gold coverage is audited per original index and position, expanding merged matches; upstream majority-category changes do not create a different gold identity. Pure prediction rows (`gt_idx=['']`) stay in upstream metrics and are counted separately, without becoming gold or requiring a gold render. Regression checks cover missing/duplicated gold, merged matches, extra predictions and renderer failures. The full gold baseline and model scores are separate runtime work. No score from this workflow automatically adopts the model or qualifies the skipped page classes.
