@@ -1,0 +1,811 @@
+{
+  "schemaVersion": 1,
+  "kind": "research-toolchain-p0",
+  "status": "passed-component-baseline",
+  "source": {
+    "head": "f3bbc7207bf4ff2917fab2e3a126eaf10be66f23",
+    "main": "f3bbc7207bf4ff2917fab2e3a126eaf10be66f23",
+    "trackedDirty": false,
+    "package": {
+      "path": "package.json",
+      "bytes": 7720,
+      "sha256": "5dbea3de0250add2eab0ef265206c7cde828f7fa11891a5efd729519b49fedf0"
+    },
+    "lock": {
+      "path": "pnpm-lock.yaml",
+      "bytes": 281817,
+      "sha256": "6130ac618350445948f63929d2fbeeefa06b7980e6034791603db6b32eaf1ccc"
+    },
+    "script": {
+      "path": "scripts/research-toolchain-inventory.mjs",
+      "bytes": 12571,
+      "sha256": "9735502a679b43b0f3357b8b8e922de294e07e75b1b53142b9068c772e650595"
+    }
+  },
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "27.2.0",
+    "macOS": "27.2.1",
+    "chip": "Apple M1 Pro",
+    "logicalCpus": 10,
+    "totalMemoryBytes": 34359738368
+  },
+  "versions": {
+    "application": "0.1.0",
+    "node": "v26.13.1",
+    "packageManager": "pnpm@12.21.0",
+    "pnpm": "12.21.0",
+    "uv": "uv 0.13.9 (Homebrew 2026-11-17 aarch64-apple-darwin)",
+    "python": {
+      "version": "3.14.7",
+      "implementation": "cpython",
+      "architecture": "arm64"
+    }
+  },
+  "sourceLockHash": "c5fcc8bc26c9fea05ad7693bea30a9dcc61f61b4b7cca7203286f5efb0ffeacc",
+  "inputs": {
+    "files": 95,
+    "pdfs": 45,
+    "annotatedImages": 46
+  },
+  "modelPacks": {
+    "compact": {
+      "assetIds": [
+        "ocr-det",
+        "ocr-rec",
+        "ocr-dictionary",
+        "layout",
+        "table"
+      ],
+      "logicalBytes": 18967109,
+      "diskKiB": 18528
+    },
+    "complete": {
+      "assetIds": [
+        "ocr-det",
+        "ocr-rec",
+        "ocr-dictionary",
+        "layout",
+        "table",
+        "formula",
+        "formula-tokenizer"
+      ],
+      "logicalBytes": 329850264,
+      "diskKiB": 322128
+    }
+  },
+  "packaging": {
+    "path": ".runtime/research-toolchain-p0-package/package/mac-arm64/Roc.app",
+    "logicalBytes": 866350807,
+    "diskKiB": 865480,
+    "fileCount": 400,
+    "symlinkCount": 14,
+    "directoryCount": 99,
+    "asar": {
+      "path": ".runtime/research-toolchain-p0-package/package/mac-arm64/Roc.app/Contents/Resources/app.asar",
+      "logicalBytes": 117302854,
+      "diskKiB": 129232,
+      "fileCount": 1,
+      "symlinkCount": 0,
+      "directoryCount": 0,
+      "bytes": 117302854,
+      "sha256": "1ea6921a90e70aeef45cfb8dc256cdf849548c57f0782e1c16c9dc04da0e8539"
+    },
+    "asarUnpacked": {
+      "path": ".runtime/research-toolchain-p0-package/package/mac-arm64/Roc.app/Contents/Resources/app.asar.unpacked",
+      "logicalBytes": 86588988,
+      "diskKiB": 85396,
+      "fileCount": 291,
+      "symlinkCount": 0,
+      "directoryCount": 31
+    },
+    "researchToolchain": {
+      "path": ".runtime/research-toolchain-p0-package/package/mac-arm64/Roc.app/Contents/Resources/research-toolchain",
+      "logicalBytes": 360029869,
+      "diskKiB": 352392,
+      "fileCount": 46,
+      "symlinkCount": 0,
+      "directoryCount": 13
+    },
+    "native": {
+      "fileCount": 8,
+      "logicalBytes": 95009792,
+      "manifestSha256": "1be1b5010f683b55cc2fba020d2158350eca0ff195bfd5723af349077a79efa7"
+    },
+    "buildSourceMatch": {
+      "packagedMain": {
+        "entry": "dist/main/index.js",
+        "bytes": 5248578,
+        "sha256": "37c18808882422078b84798d511fdff7427d9138c1ac4ebbed664b8cad813cfd"
+      },
+      "currentMain": {
+        "bytes": 5248578,
+        "sha256": "37c18808882422078b84798d511fdff7427d9138c1ac4ebbed664b8cad813cfd"
+      },
+      "mainBundleBytesEqual": true,
+      "sourceCommitVerified": false
+    }
+  },
+  "startup": {
+    "measurement": {
+      "rss": "process.memoryUsage().rss; per process, never exclusive application footprint",
+      "workingSet": "Electron app.getAppMetrics().memory.workingSetSize, KiB converted to bytes",
+      "privateMemory": "process.getProcessMemoryInfo().private, KiB converted to bytes; pre-compression private memory, not physical footprint",
+      "privateBytes": "Electron ProcessMetric privateBytes, Windows only; null on macOS",
+      "footprint": "N/A unless independently measured with Instruments/VM Tracker",
+      "gpu": "GPU process working set only; IOSurface allocation N/A",
+      "peakRss": "process.resourceUsage().maxRSS * 1024; includes fixture setup/imports",
+      "cold": "Fresh application/profile/SQLite connection; OS filesystem cache is not flushed",
+      "cpu": "CPU microseconds and Electron interval averages, reported separately from latency"
+    },
+    "scenarios": [
+      {
+        "id": "events-0",
+        "summary": {
+          "rendererReadyMs": {
+            "count": 20,
+            "min": 1282.6036249999888,
+            "p50": 1302.3079579999903,
+            "p95": 1336.7946669999947,
+            "max": 1758.7764169999998
+          },
+          "firstPaintMs": {
+            "count": 20,
+            "min": 176,
+            "p50": 228,
+            "p95": 240,
+            "max": 248
+          },
+          "inputReadyMs": {
+            "count": 20,
+            "min": 621.327249999973,
+            "p50": 637.7953750000015,
+            "p95": 643.1886660000018,
+            "max": 662.853833000001
+          },
+          "historyReadyMs": {
+            "count": 20,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "rendererHeapUsedBytes": {
+            "count": 20,
+            "min": 15394172,
+            "p50": 15475944,
+            "p95": 15676652,
+            "max": 15780232
+          },
+          "rendererHeapTotalBytes": {
+            "count": 20,
+            "min": 21397504,
+            "p50": 21921792,
+            "p95": 22446080,
+            "max": 22446080
+          },
+          "rendererDomNodes": {
+            "count": 20,
+            "min": 763,
+            "p50": 763,
+            "p95": 763,
+            "max": 763
+          },
+          "rendererDocuments": {
+            "count": 20,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "max": 2
+          },
+          "mountedMessageRows": {
+            "count": 20,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "mainRssBytes": {
+            "count": 20,
+            "min": 486686720,
+            "p50": 487194624,
+            "p95": 496582656,
+            "max": 496730112
+          },
+          "mainHeapUsedBytes": {
+            "count": 20,
+            "min": 77207996,
+            "p50": 77401812,
+            "p95": 77478320,
+            "max": 77483100
+          },
+          "mainExternalBytes": {
+            "count": 20,
+            "min": 124202373,
+            "p50": 124202373,
+            "p95": 124202373,
+            "max": 124202373
+          },
+          "mainArrayBufferBytes": {
+            "count": 20,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "mainPrivateMemoryBytes": {
+            "count": 20,
+            "min": 315820032,
+            "p50": 318179328,
+            "p95": 323569664,
+            "max": 327452672
+          },
+          "processWorkingSetSumBytes": {
+            "count": 20,
+            "min": 806109184,
+            "p50": 809205760,
+            "p95": 818708480,
+            "max": 818855936
+          }
+        }
+      },
+      {
+        "id": "events-1000",
+        "summary": {
+          "rendererReadyMs": {
+            "count": 20,
+            "min": 1282.131458000018,
+            "p50": 1306.320040999999,
+            "p95": 1332.0033330000006,
+            "max": 1336.2191250000033
+          },
+          "firstPaintMs": {
+            "count": 20,
+            "min": 216,
+            "p50": 228,
+            "p95": 240,
+            "max": 240
+          },
+          "inputReadyMs": {
+            "count": 20,
+            "min": 639.6552499999816,
+            "p50": 646.6595830000006,
+            "p95": 659.5704170000099,
+            "max": 660.0715840000194
+          },
+          "historyReadyMs": {
+            "count": 20,
+            "min": 117.05474999998114,
+            "p50": 132.97141699999338,
+            "p95": 139.73083300000872,
+            "max": 140.03437500001746
+          },
+          "rendererHeapUsedBytes": {
+            "count": 20,
+            "min": 16516356,
+            "p50": 16894152,
+            "p95": 17161052,
+            "max": 17416332
+          },
+          "rendererHeapTotalBytes": {
+            "count": 20,
+            "min": 26902528,
+            "p50": 27688960,
+            "p95": 28213248,
+            "max": 28999680
+          },
+          "rendererDomNodes": {
+            "count": 20,
+            "min": 1202,
+            "p50": 1206,
+            "p95": 1206,
+            "max": 1206
+          },
+          "rendererDocuments": {
+            "count": 20,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "max": 2
+          },
+          "mountedMessageRows": {
+            "count": 20,
+            "min": 13,
+            "p50": 13,
+            "p95": 13,
+            "max": 13
+          },
+          "mainRssBytes": {
+            "count": 20,
+            "min": 519536640,
+            "p50": 543916032,
+            "p95": 552304640,
+            "max": 552386560
+          },
+          "mainHeapUsedBytes": {
+            "count": 20,
+            "min": 64300312,
+            "p50": 64787084,
+            "p95": 65079200,
+            "max": 65112280
+          },
+          "mainExternalBytes": {
+            "count": 20,
+            "min": 127343990,
+            "p50": 158691498,
+            "p95": 168128682,
+            "max": 168128682
+          },
+          "mainArrayBufferBytes": {
+            "count": 20,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "mainPrivateMemoryBytes": {
+            "count": 20,
+            "min": 321538048,
+            "p50": 326404096,
+            "p95": 358926336,
+            "max": 364857344
+          },
+          "processWorkingSetSumBytes": {
+            "count": 20,
+            "min": 825081856,
+            "p50": 829423616,
+            "p95": 861241344,
+            "max": 868990976
+          }
+        }
+      },
+      {
+        "id": "events-10000",
+        "summary": {
+          "rendererReadyMs": {
+            "count": 20,
+            "min": 1296.8539170000004,
+            "p50": 1314.599291999999,
+            "p95": 1330.6182499999995,
+            "max": 1334.1409170000115
+          },
+          "firstPaintMs": {
+            "count": 20,
+            "min": 220,
+            "p50": 228,
+            "p95": 232,
+            "max": 240
+          },
+          "inputReadyMs": {
+            "count": 20,
+            "min": 617.240959000017,
+            "p50": 645.346749999997,
+            "p95": 662.793708000012,
+            "max": 665.3823750000156
+          },
+          "historyReadyMs": {
+            "count": 20,
+            "min": 115.50412499997765,
+            "p50": 122.2839999999851,
+            "p95": 139.50541700000758,
+            "max": 139.66520799999125
+          },
+          "rendererHeapUsedBytes": {
+            "count": 20,
+            "min": 16640460,
+            "p50": 16890996,
+            "p95": 17159140,
+            "max": 17425536
+          },
+          "rendererHeapTotalBytes": {
+            "count": 20,
+            "min": 27426816,
+            "p50": 27951104,
+            "p95": 28475392,
+            "max": 28475392
+          },
+          "rendererDomNodes": {
+            "count": 20,
+            "min": 1202,
+            "p50": 1202,
+            "p95": 1206,
+            "max": 1206
+          },
+          "rendererDocuments": {
+            "count": 20,
+            "min": 2,
+            "p50": 2,
+            "p95": 2,
+            "max": 2
+          },
+          "mountedMessageRows": {
+            "count": 20,
+            "min": 13,
+            "p50": 13,
+            "p95": 13,
+            "max": 13
+          },
+          "mainRssBytes": {
+            "count": 20,
+            "min": 520421376,
+            "p50": 526630912,
+            "p95": 554500096,
+            "max": 555319296
+          },
+          "mainHeapUsedBytes": {
+            "count": 20,
+            "min": 64317696,
+            "p50": 64634704,
+            "p95": 65038216,
+            "max": 65046328
+          },
+          "mainExternalBytes": {
+            "count": 20,
+            "min": 124198262,
+            "p50": 129441142,
+            "p95": 164982954,
+            "max": 166031530
+          },
+          "mainArrayBufferBytes": {
+            "count": 20,
+            "min": 0,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "mainPrivateMemoryBytes": {
+            "count": 20,
+            "min": 329762816,
+            "p50": 356485120,
+            "p95": 361498624,
+            "max": 370149376
+          },
+          "processWorkingSetSumBytes": {
+            "count": 20,
+            "min": 831094784,
+            "p50": 859668480,
+            "p95": 865058816,
+            "max": 873414656
+          }
+        }
+      }
+    ],
+    "idleSamples": [
+      {
+        "minutes": 0,
+        "elapsedMs": 3.83862500000032,
+        "visibility": "visible",
+        "main": {
+          "rss": 487276544,
+          "heapTotal": 147259392,
+          "heapUsed": 63005468,
+          "external": 84149205,
+          "arrayBuffers": 0
+        },
+        "mainPrivateMemoryBytes": 318310400,
+        "footprintBytes": null,
+        "ioSurfaceBytes": null,
+        "mainCpuOneCorePercent": null
+      },
+      {
+        "minutes": 1,
+        "elapsedMs": 60006.373667,
+        "visibility": "visible",
+        "main": {
+          "rss": 362971136,
+          "heapTotal": 63635456,
+          "heapUsed": 62073560,
+          "external": 12590590,
+          "arrayBuffers": 0
+        },
+        "mainPrivateMemoryBytes": 143263744,
+        "footprintBytes": null,
+        "ioSurfaceBytes": null,
+        "mainCpuOneCorePercent": 2.270607398581318
+      },
+      {
+        "minutes": 0,
+        "elapsedMs": 4.066500000000815,
+        "visibility": "hidden",
+        "main": {
+          "rss": 363429888,
+          "heapTotal": 64159744,
+          "heapUsed": 61474548,
+          "external": 12590590,
+          "arrayBuffers": 0
+        },
+        "mainPrivateMemoryBytes": 143837184,
+        "footprintBytes": null,
+        "ioSurfaceBytes": null,
+        "mainCpuOneCorePercent": null
+      },
+      {
+        "minutes": 1,
+        "elapsedMs": 60006.518875,
+        "visibility": "hidden",
+        "main": {
+          "rss": 366362624,
+          "heapTotal": 64159744,
+          "heapUsed": 61674876,
+          "external": 12590590,
+          "arrayBuffers": 0
+        },
+        "mainPrivateMemoryBytes": 148047872,
+        "footprintBytes": null,
+        "ioSurfaceBytes": null,
+        "mainCpuOneCorePercent": 1.5993246309376368
+      }
+    ],
+    "reopenMs": 45.830541000002995,
+    "limitations": [
+      "Fresh isolated profiles/launches; OS filesystem cache remains warm.",
+      "Renderer DOM and JS heap are CDP point-in-time samples after history readiness; neither peak heap nor a leak verdict. Fixture events are user messages, not streaming model output.",
+      "When hidden idle is selected, native close-to-hide and second-instance reopen exercise production host forwarding; hidden checkpoints confirm the Renderer received hidden=true.",
+      "Summed working sets include shared pages; not application exclusive footprint.",
+      "CPU interval averages share app.getAppMetrics sampling intervals with diagnostics.",
+      "Idle visibility is asserted in both BrowserWindow and Renderer forwarding. visible+hidden observes two separate intervals in that order; checkpoints alone cannot prove zero activity between samples.",
+      "mainCpuOneCorePercent uses process.cpuUsage delta / elapsed wall time; 100% means one logical CPU core. It is not normalized by host logical CPU count and differs from Electron process interval metrics.",
+      "PDF/OCR, background-busy and long idle are separate explicitly selected workloads; this startup report does not establish them."
+    ]
+  },
+  "raster": {
+    "status": "measured",
+    "metrics": {
+      "pages": 46,
+      "layout": {
+        "text": {
+          "gold": 392,
+          "predicted": 204,
+          "tp": 135,
+          "fp": 69,
+          "fn": 257,
+          "f1": 0.45302013422818793
+        },
+        "table": {
+          "gold": 12,
+          "predicted": 6,
+          "tp": 5,
+          "fp": 1,
+          "fn": 7,
+          "f1": 0.5555555555555556
+        },
+        "figure": {
+          "gold": 31,
+          "predicted": 26,
+          "tp": 20,
+          "fp": 6,
+          "fn": 11,
+          "f1": 0.7017543859649122
+        },
+        "formula": {
+          "gold": 34,
+          "predicted": 51,
+          "tp": 29,
+          "fp": 22,
+          "fn": 5,
+          "f1": 0.6823529411764706
+        }
+      },
+      "layoutMicroF1": 0.5,
+      "ocr": {
+        "characters": 42186,
+        "characterEdits": 31573,
+        "words": 6996,
+        "wordEdits": 5689,
+        "cer": 0.7484236476556203,
+        "wer": 0.8131789594053745
+      },
+      "readingOrder": {
+        "correctPairs": 933,
+        "totalPairs": 2994,
+        "pairRecall": 0.31162324649298595
+      },
+      "tables": {
+        "count": 12,
+        "matched": 5,
+        "goldCells": 622,
+        "cellExactMatch": 0.05305466237942122,
+        "meanTeds": 0.26831594018646376
+      },
+      "formulas": {
+        "count": 34,
+        "matched": 29,
+        "normalizedExactMatch": 0.11764705882352941
+      }
+    },
+    "failedPages": 2,
+    "failures": [
+      {
+        "image": "omnidocbench/images/exam_paper_2004-2019上海高考英语听力原文和答案_page_010.png",
+        "failureCode": "research_image_too_large"
+      },
+      {
+        "image": "omnidocbench/images/exam_paper_2004-2019上海高考英语听力原文和答案_page_050.png",
+        "failureCode": "research_image_too_large"
+      }
+    ],
+    "performance": {
+      "pageP50Ms": 2100.8648749999993,
+      "pageP95Ms": 7825.868291999999,
+      "totalPageMs": 133368.25258099998,
+      "sampledPeakRssBytes": 2027656368,
+      "pageSamples": 46
+    },
+    "scoringContract": {
+      "version": 1,
+      "track": "public-raster-component-subset",
+      "officialLeaderboardCompatible": false,
+      "layout": "category-collapsed-one-to-one-greedy-iou-0.5",
+      "predictionCategories": "image-chart-header_image-to-figure;captions-to-text",
+      "text": "NFC-space-collapse-region-CER-codepoints-WER-whitespace",
+      "order": "all-gold-ordered-pairs-unmatched-pairs-incorrect",
+      "table": "row-column-span-text-cell-exact-and-ordered-tree-TEDS",
+      "formula": "delimiter-spacing-left-right-normalized-exact-no-symbolic-equivalence"
+    },
+    "deterministicScoreHash": "06182bf24cda7806c642b7bdc56b2b40f5089a087858e88e8e51c1bf539ac278",
+    "limitations": [
+      "Real public raster pages, not complete original PDF documents.",
+      "Production image path does not emit PDF stage observations.",
+      "RSS sampled in one sequential process; per-page peaks include retained runtime memory.",
+      "Custom collapsed-category subset metrics; not official leaderboard scores.",
+      "CER/WER align one-to-one IoU matched text regions, with unmatched gold deletions and unmatched predictions insertions.",
+      "Reading-order pair denominator includes unmatched gold objects.",
+      "Table cells and normalized formulas retain gold denominator even when detection fails.",
+      "Explicit per-page parser failures stay in all gold denominators with zero recovery; no output or coordinate verification is asserted for them.",
+      "Whitespace WER is not linguistic segmentation for Chinese.",
+      "TEDS follows ordered-tree edit distance with tag/span and fractional character/markup token costs; normalization differs from upstream tooling.",
+      "No complete-PDF version mapping, native/OCR fusion, cross-paper or Wiki score."
+    ]
+  },
+  "fullPdf": {
+    "status": "verified-provenance-unscored-quality",
+    "papers": 45,
+    "parsedPapers": 45,
+    "failedPapers": 0,
+    "verifiedPages": 429,
+    "performance": {
+      "paperP50Ms": 29475.881417000084,
+      "paperP95Ms": 47623.24166599999,
+      "totalPaperMs": 1397638.079045999,
+      "sampledPeakRssBytes": 2377071680,
+      "paperSamples": 45
+    },
+    "deterministicOutputHash": "17d60a66d6f13cdc92f15ca3205313c99bd6a6ee166d38396a2193016c46e8a2",
+    "qualityMetrics": null,
+    "qualityMetricsReason": "No independent full-PDF structure or QASPER-to-specific-PDF evidence gold."
+  },
+  "paperIr": {
+    "counts": {
+      "sources": 91,
+      "failedSources": 2,
+      "blocks": 13564,
+      "sections": 1681,
+      "tables": 195,
+      "cells": 8151,
+      "figures": 212,
+      "equations": 503,
+      "algorithms": 3,
+      "citations": 704,
+      "references": 76,
+      "relations": 40451
+    },
+    "trials": [
+      {
+        "rows": 91,
+        "deterministicHash": "ef27f70eca6be45b0194407d551e3ccf951e312be8a51072d195fc45fa33f2b0"
+      },
+      {
+        "rows": 91,
+        "deterministicHash": "ef27f70eca6be45b0194407d551e3ccf951e312be8a51072d195fc45fa33f2b0"
+      }
+    ],
+    "limitations": [
+      "Saved parser outputs reused without OCR inference or recognition-gain claims.",
+      "Historical failures remain in the selected denominator. Missing cell geometry stays page-only.",
+      "Exact numbered and matched GROBID references only; complex author-year/range markers are not inferred.",
+      "Agent acceptance does not supply new human scientific gold."
+    ]
+  },
+  "pythonPreparation": {
+    "python": {
+      "executable": "/Users/Apple_501/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14",
+      "version": "3.14.7",
+      "implementation": "cpython",
+      "architecture": "arm64",
+      "platform": "darwin",
+      "binarySha256": "e925fab5e8f595817ff36ff28e214b91520c040d5b7d47249b0199bc5f68015e",
+      "requestedExecutable": "/Users/Apple_501/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14"
+    },
+    "fixture": {
+      "samples": 5,
+      "venvCommand": [
+        "-I",
+        "-m",
+        "venv",
+        "--without-pip",
+        "<project>/.venv"
+      ],
+      "preparationApi": "ResearchPythonEnvironmentService.list",
+      "runtime": "real CPython, production environment probe"
+    },
+    "summary": {
+      "venvCreateMs": {
+        "count": 5,
+        "min": 39.54912499999955,
+        "p50": 40.161417000000256,
+        "p95": 42.87208399999997,
+        "max": 42.87208399999997
+      },
+      "autoInspectMs": {
+        "count": 5,
+        "min": 1705.5337909999998,
+        "p50": 1727.7446250000012,
+        "p95": 2499.2243329999997,
+        "max": 2499.2243329999997
+      },
+      "reuseInspectMs": {
+        "count": 5,
+        "min": 1654.2441669999998,
+        "p50": 1718.7908339999994,
+        "p95": 1764.6139169999988,
+        "max": 1764.6139169999988
+      }
+    },
+    "limitations": [
+      "The current product discovers and inspects existing environments; it does not create this venv.",
+      "venvCreateMs measures explicit external preparation; autoInspectMs and reuseInspectMs measure the production list API.",
+      "Interpreter and packages are already local. No download, pip, uv resolution or real scientific dependency installation is measured.",
+      "Each sample uses a new project and empty real venv. Imports, fixture database setup and cleanup are excluded from measured intervals.",
+      "Warm inspection reuses the same service and receipt; OS filesystem caches are not flushed.",
+      "Temporary project paths differ between samples and are included in environment identity; metadata hashes need not match between samples."
+    ]
+  },
+  "checks": {
+    "build": "passed",
+    "contracts": {
+      "pass": 97,
+      "fail": 0
+    },
+    "production": {
+      "pass": 19,
+      "fail": 0
+    },
+    "packagedSmoke": "passed",
+    "pythonInitial": {
+      "pass": 30,
+      "fail": 9,
+      "cause": "stale test fixtures: schema version, missing manifest snapshot, missing worker lease; subsequent recovery exposed missing database connection configuration"
+    },
+    "pythonFinal": {
+      "pass": 39,
+      "fail": 0,
+      "composition": "20 unchanged tests passed in initial batch; all 19 experiment tests passed after fixture repair",
+      "rerunCommand": "node --test tests/integration/research-python-experiments.test.mjs",
+      "rerunPass": 19,
+      "rerunDurationMs": 237492.560333
+    }
+  },
+  "evidenceSha256": {
+    ".artifacts/research-toolchain-p0/inventory.json": "a861ff7dc411506ffdf9fbafc463c3ed0766f8c47197b81270151f8acc7cf360",
+    ".artifacts/research-toolchain-p0/startup.json": "edbe3624ee63998cf546e049474e945dfe96a28ecbc0efcc0c814ff276ad0333",
+    ".artifacts/research-toolchain-p0/parser-summary.json": "1c1d5ee475b37a64f50a831531b240212cb0d404b2c9b8601a3b96ca491ba36d",
+    ".artifacts/research-toolchain-p0/python-preparation.json": "67468ab5d6ddab1defedcd0e30899df9b45af0a68fe92fc4ef136618ce951ce0",
+    ".artifacts/research-toolchain-p0/contracts.log": "5bc5e790ada1be525b82be0093f3cbd9e1ba238581368b6495e6fe0368df79fc",
+    ".artifacts/research-toolchain-p0/production.log": "9a72e6e864a15ef78911a9d8623abbd368eda0e53ca2ab7bcd8d916e6d7bceb7",
+    ".artifacts/research-toolchain-p0/package.log": "28e8f5c2ba281993eb1cedfb5c92263c71aa60838bca133cce706fe264baba45",
+    ".artifacts/research-toolchain-p0/package-smoke.log": "cccb147f9cee20ac3affa2524b7de9a4b00db7f1fceb44fc9a494341c276a277",
+    ".artifacts/research-toolchain-p0/pdf-verification.log": "2ee562d7daa4ed5d6d5c6bc7cdf8a8b613de5b89891640e7b5efa74028f862b4",
+    ".artifacts/research-toolchain-p0/paper-ir.log": "2f652a29440c7321c8330acb54bfd4062a9029571412f866f6e2e678f0dd1b27",
+    ".artifacts/research-toolchain-p0/python-integration.log": "a22e64240cbbf7fc0608ac956e6675d72a1b18fcd81f6eda0ee7ca7a04495ad3",
+    ".artifacts/research-toolchain-p0/python-failure-repro.log": "a1ddc7b5ba3677b8b8042e93c5ec7995f8b54a804e4831d3d235eb7039d408b7",
+    ".artifacts/research-toolchain-p0/python-experiments-targeted.log": "3fdbacbfedbd955a4729a44927b75fc8d7e72701db11ed4eb33953876533dbbe",
+    ".artifacts/research-toolchain-p0/python-experiments-final.log": "df1799c7f0d2cf44db75e8e82b9e66bdd112ba65c956fc1b5341afe789666008"
+  },
+  "qualityQualification": "component baseline only; full >=200-page/CDM/TEDS and original multipage/scanned gold remain P3/P6",
+  "testRepair": {
+    "path": "tests/integration/research-python-experiments.test.mjs",
+    "sha256": "7e29a15906b59f3878f4c87e49bde50986ef71ec2981add0d92de288c7cd5ec5",
+    "productBehaviorChanged": false
+  }
+}

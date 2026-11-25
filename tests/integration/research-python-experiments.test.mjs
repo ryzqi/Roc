@@ -292,7 +292,7 @@ test('actual metric review freezes measured values, full method and source ident
     let reopened;
     try {
       api.applyResearchDatabaseSchema(disk);
-      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),46);
+      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchSchema.version);
       const repository=new api.ResearchRepository(disk,f.tasks),before=f.observed.length;
       reopened=new api.ResearchExperimentService(repository,{
         inspect:async()=>assert.fail('result history must not inspect an execution environment')
@@ -328,6 +328,7 @@ test('metric review requires actual complete output and human authority; source 
     const reference={projectId:f.project.id,resultId:saved.snapshot.id,expectedHash:saved.snapshotHash};
     assert.deepEqual(await service.get(reference),saved);
     await assert.rejects(service.get({...reference,expectedHash:'0'.repeat(64)}),/research_result_hash_mismatch/u);
+    await f.service.snapshot(f.project.id,run.id);
     const path=join(f.repository.experiments.root(f.project.id,run.id),'input/analysis.py');
     await chmod(path,0o600);await writeFile(path,metricSource+'\nprint("host changed source")\n');
     await assert.rejects(service.get(reference),/research_experiment_snapshot_changed/u);
@@ -816,7 +817,8 @@ test('actual Python service freezes inputs and identity, repeats deterministic o
     const foreign = f.repository.createProject({ title: 'Foreign', description: '', workspacePath: foreignWorkspace });
     await assert.rejects(f.service.inspect(foreign.id, f.runtime), /research_python_selection_project_mismatch/u);
     await assert.rejects(f.service.read({ projectId: foreign.id, runId: first.id, area: 'output', path: 'result.json' }), /research_experiment_project_mismatch/u);
-    const published = await f.service.publish(f.project.id, first.id);
+    await assert.rejects(f.service.publish(f.project.id, first.id), /research_node_worker_required/u);
+    const published = await f.withWorker(() => f.service.publish(f.project.id, first.id));
     await f.service.verifyPublication(f.project.id, published.artifactId);
     const writerRoot = await mkdtemp(join(f.path, 'export-')), writer = new api.ResearchExportFiles(writerRoot);
     for (const path of ['environment-code.json', 'python-startup.json', 'resources.json']) {
@@ -905,11 +907,11 @@ test('host rehashed startup log still cannot change project, seed, bootstrap or 
       file.sha256 = createHash('sha256').update(content).digest('hex'); file.size = Buffer.byteLength(content);
       await chmod(path, 0o600); await writeFile(path, content); await chmod(path, 0o400);
       f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(JSON.stringify(snapshot), run.id);
-      await assert.rejects(f.service.publish(f.project.id, run.id), /research_experiment_python_startup_report_changed/u);
+      await assert.rejects(f.withWorker(() => f.service.publish(f.project.id, run.id)), /research_experiment_python_startup_report_changed/u);
     }
     await chmod(path, 0o600); await writeFile(path, original); await chmod(path, 0o400);
     f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(row, run.id);
-    const published = await f.service.publish(f.project.id, run.id);
+    const published = await f.withWorker(() => f.service.publish(f.project.id, run.id));
     await f.service.verifyPublication(f.project.id, published.artifactId);
     await chmod(path, 0o600); await writeFile(path, JSON.stringify({ ...report, projectId: 'foreign' }));
     await assert.rejects(f.service.verifyPublication(f.project.id, published.artifactId), /research_experiment_snapshot_changed/u);
@@ -936,7 +938,12 @@ while True:
     const timeout = await f.execute({ requestId: 'timeout', timeoutMs: 1000 });
     assert.equal(timeout.status, 'failed'); assert.equal(timeout.error, 'research_process_timeout');
     assert.equal(JSON.parse(await f.read(timeout, 'log', 'resources.json')).outcome, 'rejected');
-    const active = await f.service.start({ ...f.request, requestId: 'cancel', timeoutMs: 15000 });
+    const cancelRequest = { ...f.request, requestId: 'cancel', timeoutMs: 15000 };
+    const before = f.observed.length;
+    await assert.rejects(f.service.start(cancelRequest), /research_node_worker_required/u);
+    assert.equal(f.observed.length, before);
+    assert.equal(f.repository.experiments.existing(f.project.id, cancelRequest.requestId), null);
+    const active = await f.withWorker(() => f.service.start(cancelRequest));
     const storage = f.repository.experiments.root(f.project.id, active.id);
     const deadline = Date.now() + 10000; let pids;
     while (Date.now() < deadline) {
@@ -1038,7 +1045,7 @@ async function waitForTree(repository, projectId, runId) {
 test('actual Python shutdown interrupts computation, persists rejected resources and removes the full process tree', async () => {
   const f = await fixture(treeSource, { scenario: 'shutdown' });
   try {
-    const active = await f.service.start({ ...f.request, timeoutMs: 15000 });
+    const active = await f.withWorker(() => f.service.start({ ...f.request, timeoutMs: 15000 }));
     const pids = await waitForTree(f.repository, f.project.id, active.id);
     await f.service.shutdown();
     const interrupted = await f.wait(active.id);
@@ -1065,14 +1072,14 @@ test('Python disk recovery retains selected environments and historical audits, 
   try {
     const completed = await f.execute();
     assert.equal(completed.status, 'completed', completed.error);
-    const published = await f.service.publish(f.project.id, completed.id);
+    const published = await f.withWorker(() => f.service.publish(f.project.id, completed.id));
     const selectionRequest = { projectId: f.project.id, selectionId: f.runtime.selectionId, expectedHash: f.runtime.expectedHash };
     const selection = f.repository.pythonEnvironments.get(selectionRequest);
     const historicalResources = await f.read(completed, 'log', 'resources.json');
     const historicalStartup = await f.read(completed, 'log', 'python-startup.json');
     await writeFile(join(f.workspace, 'analysis.py'), treeSource);
     const interruptedRequest = { ...f.request, requestId: 'running-at-restart', timeoutMs: 15000 };
-    const active = await f.service.start(interruptedRequest);
+    const active = await f.withWorker(() => f.service.start(interruptedRequest));
     const pids = await waitForTree(f.repository, f.project.id, active.id);
     const durable = f.repository.experiments.get(f.project.id, active.id);
     assert.equal(durable.status, 'running');
@@ -1083,6 +1090,12 @@ test('Python disk recovery retains selected environments and historical audits, 
     await f.service.shutdown(); await f.pythonService.shutdown();
     for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
     restartedDb = new Database(researchPath); restartedAgentDb = new Database(agentPath);
+    api.configureRocDatabaseConnection(restartedDb, {
+      databaseName: 'plugin:@roc/plugin-research', busyTimeoutMs: 5000, synchronous: 'NORMAL'
+    });
+    api.configureRocDatabaseConnection(restartedAgentDb, {
+      databaseName: 'agent', busyTimeoutMs: 5000, synchronous: 'NORMAL'
+    });
     const tasks = new api.ResearchTaskRepository(restartedAgentDb);
     const repository = new api.ResearchRepository(restartedDb, tasks);
     let dispatches = 0;
@@ -1258,7 +1271,7 @@ test('actual Notebook uses selected Python filesystem isolation and records time
     const timeout = await f.execute({ source: busy.source, requestId: 'notebook-timeout', timeoutMs: 1000 });
     assert.equal(timeout.status, 'failed'); assert.equal(timeout.error, 'research_process_timeout');
     assert.equal(JSON.parse(await f.read(timeout, 'log', 'resources.json')).outcome, 'rejected');
-    const active = await f.service.start({ ...f.request, source: busy.source, requestId: 'notebook-cancel', timeoutMs: 15000 });
+    const active = await f.withWorker(() => f.service.start({ ...f.request, source: busy.source, requestId: 'notebook-cancel', timeoutMs: 15000 }));
     const started = join(f.repository.experiments.root(f.project.id, active.id), 'output/STARTED');
     const deadline = Date.now() + 10000;
     while (true) {
@@ -1314,11 +1327,11 @@ test('host rehashed Notebook scripts cannot break provenance and disk reopen pre
     file.sha256 = createHash('sha256').update(changed).digest('hex'); file.size = changed.length;
     await chmod(path, 0o600); await writeFile(path, changed); await chmod(path, 0o400);
     f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(JSON.stringify(snapshot), run.id);
-    await assert.rejects(f.service.publish(f.project.id, run.id), /research_experiment_notebook_source_changed/u);
+    await assert.rejects(f.withWorker(() => f.service.publish(f.project.id, run.id)), /research_experiment_notebook_source_changed/u);
     await assert.rejects(f.service.start(request), /research_experiment_notebook_source_changed/u);
     await chmod(path, 0o600); await writeFile(path, original); await chmod(path, 0o400);
     f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(row, run.id);
-    const published = await f.service.publish(f.project.id, run.id);
+    const published = await f.withWorker(() => f.service.publish(f.project.id, run.id));
     const dbPath = join(f.path, 'notebook-research.db'), agentPath = join(f.path, 'notebook-agent.db');
     await f.db.backup(dbPath); await f.agentDb.backup(agentPath);
     await rm(join(f.workspace, 'analysis.ipynb')); await f.service.shutdown();
