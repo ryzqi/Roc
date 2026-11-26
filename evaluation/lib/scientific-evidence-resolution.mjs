@@ -48,8 +48,16 @@ export function resolveScientificEvidenceGold(query, annotations, observations, 
   unique(annotations.map(a => a.paperId), 'duplicate_annotation');
   unique(observations.map(s => s.paperId), 'duplicate_source');
   unique(query.expectedEvidenceSpans.map(s => s.id), 'duplicate_gold_span');
-  requireValue(query.answerable === (query.expectedEvidenceSpans.length > 0)
+  requireValue((query.answerable ? query.expectedEvidenceSpans.length > 0
+    : query.schemaVersion === 2 || query.expectedEvidenceSpans.length === 0)
     && (query.category === 'unanswerable') === !query.answerable, 'answerability_mismatch');
+  if (query.schemaVersion === 2) {
+    requireValue((query.answerability === 'answerable') === query.answerable, 'answerability_mismatch');
+    if (!query.answerable) requireValue(query.expectedEvidenceSpans.every(span =>
+      query.requiredConditions.some(condition => condition.status === 'known'
+        && condition.paperId === span.paperId && condition.evidenceSpanIds.includes(span.id))),
+    'unanswerable_condition_evidence_missing');
+  }
   const goldById = new Map(annotations.map(a => [a.paperId, a]));
   const sourceById = new Map(observations.map(s => [s.paperId, s]));
   for (const annotation of annotations) unique(annotation.blocks.map(b => b.blockId), 'duplicate_gold_block');
@@ -66,7 +74,7 @@ export function resolveScientificEvidenceGold(query, annotations, observations, 
           === hash(source.parseRef), 'index_identity_mismatch');
     }
   }
-  const resolutions = query.expectedEvidenceSpans.map(span => {
+  const allResolutions = query.expectedEvidenceSpans.map(span => {
     const annotation = goldById.get(span.paperId), source = sourceById.get(span.paperId);
     const expected = annotation?.blocks.find(b => b.blockId === span.blockId);
     requireValue(annotation?.sourceHash === span.sourceHash && expected
@@ -107,11 +115,16 @@ export function resolveScientificEvidenceGold(query, annotations, observations, 
     return { span: { ...identity, parseRef: annotation.parseRef, mapping },
       originalQuoteHash: hash(quote), originalBlockHash: hash(expected), matchedId };
   });
+  // Refusal-condition evidence remains auditable, but is not positive retrieval
+  // gold. The existing scorer deliberately excludes unanswerable questions.
+  const resolutions = query.answerable ? allResolutions : [];
   const gold = scientificEvidenceInputSchema.shape.gold.parse({
     queryId: query.id, projectId, category: query.category,
     answerable: query.answerable, spans: resolutions.map(r => r.span)
   });
   return { schemaVersion: 1, status: 'resolved-draft-correspondence', contract: scientificEvidenceResolutionContract,
     queryHash: hash(query), annotationHashes: Object.fromEntries(annotations.map(a => [a.paperId, hash(a)])),
-    sourceObservationHash: hash(observations), gold, resolutions, scientificBaselineReady: false };
+    sourceObservationHash: hash(observations), gold, resolutions,
+    ...(query.schemaVersion === 2 ? { conditionResolutions: query.answerable ? [] : allResolutions } : {}),
+    scientificBaselineReady: false };
 }

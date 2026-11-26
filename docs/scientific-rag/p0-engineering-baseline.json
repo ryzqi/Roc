@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "kind": "scientific-knowledge-p0-engineering-baseline",
+  "recordedAt": "2026-11-26T07:12:50.343097+00:00",
+  "scope": "RAG-01/RAG-02 engineering; human scientific quality remains unaccepted",
+  "workingDirectory": ".",
+  "baselineRevision": "3b8acb7feb9b745b437bdb365699264aed7e4756",
+  "baseline": {
+    "sourceHash": "7f0616dcbd0375f2174d46da50a9feb6f2b63a235191897dca832819bcc44196",
+    "lockfileHash": "688b5993c6e4ffcd6fdf97eb3d31fc161a1f5509889bf80d5e58123080035d67",
+    "node": "v26.13.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "candidate": {
+    "commit": "3b8acb7feb9b745b437bdb365699264aed7e4756",
+    "dirty": true,
+    "sourceHash": "515ebc1704eb50f7800bfabd433697759d60ddf08bc8dcf89c4d3a59ab187623",
+    "lockfileHash": "688b5993c6e4ffcd6fdf97eb3d31fc161a1f5509889bf80d5e58123080035d67",
+    "node": "v26.13.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "changedCodeAndTestFiles": [
+    {
+      "path": "evaluation/corpora/scientific-rag/README.md",
+      "sha256": "89b68dc57429711f095af6d012ce2984116a55920b287ee89b65f5f1511f3337"
+    },
+    {
+      "path": "evaluation/corpora/scientific-rag/manifest.json",
+      "sha256": "f4c2ef81183a4ecd9c769581f6ea392347ddeb001701b6a5380a56bcb5899bc8"
+    },
+    {
+      "path": "evaluation/corpora/scientific-rag/queries/README.md",
+      "sha256": "367d222eaa206383af46da23490f29ffdf8d2cfff01ea4191af1458a61d78ddb"
+    },
+    {
+      "path": "evaluation/lib/scientific-evidence-resolution.mjs",
+      "sha256": "bdfdc22348a5a3a30f9d676c9f3124ebd04382e0671b9f11d51e785c627369a7"
+    },
+    {
+      "path": "evaluation/lib/scientific-rag-corpus.mjs",
+      "sha256": "78377d73c131c6bce139727d68e3f26f3cb64b5546ac33e17528752947568167"
+    },
+    {
+      "path": "evaluation/tests/scientific-evidence-resolution.test.mjs",
+      "sha256": "96da1cdc6d618ca17f48fb015120309efb443ae2f9d9962f029fb524036aa073"
+    },
+    {
+      "path": "evaluation/tests/scientific-rag-corpus.test.mjs",
+      "sha256": "8555734a23c7babfdc7dc52db3f0701fc1409f91ca7d920953e8d831ff4fd890"
+    },
+    {
+      "path": "scripts/benchmark-scientific-native-baseline.mjs",
+      "sha256": "8cbea4ebb33e09a4e91e5b8688b9224963e70d3611ad3f123b691e3436d6c9e2"
+    },
+    {
+      "path": "scripts/check-scientific-rag-corpus.mjs",
+      "sha256": "ec4cecfb7a4704b5f8b1afb544edc6fe3b97aa2f0ccee6474b239f65ed8dd7f9"
+    },
+    {
+      "path": "src/main/plugins/research/research-scientific-evidence.ts",
+      "sha256": "765613c7f739bde5bf2273e9ba7f9b48ed5c7a9feebf857635f94ca04b50921f"
+    },
+    {
+      "path": "src/main/plugins/research/scientific-source-ref.ts",
+      "sha256": "32e4562bc24cee0ba11f266cd519d5ab03d2146463efbaec58d8f88e126dbfce"
+    },
+    {
+      "path": "src/shared/schemas/research-scientific-source-ref.ts",
+      "sha256": "702a9303fab369880a414b10af4eefa5f8bd59fd24596ab59b084b1c066c1edb"
+    },
+    {
+      "path": "tests/unit/scientific-native-baseline.test.mjs",
+      "sha256": "3b0fec9caa09dc5021b65d9febedcc47949b5d1e12d5be9994630add5c37cf9a"
+    },
+    {
+      "path": "tests/unit/scientific-source-ref.test.mjs",
+      "sha256": "3e13376e117ff265bf031f994fb2534b7b3c4bf655d7e07b6f326ba4778a6ef2"
+    }
+  ],
+  "baselineChecks": [
+    {
+      "command": "node --test --test-concurrency=2 tests/unit/scientific-retrieval.test.mjs tests/unit/scientific-evidence.test.mjs tests/unit/scientific-context.test.mjs tests/unit/scientific-knowledge.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-scientific-project-publication.test.mjs",
+      "exitCode": 0,
+      "durationSeconds": 12.77,
+      "logSha256": "e9c6fddd24fc4ffd2b5ca4da981f2a4f630d6957d50bcbf978dec40a669354fb",
+      "logPath": ".artifacts/p0-engineering-checks/baseline-0.log",
+      "workingDirectory": "isolated checkout of baselineRevision (removed after verification)",
+      "testCounts": {
+        "tests": 56,
+        "pass": 56,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "command": "node --test --test-concurrency=2 evaluation/tests/scientific-rag-corpus.test.mjs evaluation/tests/scientific-pdf-adapter.test.mjs evaluation/tests/scientific-query-binding.test.mjs evaluation/tests/scientific-evidence-resolution.test.mjs evaluation/tests/scientific-evidence-scoring.test.mjs",
+      "exitCode": 0,
+      "durationSeconds": 4.25,
+      "logSha256": "a2a0c4f520b2f1194fbfc033eb227a09caee509987d90b07fefab9797da37fa4",
+      "logPath": ".artifacts/p0-engineering-checks/baseline-1.log",
+      "workingDirectory": "isolated checkout of baselineRevision (removed after verification)",
+      "testCounts": {
+        "tests": 55,
+        "pass": 55,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+      "exitCode": 0,
+      "durationSeconds": 15.46,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "logPath": ".artifacts/p0-engineering-checks/baseline-2.log",
+      "workingDirectory": "isolated checkout of baselineRevision (removed after verification)"
+    },
+    {
+      "command": "node scripts/check-research-skills.mjs",
+      "exitCode": 0,
+      "durationSeconds": 0.33,
+      "logSha256": "5b1667547f969584da32254cb65e8180b11b4bf490cfd0050022e7c990c4aeee",
+      "logPath": ".artifacts/p0-engineering-checks/baseline-3.log",
+      "workingDirectory": "isolated checkout of baselineRevision (removed after verification)"
+    },
+    {
+      "command": "node scripts/generate-ipc-schema.mjs --check",
+      "exitCode": 0,
+      "durationSeconds": 0.29,
+      "logSha256": "5e2b283947e00e695511385762d6665c6ea53310b1216418c9a4edd3ebf7177a",
+      "logPath": ".artifacts/p0-engineering-checks/baseline-4.log",
+      "workingDirectory": "isolated checkout of baselineRevision (removed after verification)"
+    }
+  ],
+  "candidateChecks": [
+    {
+      "command": "pnpm typecheck",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 15.93,
+      "logSha256": "70685b4df7789c854b9e1ceab7d78a6d0f9a0831c11eb0010b7b5fdbe0e50c39",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-typecheck.log"
+    },
+    {
+      "command": "pnpm check:skills",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 0.83,
+      "logSha256": "28875085d9236ca86700b0215bd1b4b268da380a47c2bcf85f4720a53134d9b8",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-skills.log"
+    },
+    {
+      "command": "pnpm check:ipc",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 0.79,
+      "logSha256": "a6ca3f9de6e5302f8a3d5a561534fae321438dddeceeb54ac28784f3d065acd9",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-ipc.log"
+    },
+    {
+      "command": "pnpm test:unit",
+      "workingDirectory": ".",
+      "exitCode": 1,
+      "durationSeconds": 582.89,
+      "logSha256": "33b3a71d2c3454501ee84ab6ae7f136d1bef92f61bd9cbb09ae54d69461cce37",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-unit.log",
+      "testCounts": {
+        "tests": 2911,
+        "pass": 2890,
+        "fail": 20,
+        "cancelled": 0,
+        "skipped": 1,
+        "todo": 0
+      }
+    },
+    {
+      "command": "pnpm build",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 23.12,
+      "logSha256": "84ff4501c8c915b9e7fde8658a67d88b73ad29fc336935bf1e7156008358ad98",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-build.log"
+    },
+    {
+      "command": "node --test --test-concurrency=2 tests/unit/scientific-retrieval.test.mjs tests/unit/scientific-evidence.test.mjs tests/unit/scientific-context.test.mjs tests/unit/scientific-knowledge.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-scientific-project-publication.test.mjs tests/unit/scientific-source-ref.test.mjs tests/unit/scientific-native-baseline.test.mjs",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 14.67,
+      "logPath": ".artifacts/p0-engineering-checks/candidate-scientific-unit.log",
+      "logSha256": "cd0bc8cc91306f39701de77aac0c11419b5f97fded436e5a1924f634fe6eb66f",
+      "testCounts": {
+        "tests": 67,
+        "pass": 67,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "command": "node --test --test-concurrency=2 evaluation/tests/scientific-rag-corpus.test.mjs evaluation/tests/scientific-pdf-adapter.test.mjs evaluation/tests/scientific-query-binding.test.mjs evaluation/tests/scientific-evidence-resolution.test.mjs evaluation/tests/scientific-evidence-scoring.test.mjs",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 4.88,
+      "logPath": ".artifacts/p0-engineering-checks/candidate-scientific-evaluation.log",
+      "logSha256": "941c58044922b7666125d462338bedb98e896e5beaddee950e298406402076e4",
+      "testCounts": {
+        "tests": 60,
+        "pass": 60,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "command": "node --test --test-concurrency=2 tests/unit/research-processing-trace.test.mjs tests/unit/research-typescript-experiment-csv.test.mjs tests/unit/scientific-extraction-service.test.mjs tests/unit/scientific-shadow-retrieval.test.mjs",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 15.58,
+      "logPath": ".artifacts/p0-engineering-checks/candidate-electron-unit-restored.log",
+      "logSha256": "05ce6c95e3f4a0752e1f43e258af1c848b1429485b1778b84b2f40c398a33856",
+      "testCounts": {
+        "tests": 35,
+        "pass": 35,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "command": "pnpm evaluation:check",
+      "workingDirectory": ".",
+      "exitCode": 1,
+      "durationSeconds": 134.28,
+      "logPath": ".artifacts/p0-engineering-checks/candidate-evaluation-restored.log",
+      "logSha256": "651fbcf7f720ca5974b43fe377c04cf638a1d71dd1a4abff4d36df4dda294d67",
+      "testCounts": {
+        "tests": 769,
+        "pass": 726,
+        "fail": 2,
+        "cancelled": 0,
+        "skipped": 41,
+        "todo": 0
+      }
+    },
+    {
+      "command": "pnpm evaluation:scientific-rag:check",
+      "workingDirectory": ".",
+      "exitCode": 2,
+      "expectedExitCode": 2,
+      "result": "Expected missing-gold outcome; frozen readiness report matches current output.",
+      "logPath": ".artifacts/p0-engineering-checks/candidate-corpus-readiness.log",
+      "logSha256": "53bd1b087ad11370b33764d3a7cb0ce626c8174dd75db380492f67e46c9fd6ff"
+    },
+    {
+      "command": "pnpm test:renderer",
+      "workingDirectory": ".",
+      "exitCode": 0,
+      "durationSeconds": 1953.74,
+      "logPath": ".artifacts/p0-engineering-checks/candidate-renderer-restored.log",
+      "logSha256": "3b9ec7ef08128c5c18b8b2ab6cd1d1d6b9356c72ec7d5a28ae1de5b0db5e7552",
+      "testCounts": {
+        "tests": 1054,
+        "pass": 1054,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    }
+  ],
+  "fullSuitePassing": false,
+  "fullUnitRetestComplete": false,
+  "knownExistingFailures": [
+    {
+      "file": "tests/unit/research-ovis-structural-replay.test.mjs",
+      "line": 39,
+      "failure": "actual page statuses failed/failed; expected failed/passed",
+      "initialHeadReproduced": true,
+      "evidence": ".artifacts/p0-engineering-checks/unit-failures-comparison.md"
+    },
+    {
+      "file": "evaluation/tests/capability-mcp-runtime.test.mjs",
+      "line": 148,
+      "failure": "capability_mcp_artifact_read_contract_invalid",
+      "initialHeadReproduced": true,
+      "evidence": ".artifacts/p0-engineering-checks/evaluation-differential-o3pjwu5s/summary.json"
+    },
+    {
+      "file": "evaluation/tests/experiment.test.mjs",
+      "line": 260,
+      "failure": "Missing expected exception: record_changed",
+      "initialHeadReproduced": true,
+      "evidence": ".artifacts/p0-engineering-checks/evaluation-differential-o3pjwu5s/summary.json"
+    }
+  ],
+  "environmentRecovery": {
+    "invalidInitialBaseline": "pnpm relinked shared dependencies during temporary checkout attempt; discarded and rerun via direct pinned binaries",
+    "offlineRestore": "pnpm install --offline --frozen-lockfile; package.json and lockfile unchanged",
+    "electronVersion": "45.3.4",
+    "electronArchiveSha256": "f3ac0124c48a6cc3aa9332caca0e913cc478cd3610a378881729ca33452caa72",
+    "electronRecovery": "Restored official darwin-arm64 archive after checksum verification; removed download",
+    "affectedUnitRetest": "35 tests passed across four Electron-dependent unit files",
+    "rootDependencyLinks": "No broken links or links to removed worktrees"
+  },
+  "scientificBaselineReady": false,
+  "qualityMetrics": null,
+  "readiness": {
+    "path": ".artifacts/p0-engineering-checks/corpus-readiness.json",
+    "sha256": "a322e66856d59f3dd59fdc2dcb549b491a45604c5977fb362aa774268748b031",
+    "expectedExitCode": 2
+  },
+  "nativeObservation": {
+    "report": "docs/scientific-rag/p0-native-baseline.json",
+    "sha256": "f65081a9775290ac38dfc78f88a8166702edbb92aadfe8edaefb44e4d7027e47",
+    "scope": "One native-text PDF; no quality scoring"
+  },
+  "sourceInventories": [
+    {
+      "path": ".artifacts/p0-engineering-checks/source-baseline.json",
+      "sha256": "3db42e51703c9b9c7f967f307dc1377d64cf6f7c0fbeb797b2e799b2669a8507"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/source-candidate.json",
+      "sha256": "199e786a1ba897888c115decfd20a4a10ae0ce5dcc1dbbeaf0923e6887b8a680"
+    }
+  ],
+  "limitations": [
+    "No independent local human-reviewed gold; no scientific quality claim.",
+    "Only scoped engineering checks pass. Complete unit/evaluation checks retain initial-HEAD failures.",
+    "Full unit run occurred before Electron repair; affected files were rerun, not the entire suite.",
+    "Scientific test counts include new tests, not a measured retrieval or parser quality improvement.",
+    "Source inventory hashes establish consistency; historical commits and retained original evidence provide provenance."
+  ],
+  "comparisonAndRecoveryEvidence": [
+    {
+      "path": ".artifacts/p0-engineering-checks/unit-failures-comparison.md",
+      "sha256": "5b66f71ad08675b648fe58c015068c502233a3ac9b23b1eef121f827197f93ea"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/unit-failures-candidate-rerun.log",
+      "sha256": "e63908d97f58c6e0d16289f4deedd347b0910ce75003934c0691547864054667"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/unit-failures-initial-head.log",
+      "sha256": "4d4a9b6c005fb9e96f9db7a04bc0c381798d002febc71c868a6432efc71dda35"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/evaluation-differential-o3pjwu5s/summary.json",
+      "sha256": "a22f9621b2dc69b59a1b6fc93bd3a167f2c81211bdb7288afc27d82587d1a08a"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/invalid-attempts-cleanup.json",
+      "sha256": "c709bf401aacb86c6e85494485ca6faabf4de03814347b1642c9a67e4e142fb1"
+    },
+    {
+      "path": ".artifacts/p0-engineering-checks/orphan-fixture-cleanup.json",
+      "sha256": "70625f42c5481925b000ee19b518537e2dec815745692fbb55651a4fe0ef9e26"
+    }
+  ],
+  "recordedWorkingDirectories": {
+    "candidate": "/Users/Apple_501/Desktop/Roc/Roc",
+    "baseline": "/var/folders/p8/s1717bsd4cz80g353254g8vc0000gn/T/roc-knowledge-p0-9fwgr2pp/baseline",
+    "baselineRemovedAfterChecks": true
+  },
+  "cleanup": {
+    "path": ".artifacts/p0-engineering-checks/final-cleanup.json",
+    "sha256": "42844f98d39a2d7944131d847fb06af16794a8f215f27d7c648c06f8b100b8f0",
+    "temporaryWorktreesRemoved": true,
+    "temporaryBundlesRemoved": true,
+    "invalidAttemptsDiscarded": true
+  },
+  "status": "Verified passing",
+  "statusScope": "P0 focused engineering deliverable; full unit/evaluation suites retain documented existing failures"
+}

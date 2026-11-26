@@ -13,7 +13,7 @@ pnpm evaluation:scientific-rag:check
 pnpm evaluation:scientific-rag:check --corpus /absolute/corpus/manifest.json --output /absolute/new-readiness.json
 ```
 
-输出是确定性 readiness 报告。exit 0 只说明输入资格检查通过；exit 2 说明缺资料、配额、人审记录或来源不一致。输出文件必须不存在；检查不覆盖旧报告、不下载论文、不调用模型、不读写生产数据库、不产生质量分数。checker 的 `scientificBaselineReady` 始终 false；完整科学基线须另行真实测量与验收。
+输出是确定性 readiness 报告。exit 0 只说明所声明版本的输入资格检查通过；exit 2 说明缺资料、配额、人审记录或来源不一致。输出文件必须不存在；检查不覆盖旧报告、不下载论文、不调用模型、不读写生产数据库、不产生质量分数。checker 的 `scientificBaselineReady` 始终 false；完整科学基线须另行真实测量与验收。
 
 [论文](papers/README.md)、[结构标注](annotations/README.md)、[问题](queries/README.md) 分别保存原始数据、独立 gold 和证据题。私有语料置于 evaluation/local 或仓库外；从其他目录传入 manifest 时，全部文件必须位于其目录内。manifest 不能引用外部路径或借助软链接越过根目录。
 
@@ -31,3 +31,24 @@ pnpm evaluation:scientific-rag:check --corpus /absolute/corpus/manifest.json --o
 | [score-scientific-retrieval.mjs](../../../scripts/score-scientific-retrieval.mjs) | `--run`、`--bindings`、`--output`，可选 `--manifest`、`--context`；显式绑定 gold query 与保存请求，先检查完整语料，缺请求或不兼容范围保持 NA |
 
 这些入口不创建人工 gold，也不自动授予完整 scientific baseline；`scientificBaselineReady` 保持 false。精确评分与原始证据合同见 [parser](../../tasks/scientific-parser/Task.md)、[objects](../../tasks/scientific-objects/Task.md)及 [retrieval](../../tasks/scientific-retrieval/Task.md)。公共组件优化和执行授权的范围定位见[专题索引](../../../docs/scientific-rag/README.md)。
+
+## P0 冻结合同 v2
+
+新建语料使用 manifest `schemaVersion: 2`。原 v1 仍供历史记录复评分，不会因此取得 v2 冻结基线资格。v2 在既有 PDF、结构标注、问题字节 hash 之外增加 `baseline`：
+
+```json
+{
+  "source": { "path": "baseline/source.json", "sha256": "<sha256 of file bytes>" },
+  "configuration": { "path": "baseline/configuration.json", "sha256": "<sha256 of file bytes>" }
+}
+```
+
+`source.json` 使用现有 `evaluation/lib/common.mjs` 的 `sourceIdentity()` 输出：Git commit、dirty、文件路径/hash 清单、清单 sourceHash、pnpm lockfileHash、Node/OS/arch。checker 核验清单内部一致性与锁文件绑定；这不是签名，也不会重新取得历史源码。执行端仍需核对运行源码与冻结快照，保留原 checkout 或可重建版本。
+
+`configuration.json` 使用 `scientificBaselineConfigurationSchema`：parser id/revision/fingerprint、retrievalMode、embedding/reranker/generation 的 provider/model/revision、execution 的 timeoutMs/maxModelCalls/maxInputTokens/maxOutputTokens/repetitions。缺模型用 null；hybrid 必须声明 embedding。配置不得含 API key、认证头或其他 secret，严格 schema 拒绝额外字段。配置身份不证明模型当前可运行；真正运行和 transport 证据另行保存。
+
+v2 问题显式保存 `schemaVersion: 2`、`answerability`、`requiredConditions`，详见[问题合同](queries/README.md)。旧问题不能静默补默认条件或重用变更前审核 hash。
+
+报告 `stages` 分别列出 parser、retrieval、extraction、wiki、writing 的 `inputReady` 和 `missingInputs`。所有阶段的 `executionStatus` 保持 `not_run`、`qualityStatus` 保持 `not_evaluated`、`qualityMetrics` 为 null。Parser/retrieval 具备完整参考和冻结配置时可以输入就绪；完整 Entity/Fact 库存、Wiki 事实与增量场景、写作 Claim/修订任务尚需独立准备，不会因基础 corpus 通过而自动合格。
+
+当前提交的自采 manifest 为 pending，未登记任何 PDF 或人审题目，baseline 为 null。这仅说明这份自采合同尚未准备完毕；不代表机器没有 PDF、公开上游标注、模型或可用组件评测素材。公开缓存和其许可/审核边界须按各自来源锁另行审计，不能改写为本地独立人工 gold。P0 尚缺登记并授权的原 PDF、独立结构与题目审核、来源配置锁，以及抽取/Wiki/写作专属参考。建议的 60 篇、310 道知识问答、30 组 Wiki 增量、20 组写作是后续建设目标，不是既有数量，也不替代当前 45/200 的合同版本。

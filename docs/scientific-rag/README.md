@@ -11,6 +11,7 @@
 | [索引、检索与证据上下文](retrieval.md) | 分块、嵌入预算、原子发布、六通道、精排、引用验证及可选视觉 |
 | [科研知识抽取与 Wiki](extraction.md) | 完整输入、Entity/Fact/Relation、条件来源权限、provider 工具 schema 与知识依赖 |
 | [科学评测资格与运行前提](evaluation.md) | corpus 配额、独立参考、六层评分、Baseline/A–I 配对及可用脚本限制 |
+| [知识库优化 P0 交付](p0-implementation.md) | 冻结工程基线、共享来源引用、真实 PDF 观察与待补质量证据 |
 
 产品使用合同见[科研 RAG 与持久 Wiki](../research-rag-wiki.md)，界面位置见[科研工作台](../research-workbench.md)，数据库升级见[数据库存储](../database-storage.md)。
 

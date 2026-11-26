@@ -9,8 +9,9 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log('pnpm evaluation:scientific-rag:check [--corpus manifest.json] [--output new-report.json]');
-  console.log('Checks PDF bytes, human annotation records, evidence locators and 45-paper/200-query quotas.');
-  console.log('Exit 0: corpus ready; exit 2: missing/invalid data. Does not run a scientific baseline.');
+  console.log('Checks PDF bytes, human reviews, evidence/conditions, 45-paper/200-query quotas and v2 frozen baseline inputs.');
+  console.log('Reports parser/retrieval/extraction/wiki/writing input gaps separately. Does not run models or measure quality.');
+  console.log('Exit 0: declared corpus contract ready; exit 2: missing/invalid data.');
 } else {
   const report = await checkScientificRagCorpus(resolve(values.corpus
     ?? resolve(ROOT, 'evaluation/corpora/scientific-rag/manifest.json')));

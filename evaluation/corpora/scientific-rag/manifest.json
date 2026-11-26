@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "id": "roc-scientific-rag-v1",
+  "schemaVersion": 2,
+  "id": "roc-scientific-rag-v2",
   "provenance": {
     "kind": "pending",
     "producer": null,
@@ -9,5 +9,6 @@
   },
   "papers": [],
   "queriesPath": "queries/queries.json",
-  "queriesHash": null
+  "queriesHash": null,
+  "baseline": null
 }

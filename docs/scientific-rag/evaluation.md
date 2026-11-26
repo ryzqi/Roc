@@ -41,6 +41,10 @@ pnpm evaluation:scientific-rag:check --corpus /absolute/path/to/manifest.json
 
 exit 0 表示输入合格，exit 2 表示缺失或无效；该命令不调用模型，也不生成质量成绩。是否满足资格以当前提供的 manifest 检查为准，不能用旧运行记录推断当前配置或用户数据库。
 
+P0 新建语料使用 [v2 冻结合同](../../evaluation/corpora/scientific-rag/README.md#p0-冻结合同-v2)：代码清单与 lockfile hash、无秘密的模型/预算配置、问题条件及细分拒答原因均纳入输入摘要。v1 保留历史复评分，不能自动取得 v2 输入资格。报告分别列出 parser/retrieval/extraction/wiki/writing 缺失输入；`inputReady` 不证明模型可用或真实执行，质量保持 `not_evaluated`，不产生评分。
+
+当前提交的自采 manifest 未登记 PDF、人审题目和 baseline 锁。公开来源缓存与上游人工标注按独立来源合同解释，不能据此声称本机没有论文/模型，也不能将这些缓存直接升级为完整自采 gold。抽取 Entity/Fact 库存、Wiki 增量参考、写作 Claim/修订任务须独立完成；当前基础 checker 明确将这些阶段标为缺输入。当前工程交付、真实素材核查与复跑方法见 [P0 实施记录](p0-implementation.md)。
+
 ## 任务与评分
 
 | 层 | Task Spec | 需独立取得的参考与指标 |

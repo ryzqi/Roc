@@ -6,6 +6,7 @@ import type {ScholarlyRelationsRepository} from './scholarly-relations-repositor
 import {assertScientificChunkCandidate} from './scientific-context-assembler';
 import {scientificMetadataCandidate, scientificCitationCandidate} from './scientific-search-candidate';
 import {researchContentHash} from './research-files';
+import {createScientificSourceRefs} from './scientific-source-ref';
 
 const digest = (value: unknown): string => researchContentHash(JSON.stringify(value));
 const sourceSchema = scientificCandidateSchema.omit({signals: true, score: true});
@@ -20,6 +21,7 @@ export function assertScientificSearchSources(search: ScientificSearchResult, pa
   const byGeneration = new Map(papers.map(p => [p.generation.id, p]));
   const candidates = new Map<string, ScientificCandidate>();
   const citations = new Map<string, Map<string, ReturnType<typeof scientificCitationCandidate>>>();
+  const refs = new Map<string, ReturnType<typeof createScientificSourceRefs>>();
   for (const candidate of search.candidates) {
     signal.throwIfAborted();
     const paper = byGeneration.get(candidate.generationId);
@@ -27,6 +29,12 @@ export function assertScientificSearchSources(search: ScientificSearchResult, pa
     candidates.set(candidate.id, candidate);
     if (candidate.chunkId !== null) {
       assertScientificChunkCandidate(candidate, paper);
+      let sourceRefs = refs.get(candidate.generationId);
+      if (!sourceRefs) {
+        sourceRefs = createScientificSourceRefs(paper.receipt, paper.ir);
+        refs.set(candidate.generationId, sourceRefs);
+      }
+      if (!sourceRefs.fromCandidate(candidate)) throw new Error('research_scientific_search_candidate_invalid');
       continue;
     }
     let expected: ReturnType<typeof scientificMetadataCandidate> | undefined;

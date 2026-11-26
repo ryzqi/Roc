@@ -10,9 +10,14 @@
 | Coordinate Snapshot | [research-document-coordinates.ts](../../src/shared/schemas/research-document-coordinates.ts) | source/parse 与工件绑定；PDF CropBox/rotation/viewport 到 TOPLEFT raster 的投影依据。 |
 | Source Locator | [research-source-locator.ts](../../src/shared/schemas/research-source-locator.ts) | 固定 document/parse/knowledgeDocument/block 与来源 hash，原始 locator、UTF-16 span、page/bbox/origin；没有几何时不能从字符串猜坐标。 |
 | Paper IR v2 / Artifact | [research-paper-ir-v2.ts](../../src/shared/schemas/research-paper-ir-v2.ts) | schema 2、`roc-paper-ir/2.2`；完整 source identity、metadata、章节/块、table/cell、figure、equation、algorithm、citation/reference、结构关系与质量。工件另外固定路径/hash/size/indexedBlocksHash。 |
+| Scientific Source Ref | [research-scientific-source-ref.ts](../../src/shared/schemas/research-scientific-source-ref.ts)、[scientific-source-ref.ts](../../src/main/plugins/research/scientific-source-ref.ts) | 复用 IR identity 与同一 Source Locator，绑定 IR hash、索引 generation 和原始对象类型/ID；检索候选与抽取来源投影到同一引用，不另造来源身份。 |
 | 原 parent/child 标注 | [research-paper-ir.ts](../../src/shared/schemas/research-paper-ir.ts) | 保留旧知识工具所消费的章节角色及邻块关系，与独立 IR v2 工件并存。 |
 
 对象 ID 对 parseId/originalId 分量编码，避免分隔符歧义；cell 和算法 step 仍绑定原对象与同一 parse。表格几何可为 unknown，结构关系可为 candidate；这些状态不能提升成精确原文支持。
+
+`ScientificSourceRef` 仅引用原始 IR 对象：段落和 caption 指向 `block`，表格行组指向 `table`，单元格指向 `table_cell`；完整选择范围仍由现有候选 selection/原始来源保存。元数据与外部 citation snapshot 没有 PDF locator，不能伪装为原文引用，投影返回 `null`。`createScientificSourceRefs` 先验证 receipt 与 IR 工件一致，再检查每个引用的身份、对象、定位和 UTF-16 区间；现有科研检索重建验证已使用该边界。
+
+引用中的 `generationId` 是现有科研索引代次，不是抽取代次、Wiki revision 或人工审批。消费者仍须保留各层已有配置、input/result hash、发布状态与历史依赖，并通过 owner 选定的当前 receipt、实际文件字节与项目授权检查后再消费引用。投影能验证历史 receipt 内部一致性，不能单凭历史对象证明当前有效或科学正确。P0 没有修改数据库、已保存的 Search wire 合同、Evidence、Wiki revisions 或人工内容。
 
 ## 索引、上下文与知识
 

@@ -32,7 +32,7 @@ const review = z.strictObject({
   }).nullable()
 });
 
-export const scientificManifestSchema = z.strictObject({
+const scientificManifestV1Schema = z.strictObject({
   schemaVersion: z.literal(1), id,
   provenance: z.strictObject({
     kind: z.enum(['pending', 'engineering_fixture', 'human_reviewed']),
@@ -43,6 +43,35 @@ export const scientificManifestSchema = z.strictObject({
     sourceUri: z.url(), license: text, pdfPath: text, annotationPath: text, annotationHash: digest
   })),
   queriesPath: text, queriesHash: digest.nullable()
+});
+
+// Version 2 freezes the implementation/configuration alongside the existing
+// source corpus. Version 1 remains readable for historical scoring; it never
+// acquires a v2 baseline qualification merely by passing its older contract.
+const frozenFile = z.strictObject({ path: text, sha256: digest });
+const scientificManifestV2Schema = scientificManifestV1Schema.extend({
+  schemaVersion: z.literal(2),
+  baseline: z.strictObject({ source: frozenFile, configuration: frozenFile }).nullable()
+});
+export const scientificManifestSchema = z.discriminatedUnion('schemaVersion', [
+  scientificManifestV1Schema, scientificManifestV2Schema
+]);
+const modelIdentity = z.strictObject({ provider: text, model: text, revision: text });
+export const scientificBaselineConfigurationSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  parser: z.strictObject({ id: text, revision: text, fingerprint: digest }).nullable(),
+  retrievalMode: z.enum(['lexical', 'hybrid']),
+  embedding: modelIdentity.nullable(), reranker: modelIdentity.nullable(), generation: modelIdentity.nullable(),
+  execution: z.strictObject({
+    timeoutMs: z.number().int().positive(), maxModelCalls: z.number().int().nonnegative(),
+    maxInputTokens: z.number().int().positive(), maxOutputTokens: z.number().int().positive(),
+    repetitions: z.number().int().positive()
+  })
+});
+const sourceSnapshotSchema = z.strictObject({
+  commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u), dirty: z.boolean(), sourceHash: digest,
+  files: z.array(z.strictObject({ path: text, sha256: digest.nullable() })).min(1),
+  lockfileHash: digest, node: text, platform: text, arch: text
 });
 
 // Human gold is independent of parser predictions. A parseRef is required when
@@ -74,7 +103,7 @@ export const scientificAnnotationSchema = z.strictObject({
   review
 });
 
-export const scientificQuerySchema = z.strictObject({
+const scientificQueryV1Schema = z.strictObject({
   id, category: z.enum(Object.keys(scientificQueryQuotas)),
   query: text.max(32000), targetPaperIds: z.array(id).min(1),
   targetBlockIds: z.array(id), targetTableIds: z.array(id),
@@ -88,6 +117,19 @@ export const scientificQuerySchema = z.strictObject({
   // Unanswerable/insufficient/condition-mismatch queries need a human rationale.
   unanswerableReason: text.nullable(), review
 });
+
+export const scientificQueryV2Schema = scientificQueryV1Schema.extend({
+  schemaVersion: z.literal(2),
+  answerability: z.enum(['answerable', 'insufficient_evidence', 'conditions_not_comparable']),
+  requiredConditions: z.array(z.strictObject({
+    id, paperId: id,
+    field: z.enum(['dataset', 'dataset_version', 'split', 'metric', 'baseline', 'unit',
+      'training_budget', 'inference_budget', 'hardware', 'random_seed', 'repetitions', 'uncertainty', 'other']),
+    status: z.enum(['known', 'unknown', 'inapplicable']),
+    value: text.nullable(), evidenceSpanIds: z.array(id)
+  }))
+});
+export const scientificQuerySchema = z.union([scientificQueryV2Schema, scientificQueryV1Schema]);
 
 export function scientificReviewContentHash(value) {
   const { review: ignored, ...content } = value;
@@ -192,7 +234,8 @@ function checkQuery(query, papers, producer) {
   requireCondition((query.category === 'unanswerable') === !query.answerable, 'query_answerability_category_mismatch');
   requireCondition(query.answerable
     ? query.expectedAnswer !== null && query.expectedEvidenceSpans.length > 0 && query.unanswerableReason === null
-    : query.expectedAnswer === null && query.expectedEvidenceSpans.length === 0 && query.unanswerableReason !== null,
+    : query.expectedAnswer === null && (query.schemaVersion === 2 || query.expectedEvidenceSpans.length === 0)
+      && query.unanswerableReason !== null,
   'query_answerability_gold_mismatch');
   const targets = query.targetPaperIds.map(paperId => papers.get(paperId));
   for (const [key, annotationKey, identifierKey] of [
@@ -235,7 +278,72 @@ function checkQuery(query, papers, producer) {
     }
   }
   requireCondition(query.category !== 'cross-paper' || coveredPapers.size >= 2, 'cross_paper_evidence_missing');
+  if (query.schemaVersion === 2) {
+    requireCondition((query.answerability === 'answerable') === query.answerable,
+      'query_answerability_detail_mismatch');
+    unique(query.requiredConditions.map(condition => condition.id), 'duplicate_required_condition');
+    for (const condition of query.requiredConditions) {
+      requireCondition(query.targetPaperIds.includes(condition.paperId), 'condition_paper_missing');
+      unique(condition.evidenceSpanIds, 'duplicate_condition_evidence');
+      requireCondition(condition.status === 'known'
+        ? condition.value !== null && condition.evidenceSpanIds.length > 0
+        : condition.value === null && condition.evidenceSpanIds.length === 0,
+      'condition_value_or_evidence_invalid');
+      requireCondition(condition.evidenceSpanIds.every(evidenceId => query.expectedEvidenceSpans.some(span =>
+        span.id === evidenceId && span.paperId === condition.paperId)), 'condition_evidence_missing');
+    }
+    if (!query.answerable) {
+      requireCondition(query.expectedEvidenceSpans.every(span => query.requiredConditions.some(condition =>
+        condition.evidenceSpanIds.includes(span.id))), 'unanswerable_evidence_without_condition');
+    }
+    requireCondition(query.answerability !== 'conditions_not_comparable' || query.requiredConditions.length > 0,
+      'incomparable_conditions_missing');
+  }
   checkReview(query, producer);
+}
+
+function checkBaseline(manifest, root, files) {
+  if (manifest.schemaVersion !== 2 || !manifest.baseline) return null;
+  const readFrozen = (entry, schema) => {
+    const bytes = readContained(root, entry.path);
+    files.push({ path: entry.path, sha256: sha256(bytes) });
+    requireCondition(sha256(bytes) === entry.sha256, 'baseline_file_changed');
+    return schema.parse(JSON.parse(bytes));
+  };
+  const source = readFrozen(manifest.baseline.source, sourceSnapshotSchema);
+  unique(source.files.map(file => file.path), 'duplicate_baseline_source_file');
+  for (const file of source.files) {
+    requireCondition(!isAbsolute(file.path) && !file.path.split(/[\\/]/u).includes('..'),
+      'baseline_source_path_invalid');
+  }
+  requireCondition(hash(source.files) === source.sourceHash, 'baseline_source_inventory_changed');
+  requireCondition(source.files.some(file => file.path === 'pnpm-lock.yaml' && file.sha256 === source.lockfileHash),
+    'baseline_lockfile_changed');
+  const configuration = readFrozen(manifest.baseline.configuration, scientificBaselineConfigurationSchema);
+  requireCondition(configuration.retrievalMode !== 'hybrid' || configuration.embedding !== null,
+    'baseline_embedding_configuration_missing');
+  return { source, configuration };
+}
+
+function stageReadiness(referenceInputsReady, baseline) {
+  const frozenMissing = baseline ? [] : ['frozen_source_and_configuration'];
+  const dataMissing = referenceInputsReady ? [] : ['qualified_pdf_annotations_and_queries'];
+  const result = {};
+  for (const [stage, additional] of [
+    ['parser', baseline?.configuration.parser ? [] : ['parser_configuration']],
+    ['retrieval', []],
+    ['extraction', ['independent_entity_and_fact_inventory']],
+    ['wiki', ['independent_wiki_fact_and_incremental_scenarios']],
+    ['writing', ['independent_writing_claim_and_revision_tasks']]
+  ]) {
+    const missingInputs = [...dataMissing, ...frozenMissing, ...additional];
+    if (['extraction', 'wiki', 'writing'].includes(stage) && !baseline?.configuration.generation) {
+      missingInputs.push('generation_model_configuration');
+    }
+    result[stage] = { inputReady: missingInputs.length === 0, missingInputs,
+      executionStatus: 'not_run', qualityStatus: 'not_evaluated', qualityMetrics: null };
+  }
+  return result;
 }
 
 /** Qualification only: no model calls, production database access or quality scores. */
@@ -246,7 +354,7 @@ export async function checkScientificRagCorpus(manifestPath) {
   const queryCounts = Object.fromEntries(Object.keys(scientificQueryQuotas).map(key => [key, 0]));
   const files = [];
   const papers = new Map();
-  let manifest = null, queries = [];
+  let manifest = null, queries = [], baseline = null;
   try {
     const absolute = realpathSync(manifestPath), root = realpathSync(dirname(absolute));
     const manifestBytes = readFileSync(absolute);
@@ -256,6 +364,10 @@ export async function checkScientificRagCorpus(manifestPath) {
       || !manifest.provenance.sourceRevision || !manifest.provenance.license) {
       issue('manifest', 'human_reviewed_provenance_missing');
     }
+    try {
+      baseline = checkBaseline(manifest, root, files);
+      if (manifest.schemaVersion === 2 && !baseline) issue('baseline', 'baseline_lock_missing');
+    } catch (error) { issue('baseline', failureCode(error)); }
     const seenIds = new Set(), seenHashes = new Set();
     for (const paper of manifest.papers) {
       try {
@@ -285,7 +397,8 @@ export async function checkScientificRagCorpus(manifestPath) {
       const queryBytes = readContained(root, manifest.queriesPath);
       files.push({ path: manifest.queriesPath, sha256: sha256(queryBytes) });
       requireCondition(sha256(queryBytes) === manifest.queriesHash, 'queries_file_changed_or_unlocked');
-      queries = z.array(scientificQuerySchema).parse(JSON.parse(queryBytes));
+      queries = z.array(manifest.schemaVersion === 2 ? scientificQueryV2Schema : scientificQueryV1Schema)
+        .parse(JSON.parse(queryBytes));
       const seenQueries = new Set(), seenQuestions = new Set();
       for (const query of queries) {
         try {
@@ -309,10 +422,15 @@ export async function checkScientificRagCorpus(manifestPath) {
   }
   issues.sort((a, b) => a.subject.localeCompare(b.subject, 'en') || a.code.localeCompare(b.code, 'en'));
   return {
-    schemaVersion: 1, kind: 'scientific-rag-corpus-readiness', corpusId: manifest?.id ?? null,
+    schemaVersion: 2, kind: 'scientific-rag-corpus-readiness', corpusId: manifest?.id ?? null,
+    corpusSchemaVersion: manifest?.schemaVersion ?? null,
     status: issues.length ? 'blocked' : 'ready', corpusReady: issues.length === 0,
     // A successful data check is not a measured baseline or human authenticity proof.
     scientificBaselineReady: false,
+    frozenBaseline: baseline ? { sourceRevision: baseline.source.commit, sourceHash: baseline.source.sourceHash,
+      sourceDirty: baseline.source.dirty, lockfileHash: baseline.source.lockfileHash,
+      configurationHash: manifest.baseline.configuration.sha256 } : null,
+    stages: stageReadiness(issues.every(issue => issue.subject === 'baseline'), baseline),
     verifiedPapers: papers.size,
     verifiedQueries: Object.values(queryCounts).reduce((sum, count) => sum + count, 0),
     paperCounts, queryCounts, requiredPapers: scientificPaperQuotas, requiredQueries: scientificQueryQuotas,

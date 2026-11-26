@@ -219,3 +219,26 @@ test('gold host mode fails closed before reading missing runs and CLI persists b
     assert.throws(() => scientificEvidenceResolutionArguments(['--run', 'x', '--output', 'y', ...extra]));
   }
 });
+
+
+test('v2 refusal condition spans remain auditable without entering positive evidence scoring', () => {
+  const f = fixture(), span = f.query.expectedEvidenceSpans[0];
+  Object.assign(f.query, { schemaVersion: 2, category: 'unanswerable', answerable: false,
+    answerability: 'conditions_not_comparable', expectedAnswer: null, unanswerableReason: 'Synthetic split missing',
+    requiredConditions: [{ id: 'metric', paperId: span.paperId, field: 'metric', status: 'known',
+      value: 'Synthetic metric', evidenceSpanIds: [span.id] }, { id: 'split', paperId: span.paperId,
+      field: 'split', status: 'unknown', value: null, evidenceSpanIds: [] }] });
+  const result = resolveFixture(f);
+  assert.deepEqual(result.gold.spans, []);
+  assert.deepEqual(result.resolutions, []);
+  assert.equal(result.conditionResolutions[0].span.mapping.status, 'mapped');
+  assert.equal(result.conditionResolutions[0].originalQuoteHash, hash(span.quote));
+  const score = scoreScientificEvidence({ schemaVersion: 1, gold: result.gold, observation: {
+    queryId: f.query.id, ranking: { status: 'verified', reason: null, items: [] },
+    context: { status: 'verified', reason: null, items: [] },
+    unsupportedAnswerEvidence: { status: 'unmeasured', unsupportedPositive: null }
+  } });
+  assert.equal(score.metrics.recallAt5.value, null);
+  f.query.requiredConditions[0].evidenceSpanIds = [];
+  assert.throws(() => resolveFixture(f), /unanswerable_condition_evidence_missing/);
+});

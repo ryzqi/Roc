@@ -316,3 +316,132 @@ test('CLI returns exit 2 for missing data, writes only a new readiness file and 
   assert.equal(missing.status, 2);
   assert.ok(hasIssue(JSON.parse(missing.stdout), 'file_missing'));
 });
+
+function upgradeV2(root) {
+  const manifest = read(join(root, 'manifest.json'));
+  const sourceFiles = [{ path: 'pnpm-lock.yaml', sha256: hash('test-lock') },
+    { path: 'src/main/index.ts', sha256: hash('test-source') }];
+  const source = { commit: 'a'.repeat(40), dirty: false, sourceHash: hash(sourceFiles),
+    files: sourceFiles, lockfileHash: hash('test-lock'), node: 'test-node', platform: 'darwin', arch: 'arm64' };
+  const configuration = { schemaVersion: 1,
+    parser: { id: 'test-parser', revision: 'test-v1', fingerprint: hash('test-parser') },
+    retrievalMode: 'lexical', embedding: null, reranker: null, generation: null,
+    execution: { timeoutMs: 1000, maxModelCalls: 0, maxInputTokens: 2000, maxOutputTokens: 1000, repetitions: 1 } };
+  write(join(root, 'source.json'), source); write(join(root, 'configuration.json'), configuration);
+  manifest.schemaVersion = 2;
+  manifest.baseline = Object.fromEntries(['source', 'configuration'].map(key => [key,
+    { path: `${key}.json`, sha256: sha256(readFileSync(join(root, `${key}.json`))) }]));
+  write(join(root, 'manifest.json'), manifest);
+  changeQueries(root, queries => {
+    queries.forEach((query, index) => {
+      queries[index] = review({ ...query, schemaVersion: 2,
+        answerability: query.answerable ? 'answerable' : 'insufficient_evidence', requiredConditions: [] });
+    });
+  });
+}
+function changeBaseline(root, key, mutate) {
+  const manifest = read(join(root, 'manifest.json')), entry = manifest.baseline[key];
+  const path = join(root, entry.path), value = read(path);
+  mutate(value); write(path, value);
+  entry.sha256 = sha256(readFileSync(path)); write(join(root, 'manifest.json'), manifest);
+}
+
+test('v2 freezes source and config without upgrading input readiness into scientific quality', async t => {
+  const root = isolated(t); upgradeV2(root);
+  const report = await check(root);
+  assert.equal(report.corpusReady, true, JSON.stringify(report.issues));
+  assert.equal(report.corpusSchemaVersion, 2);
+  assert.equal(report.frozenBaseline.sourceRevision, 'a'.repeat(40));
+  assert.equal(report.stages.parser.inputReady, true);
+  assert.equal(report.stages.retrieval.inputReady, true);
+  for (const stage of ['extraction', 'wiki', 'writing']) assert.equal(report.stages[stage].inputReady, false);
+  for (const stage of Object.values(report.stages)) {
+    assert.equal(stage.executionStatus, 'not_run');
+    assert.equal(stage.qualityStatus, 'not_evaluated');
+    assert.equal(stage.qualityMetrics, null);
+  }
+  assert.equal(report.scientificBaselineReady, false);
+  assert.deepEqual(report, await check(root));
+  const legacy = await check(isolated(t));
+  assert.equal(legacy.corpusReady, true);
+  assert.equal(legacy.frozenBaseline, null);
+  assert.equal(legacy.stages.retrieval.inputReady, false);
+});
+
+test('v2 refuses missing, changed, inconsistent or escaping baseline artifacts', async t => {
+  const mutations = [
+    [root => {
+      const manifest = read(join(root, 'manifest.json')); manifest.baseline = null;
+      write(join(root, 'manifest.json'), manifest);
+    }, 'baseline_lock_missing'],
+    [root => writeFileSync(join(root, 'configuration.json'), '{}'), 'baseline_file_changed'],
+    [root => changeBaseline(root, 'source', source => { source.files[0].sha256 = hash('changed'); }),
+      'baseline_source_inventory_changed'],
+    [root => changeBaseline(root, 'source', source => { source.lockfileHash = hash('changed'); }),
+      'baseline_lockfile_changed'],
+    [root => changeBaseline(root, 'configuration', configuration => { configuration.retrievalMode = 'hybrid'; }),
+      'baseline_embedding_configuration_missing'],
+    [root => changeBaseline(root, 'configuration', configuration => { configuration.apiKey = 'test-secret'; }),
+      'schema_invalid'],
+    [root => {
+      const manifest = read(join(root, 'manifest.json')); manifest.baseline.source.path = '../source.json';
+      write(join(root, 'manifest.json'), manifest);
+    }, 'corpus_path_outside_root']
+  ];
+  for (const [mutate, code] of mutations) {
+    const root = isolated(t); upgradeV2(root); mutate(root);
+    const report = await check(root);
+    assert.equal(report.corpusReady, false);
+    assert.equal(report.frozenBaseline, null);
+    assert.ok(hasIssue(report, code), code);
+    assert.equal(report.stages.retrieval.inputReady, false);
+    assert.deepEqual(report.stages.retrieval.missingInputs, ['frozen_source_and_configuration']);
+    assert.ok(!JSON.stringify(report).includes('test-secret'));
+  }
+});
+
+test('v2 binds required experimental conditions to their own paper evidence and review content', async t => {
+  const root = isolated(t); upgradeV2(root);
+  changeQueries(root, queries => {
+    const query = queries[0];
+    query.requiredConditions = [{ id: 'dataset', paperId: query.targetPaperIds[0], field: 'dataset',
+      status: 'known', value: 'Synthetic test dataset', evidenceSpanIds: [query.expectedEvidenceSpans[0].id] }];
+    queries[0] = review(query);
+  });
+  assert.equal((await check(root)).corpusReady, true);
+  changeQueries(root, queries => { queries[0].requiredConditions[0].value = 'Changed dataset'; });
+  assert.ok(hasIssue(await check(root), 'review_content_changed'));
+  changeQueries(root, queries => {
+    queries[0].requiredConditions[0].evidenceSpanIds = ['missing']; queries[0] = review(queries[0]);
+  });
+  assert.ok(hasIssue(await check(root), 'condition_evidence_missing'));
+  changeQueries(root, queries => {
+    queries[0].requiredConditions[0].status = 'unknown'; queries[0] = review(queries[0]);
+  });
+  assert.ok(hasIssue(await check(root), 'condition_value_or_evidence_invalid'));
+});
+
+test('v2 distinguishes condition mismatch and refuses silent legacy defaults or invented refusal answers', async t => {
+  const root = isolated(t); upgradeV2(root);
+  changeQueries(root, queries => {
+    const query = queries.find(query => !query.answerable), sourceQuery = queries.find(candidate => candidate.answerable);
+    query.answerability = 'conditions_not_comparable';
+    query.targetPaperIds = sourceQuery.targetPaperIds; query.targetBlockIds = sourceQuery.targetBlockIds;
+    query.expectedEvidenceSpans = sourceQuery.expectedEvidenceSpans;
+    query.requiredConditions = [{ id: 'dataset', paperId: query.targetPaperIds[0], field: 'dataset',
+      status: 'known', value: 'Synthetic dataset', evidenceSpanIds: [query.expectedEvidenceSpans[0].id] },
+    { id: 'split', paperId: query.targetPaperIds[0], field: 'split', status: 'unknown', value: null, evidenceSpanIds: [] }];
+    Object.assign(query, review(query));
+  });
+  assert.equal((await check(root)).corpusReady, true);
+  changeQueries(root, queries => {
+    const query = queries.find(query => !query.answerable); query.expectedAnswer = 'Unsupported conclusion';
+    Object.assign(query, review(query));
+  });
+  assert.ok(hasIssue(await check(root), 'query_answerability_gold_mismatch'));
+  const legacyQuery = isolated(t); upgradeV2(legacyQuery);
+  changeQueries(legacyQuery, queries => {
+    delete queries[0].requiredConditions; queries[0] = review(queries[0]);
+  });
+  assert.ok(hasIssue(await check(legacyQuery), 'schema_invalid'));
+});
