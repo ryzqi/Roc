@@ -122,6 +122,26 @@ test('empty and failed literature lists keep one import and one reload action',a
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('literature search shows one outer focus ring for mouse and keyboard focus',async()=>{
+  await page.evaluate(()=>mount());
+  const search=page.getByRole('searchbox',{name:'搜索文献'});
+  const frame=search.locator('..');
+  await search.click();
+  await expect(search).toBeFocused();
+  await expect(search).toHaveCSS('outline-style','none');
+  await expect(frame).toHaveCSS('outline-style','solid');
+
+  const refresh=page.getByTestId('literature-refresh');
+  await page.keyboard.press('Tab');
+  await expect(refresh).toBeFocused();
+  await expect(refresh).toHaveCSS('outline-style','solid');
+  await expect(frame).toHaveCSS('outline-style','none');
+  await page.keyboard.press('Shift+Tab');
+  await expect(search).toBeFocused();
+  await expect(search).toHaveCSS('outline-style','none');
+  await expect(frame).toHaveCSS('outline-style','solid');
+});
+
 test('narrow literature navigation contains its filters and leaves reader controls clickable',async()=>{
   await page.evaluate(()=>mount());
   await page.getByTestId('literature-row-paper-layout').waitFor();
