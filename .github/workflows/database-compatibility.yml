@@ -1,0 +1,47 @@
+name: Database compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'src/main/infrastructure/*schema*.ts'
+      - 'src/main/infrastructure/database*.ts'
+      - 'src/main/infrastructure/execution-events.ts'
+      - 'src/main/infrastructure/observe-database.ts'
+      - 'src/main/kernel/kernel-runtime.ts'
+      - 'src/shared/schemas/*.ts'
+      - 'tests/unit/database-*.test.mjs'
+      - 'tests/unit/research-schema-migration.test.mjs'
+      - 'tests/unit/research-paper-card-versions.test.mjs'
+      - 'tests/unit/research-scientific-generations.test.mjs'
+      - 'tests/fixtures/research-historical-database.mjs'
+      - 'tests/fixtures/research-*/**'
+      - 'scripts/database/**'
+      - 'scripts/verify-research-schema-migration.mjs'
+      - 'scripts/lib/bundle-ts.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.node-version'
+      - 'tsconfig*.json'
+      - '.github/workflows/database-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-schema-migration.test.mjs tests/unit/research-paper-card-versions.test.mjs tests/unit/research-scientific-generations.test.mjs

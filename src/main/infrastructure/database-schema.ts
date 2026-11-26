@@ -23,7 +23,7 @@ export function initializeDatabaseSchema(
   }
   registerExecutionEventFunctions(db);
   const expected = expectedSchemaObjects(schema.sql);
-  const checksum = createHash('sha256').update(JSON.stringify([dbName, schema.version, [...expected]])).digest('hex');
+  const checksum = checksumSchemaObjects(dbName, schema.version, expected);
   const actual = readSchemaObjects(db);
   const metadataExists = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'schema_metadata'").get() !== undefined;
 
@@ -57,7 +57,7 @@ export function initializeDatabaseSchema(
   }).immediate();
 }
 
-function expectedSchemaObjects(sql: string): SchemaObjects {
+export function expectedSchemaObjects(sql: string): SchemaObjects {
   const cached = expectedSchemaCache.get(sql);
   if (cached !== undefined) return cached;
   const probe = new Database(':memory:');
@@ -72,10 +72,14 @@ function expectedSchemaObjects(sql: string): SchemaObjects {
   }
 }
 
-function readSchemaObjects(db: DatabaseConnection): SchemaObjects {
+export function readSchemaObjects(db: DatabaseConnection): SchemaObjects {
   const shadowTables = new Set(db.prepare("SELECT name FROM pragma_table_list WHERE type = 'shadow'").pluck().all() as string[]);
   const rows = db.prepare(`SELECT name, sql FROM sqlite_master
     WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name != 'schema_metadata' ORDER BY name`).all() as
     Array<{ name: string; sql: string }>;
   return new Map(rows.filter(row => !shadowTables.has(row.name)).map(row => [row.name, row.sql.replace(/\s+/gu, ' ').trim()]));
+}
+
+export function checksumSchemaObjects(dbName: RocLogicalDatabaseName, version: number, objects: SchemaObjects): string {
+  return createHash('sha256').update(JSON.stringify([dbName, version, [...objects]])).digest('hex');
 }
