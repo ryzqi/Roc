@@ -117,7 +117,9 @@ export function compileRunCapabilityManifest(input: {
     mcpServers: input.mcpServers.filter((server) => resolvedMcpServers.includes(server.id)),
     selfConfigAvailable: input.selfConfigAvailable ?? false,
     shellAllowedCommands: input.shellAllowedCommands,
-    trustedHostAvailable: input.trustedHostAvailable === true  });
+    trustedHostAvailable: input.trustedHostAvailable === true,
+    reservedToolNames: RESEARCH_TOOL_DESCRIPTORS.map((descriptor) => descriptor.name)
+  });
 
   const interruptOn = createInterruptPolicy({
     deleteFileApprovalMode: input.deleteFileApprovalMode,
@@ -151,6 +153,16 @@ export function compileRunCapabilityManifest(input: {
         preset: server.preset, riskLevel: server.riskLevel, url: server.url, command: server.command, allowedTools: server.allowedTools })),
     untrustedContextPolicy: 'external_content_reference_only' as const
   };
+
+  // Validate the complete manifest, not only tool cards. Framework and research
+  // tools are appended after card validation and must not share a model name.
+  const names = new Set<string>();
+  for (const entry of manifestWithoutHash.tools) {
+    if (names.has(entry.modelVisibleName)) {
+      throw new Error(`run_capability_model_visible_name_collision:${entry.modelVisibleName}`);
+    }
+    names.add(entry.modelVisibleName);
+  }
 
   const manifest: RunCapabilityManifestV1 = {
     ...manifestWithoutHash,

@@ -370,7 +370,7 @@ export function createResearchTools(input: {
     }, {
       name: 'research_search_knowledge',
       responseFormat: 'content_and_artifact',
-      description: '检索本项目与全局文献原文，返回真实 chunkId、indexedVersion 和定位。需要实验设置或邻接原文时用 research_read_knowledge_context；捕获用 research_capture_evidence。',
+      description: '当要寻找已入库论文的正文段落、方法描述或相关上下文时使用；不是外部新论文发现，也不负责核对表格/公式等精确科学对象。检索项目与全局文献原文，返回 chunkId、indexedVersion 和定位；需要实验设置或邻接原文时用 research_read_knowledge_context，确认后再用 research_capture_evidence 捕获可引用证据。命中预览不是科学验证。',
       schema: z.object({ query: z.string().trim().min(1), documentId: z.string().optional(), limit: z.number().int().min(1).max(20).optional() }).strict()
     }),
     tool(request => invoke('research.knowledge.context', {...request, projectId}), {
