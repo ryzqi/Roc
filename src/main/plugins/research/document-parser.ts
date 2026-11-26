@@ -13,7 +13,6 @@ import {attachPaperVisuals} from './pdf-caption-linker';
 import {paperVisualVersion} from '../../../shared/schemas/research-paper-visual';
 import {assessPdfQuality} from './pdf-quality-assessor';
 import {paperQualityVersion} from '../../../shared/schemas/research-paper-quality';
-import * as ort from 'onnxruntime-node';
 import {
   getObjectDetectionPreset,
   matchTableStructureToOcr,
@@ -479,6 +478,10 @@ async function createStructureService(
   const layout = buffers.get('layout');
   const table = buffers.get('table');
   if (!ocrDet || !ocrRec || !dictionary || !layout || !table) throw new ResearchProcessError('research_model_asset_missing');
+  // Native-text PDFs and HTML need no ONNX binding. Load it after OCR asset validation.
+  throwIfAborted(signal);
+  const ort = await import('onnxruntime-node');
+  throwIfAborted(signal);
   let usedCpuFallback = false;
   const modelStages = new Map<ArrayBuffer, ProcessingStage>();
   const modelBuffer = (buffer: Buffer, stage: ProcessingStage): ArrayBuffer => {

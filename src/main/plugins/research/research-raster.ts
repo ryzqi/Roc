@@ -1,5 +1,4 @@
 import {createCanvas, loadImage} from '@napi-rs/canvas';
-import * as UTIF from 'utif';
 import {researchJobError} from './research-job';
 
 const MAX_PAGE_PIXELS = 25_000_000;
@@ -10,6 +9,7 @@ type RasterDocument = { pageCount: number; page(pageNumber: number): Promise<Ras
 export async function decodeRasterDocument(source: Buffer, extension: string): Promise<RasterDocument> {
   extension = extension.toLowerCase();
   if (extension === '.tif' || extension === '.tiff') {
+    const {default: UTIF} = await import('utif');
     const buffer = toArrayBuffer(source);
     const pages = UTIF.decode(buffer);
     if (pages.length === 0) researchJobError('research_image_decode_failed');

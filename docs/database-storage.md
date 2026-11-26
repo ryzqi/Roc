@@ -8,21 +8,36 @@ Core 位于 `data/core.db`，插件库位于 `data/plugins/@roc/plugin-<name>.db
 Core 1、Agent 25、Memory 2、Task 1、Workspace 1、Diagnostics 1、Research 76。
 已有库必须具有匹配的结构、数据库身份、版本和结构校验和；重复打开不改写数据或元数据。
 版本号相同也不能替代结构和校验和验证。
-结构不兼容时返回 `database_schema_current_required`，保留原库，不进行自动升级、回填或重建。
-仓库不提供启动时的一次性转换逻辑或逐版本升级账本。Research v71、v72、v73、v74、v75 到 v76
-使用独立离线工具，先生成候选库，再经实际应用启动验证和显式发布；其他历史结构仍拒绝。
+启动时先取得数据库维护租约，检查七库版本，然后才运行快速校验和加载插件。
+当前支持 **Research v71～v75 自动升级到 v76**：升级前验证冻结的历史结构校验和、
+SQLite 完整性及历史执行记录，使用 SQLite Backup API 在 `plugin-data/schema-backups/upgrade-*/`
+保存原始数据库，完成备份验证后才在单个事务内升级表、索引、触发器及版本元数据。
+迁移连接保留来源的 journal mode，只设置连接级外键、超时及同步参数；事务失败时原库字节与
+journal mode 保持不变，迁移提交后由正常启动的 `DatabasePool` 配置 WAL。
+备份或备份验证失败时只清理本次新建的不完整备份目录；已完成的备份保留供恢复。
+升级完成仍使用原有严格结构校验；重复启动不会重复迁移，也不会重复备份。
+历史 TypeScript 执行快照必须满足当前 strict 合同，并匹配 run、project、request 与 status 的
+关系身份；不改写原快照或已有回执。涉及旧 Python 环境选择、Python/R/Julia 执行历史，或未知、
+损坏、身份不匹配的执行快照时，在备份和原库写入前拒绝自动迁移并保留原库，
+交由离线迁移工具处理；未知历史版本、意外 DDL、未来版本和损坏数据库同样拒绝自动修改。
+自动迁移 **不删除用户业务数据**，也不为不支持的结构猜测转换规则。
+
+后续结构变更必须按版本增加受控迁移路径；不能只修改当前 DDL 或修改元数据版本号。
+对应的冻结结构检查见 `tests/unit/database-migrations.test.mjs`，Release CI 强制运行。
 
 `pnpm database:backup` 和 `pnpm database:restore` 使用构建后的维护 CLI；恢复来源同样必须符合当前结构。
 维护操作使用互斥租约，完整性检查覆盖 SQLite integrity 与外键。
 
 显式离线更换不兼容库时，先停止 Roc、取得维护租约并用 SQLite 原生备份保存七库；
-上述维护 CLI 要求当前结构，不能用于备份或恢复不兼容的旧库。
+上述维护 CLI 要求当前结构，不能用于备份或恢复不兼容的旧库；
+启动迁移使用独立的旧版备份入口，因此不受此限制。
 在临时库创建当前结构，转换并核对业务数据、重建派生索引，通过结构、完整性和外键检查后
 原子替换不兼容库。工具拒绝任何 WAL/SHM/journal 侧文件；应使用对应历史版本安全
 完成 checkpoint 并关闭连接，不能删除尚未处理的侧文件。
 替换后用实际数据根启动最新应用并复查数据；已符合当前结构的库无需重建。
 
-Research 历史库迁移工具位于 `scripts/database/`。在 macOS 上先停止 Roc，并将旧 Research
+自动迁移拒绝的 Research 历史库仍可通过 `scripts/database/` 的离线工具处理。
+在 macOS 上先停止 Roc，并将旧 Research
 库和其项目文件完整复制到隔离的数据根；不要对用户数据目录直接运行验收脚本。使用新建、空的
 输出目录运行 `node scripts/database/migrate-research-schema.mjs --data-root <隔离数据根> --output <新迁移目录>`，
 随后运行 `node scripts/database/verify-research-migration.mjs --migration <迁移目录>`。构建当前应用后，
@@ -39,5 +54,7 @@ v76 将旧 Python 选择表替换为当前环境回执表，并新增准备操�
 
 科研文档重解析后的来源定位候选属于当前业务数据，仍按[证据来源合同](research-evidence-relations.md)保存和审核。
 
-验证入口：`node --test tests/unit/database-schema.test.mjs`，覆盖七库初始化、只读重开、
-不兼容库拒绝与初始化失败回滚；实际启动由 Electron smoke 验证。
+验证入口：`node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-schema-migration.test.mjs tests/unit/research-paper-card-versions.test.mjs tests/unit/research-scientific-generations.test.mjs`，
+覆盖七库初始化、只读重开、历史库自动升级、数据与 FTS 保留、快照身份拒绝、事务失败时原库字节
+与 journal mode 保留、备份失败清理，以及历史卡片和科学代次恢复。PR CI 运行这些回归；
+打包后仍须使用隔离的、已有历史内容的数据根验证实际启动，空数据根的 smoke 不能替代该检查。

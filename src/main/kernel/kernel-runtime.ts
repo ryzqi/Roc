@@ -8,6 +8,7 @@ import {
 import { DatabaseMaintenanceService } from '../infrastructure/database-maintenance';
 import { ConfigStore } from '../infrastructure/config-store';
 import { runDatabaseFastProbe } from '../infrastructure/database-fast-probe';
+import { migrateDatabasesOnStartup } from '../infrastructure/database-migrations';
 import { DatabasePool } from '../infrastructure/database-pool';
 import { runDatabaseRetention, type RocDatabaseRetentionPolicy } from '../infrastructure/database-retention';
 import { InfrastructureLogger } from '../infrastructure/logger';
@@ -74,6 +75,7 @@ export class KernelRuntime {
     let databasePoolToClose: DatabasePool | null = null;
     let loggerToClose: InfrastructureLogger | null = null;
     try {
+      await migrateDatabasesOnStartup(this.options.rootDir);
       const databasePool = new DatabasePool(this.options.rootDir, this.options.performanceObserverService);
       databasePoolToClose = databasePool;
       const fastProbe = runDatabaseFastProbe({

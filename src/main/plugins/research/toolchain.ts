@@ -444,11 +444,13 @@ export class ResearchToolchain {
     }
     const entries = new Map(manifest.entries.map((entry) => [researchRelativePath(entry.path), entry]));
     if (entries.size !== manifest.entries.length) throw new ResearchProcessError('research_toolchain_manifest_invalid');
-    const requireHash = (path: string, hash: string): void => {
-      const entry = entries.get(path);
-      if (entry?.type !== 'file' || entry.sha256 !== hash) throw new ResearchProcessError('research_toolchain_source_mismatch');
-    };
-    requireHash('tex/bundle.zip', toolsLock.texBundle.zipSha256);
+    // A machine-specific compressed ZIP digest is not part of the source lock.
+    // The build verifies its contents against the pinned upstream tarball;
+    // this runtime verifies the packaged ZIP against the signed file manifest
+    // in verifyNextEntries(), alongside every other packaged toolchain file.
+    if (entries.get('tex/bundle.zip')?.type !== 'file') {
+      throw new ResearchProcessError('research_toolchain_source_mismatch');
+    }
     const actual: string[] = [];
     const visit = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {

@@ -6,7 +6,6 @@
   "texBundle": {
     "url": "https://data1b.fullyjustified.net/tlextras-2022.0r0.tar",
     "sha256": "425685e124746c15ba9bb8e0596bdaad98fce886afa347fbcf9ec0e9acd7fe79",
-    "zipSha256": "2283a64f57abe845a1e03e508a0e889e7607e22ba92492847c990fb9709987f7",
     "size": 2881562112,
     "formatSerial": 33,
     "upstreamDefault": "https://relay.fullyjustified.net/default_bundle_v33.tar"

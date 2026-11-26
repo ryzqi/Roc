@@ -26,7 +26,7 @@
 
 | 项目 | 值 | 权威源码 |
 | --- | --- | --- |
-| Research DB schema | 74 | `src/main/infrastructure/database-schemas.ts` |
+| Research DB schema | 76 | `src/main/infrastructure/database-schemas.ts` |
 | Parse Contract | 6 | `src/shared/schemas/research-production.ts` |
 | Derivation Generation / Parser | 12 / `roc-research-parser/12` | `src/shared/schemas/research-production.ts` |
 | Paper IR | schema 2 / `roc-paper-ir/2.2` | `src/shared/schemas/research-paper-ir-v2.ts` |
@@ -34,7 +34,7 @@
 | Scientific context | `roc-scientific-context/1` | `src/shared/schemas/research-scientific-context.ts` |
 | 抽取 Prompt | `roc-scientific-extraction-prompts/26` | `src/main/plugins/research/scientific-extraction-model.ts` |
 
-IR、chunk、索引、抽取、卡片与 Wiki 的代次有各自身份，不能用一个 parser 版本替代全部失效判断。数据库启动拒绝不兼容旧库；v71/v72/v73→74 使用独立离线迁移，详见[数据库存储](../database-storage.md)。
+IR、chunk、索引、抽取、卡片与 Wiki 的代次有各自身份，不能用一个 parser 版本替代全部失效判断。经过冻结结构、完整性和历史执行校验的 Research v71～v75 可在启动时自动升级到 v76；不支持或不安全的旧库仍拒绝修改并交由离线迁移处理，详见[数据库存储](../database-storage.md)。
 
 Provider 工具在递归 sanitizer 后要求 `type: 'object'` 根；未支持的纯引用/组合根、标量和可空根在 dispatch 前返回 `provider_tool_schema_root_unsupported`。从 properties 推导的对象根仍支持，嵌套引用与可空字段保留。源码与工程回归入口见[抽取模型的工具边界](extraction.md#provider-工具-schema-边界)。
 
