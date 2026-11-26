@@ -763,6 +763,84 @@ test('arXiv parses located Atom records and DOI but refuses error feeds and inva
   }
 });
 
+test('arXiv exact lookup uses id_list, retains the requested version and applies local date bounds', async () => {
+  const calls = [];
+  const search = new api.LiteratureSearchService(async raw => {
+    calls.push(new URL(raw));
+    return new Response(`<feed><totalResults>1</totalResults><entry>
+      <id>http://arxiv.org/abs/2611.34841v2</id><title>Exact paper</title>
+      <summary>Abstract</summary><published>2026-11-25T00:00:00Z</published>
+      <author><name>Author</name></author></entry></feed>`);
+  });
+  try {
+    const input = {query: 'id:2611.34841v2', sources: ['arxiv'], limit: 10, maxPages: 3};
+    const result = await search.searchDetailed(input);
+    assert.equal(result.records[0].record.externalId, 'http://arxiv.org/abs/2611.34841v2');
+    assert.equal(result.records[0].record.openAccessUrl, 'https://arxiv.org/pdf/2611.34841v2');
+    assert.equal(result.sources[0].stopReason, 'reported_end');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].searchParams.get('id_list'), '2611.34841v2');
+    assert.equal(calls[0].searchParams.has('search_query'), false);
+    const filtered = await search.searchDetailed({...input, dateTo: '2026-11-24'});
+    assert.equal(filtered.sources[0].status, 'empty');
+    assert.equal(calls.length, 1);
+  } finally { await search.shutdown(); }
+});
+
+const missingArxivFeed = '<feed><totalResults>0</totalResults></feed>';
+const arxivAbstractHtml = `<!doctype html><html><head>
+  <meta name="citation_title" content="Knowledge-Base Gradient Descent: Self-Structuring Learning through Question Answering">
+  <meta name="citation_author" content="Kato, Masahiro">
+  <meta name="citation_abstract" content="Questions &amp; answers">
+  <meta name="citation_date" content="2026/11/25">
+  <meta name="citation_arxiv_id" content="2611.34841">
+  <meta property="og:url" content="https://arxiv.org/abs/2611.34841v2">
+  <meta name="citation_pdf_url" content="https://arxiv.org/pdf/2611.34841">
+</head></html>`;
+
+test('arXiv abstract fallback enters the audited search and candidate import workflow', async () => {
+  const search = new api.LiteratureSearchService(async raw => {
+    const url = new URL(raw);
+    if (url.hostname === 'export.arxiv.org') return new Response(missingArxivFeed);
+    assert.equal(raw, 'https://arxiv.org/abs/2611.34841');
+    return new Response(arxivAbstractHtml);
+  });
+  const f = setup({search});
+  try {
+    const input = {query: 'https://arxiv.org/abs/2611.34841', sources: ['arxiv']};
+    const result = await f.run(() => f.service.search(input));
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.sources[0].requests.map(request => new URL(request.url).hostname), ['export.arxiv.org', 'arxiv.org']);
+    const entry = {kind: 'candidate', searchId: result.searchId, candidateId: result.candidates[0].candidateId};
+    const imported = await f.run(() => f.service.add({requestId: 'arxiv-exact-fallback', entries: [entry]}));
+    const {metadata} = f.repo.library.get(imported.items[0].libraryItemId);
+    assert.equal(metadata.source, 'arxiv');
+    assert.equal(metadata.publishedYear, 2026);
+    assert.equal(metadata.abstract, 'Questions & answers');
+    assert.deepEqual(metadata.authors, ['Kato, Masahiro']);
+    assert.equal(metadata.openAccessUrl, 'https://arxiv.org/pdf/2611.34841v2');
+  } finally { await search.shutdown(); f.close(); }
+});
+
+test('arXiv exact lookup rejects other versions and distinguishes missing papers from errors', async () => {
+  for (const [query, apiStatus, pageStatus, expected] of [
+    ['2611.34841v1', 200, 200, 'error'],
+    ['2611.34841v2', 200, 200, 'ok'],
+    ['2611.34841', 429, 200, 'ok'],
+    ['2611.34841', 200, 404, 'empty'],
+    ['2611.34841', 200, 403, 'error']
+  ]) {
+    const search = new api.LiteratureSearchService(async raw => new URL(raw).hostname === 'export.arxiv.org'
+      ? new Response(missingArxivFeed, {status: apiStatus, headers: {'retry-after': '60'}})
+      : new Response(arxivAbstractHtml, {status: pageStatus}));
+    try {
+      const result = await search.searchDetailed({query, sources: ['arxiv']});
+      assert.equal(result.sources[0].status, expected);
+      assert.equal(result.records.length, expected === 'ok' ? 1 : 0);
+    } finally { await search.shutdown(); }
+  }
+});
+
 test('Provider request receipts persist exact query, page, retries, response hashes and transport failures', async () => {
   let attempts = 0;
   const body = JSON.stringify({message: {items: [{DOI: '10.1234/receipt', title: ['Receipt paper']}]}});

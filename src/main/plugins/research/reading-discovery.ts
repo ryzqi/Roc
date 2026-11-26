@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
-import {Parser} from 'htmlparser2';
+import {readPaperPageMetadata} from './paper-page-metadata';
 import type {ReadingRepository} from './reading-repository';
 import type {RadarService} from './radar-service';
 import {fetchReadingText,type ReadingFetch} from './reading-network';
@@ -69,8 +69,7 @@ export class ReadingDiscoveryService {
   capturePage(projectId:string,raw:string):Promise<RadarArticle>{return this.track(async()=>{
     this.reading.scope(projectId,true);const url=new URL(raw);
     if(url.origin!=='https://papers.cool'||!/^\/(?:arxiv|venue)\/[^/]+$/u.test(url.pathname))throw new Error('请选择 Cool Papers 的论文详情页。');
-    const html=await this.fetchText(url.href,{signal:this.controller.signal}),metadata=new Map<string,string[]>();
-    const parser=new Parser({onopentag(name,attrs){if(name!=='meta'||!attrs.name||!attrs.content)return;const key=attrs.name.toLowerCase();metadata.set(key,[...(metadata.get(key)??[]),attrs.content]);}},{decodeEntities:true});parser.write(html);parser.end();
+    const metadata=readPaperPageMetadata(await this.fetchText(url.href,{signal:this.controller.signal}));
     const first=(key:string)=>metadata.get(key)?.[0]??'';const title=first('citation_title');if(!title)throw new Error('页面未提供 citation_title，无法可靠入库。');
     const arxivId=/^\/arxiv\/(.+)$/u.exec(url.pathname)?.[1]??null,doi=first('citation_doi')||null;
     const value=this.article(`cool:${projectId}`,url.href,{title,doi,arxivId,url:first('citation_public_url')||url.href,pdfUrl:first('citation_pdf_url')||null,publisher:first('citation_publisher')||null,publishedAt:first('citation_date')||first('citation_publication_date')||null,summary:plainArticleText(first('citation_abstract')),authors:metadata.get('citation_author')??first('citation_authors').split(';').map(value=>value.trim()).filter(Boolean)});

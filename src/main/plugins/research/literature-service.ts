@@ -7,13 +7,15 @@ import { researchLiteratureSchema } from '../../../shared/schemas/research';
 import { literatureSearchInputSchema, type LiteraturePagePosition, type LiteratureSearchInput, type LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
 import type { ResearchLiterature } from '../../../shared/types';
+import { arxivQueryFromInput } from '../../../shared/arxiv-identifier';
+import { readPaperPageMetadata } from './paper-page-metadata';
 import { literatureIdentity, normalizeResearchDoi } from './literature-identity';
 import {openAlexIdentifierObservations, semanticScholarIdentifierObservations} from './literature-provider-identifiers';
 import {literatureRawIdentifiersSchema, type LiteratureIdentifierObservation, type LiteratureRawIdentifiers} from '../../../shared/schemas/literature-identifiers';
 import { fuseLiterature, literatureSourcePriority, type RankedLiteratureRecord } from './literature-fusion';
-import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
+import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload, type ArxivAtomEntry } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
-import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, researchProviderHosts,
+import { arxivAbstractHost, createLiteratureProviderGovernor, LiteratureProviderAdmissionError, researchProviderHosts,
   type ResearchMetadataProvider, type LiteratureProviderGovernor } from './literature-provider-governor';
 import { LiteratureRequestAuditError } from './literature-search-ledger';
 import { betterBibtexKey } from './cite-key';
@@ -184,6 +186,7 @@ export class LiteratureSearchService {
     const records: RankedLiteratureRecord[] = [];
     const pages: SourceOutcome['pages'] = [];
     let coverage: SourceOutcome['coverage'] = {apiHitCount: null, validatedPages: 0, state: 'unknown', nextPage: position};
+    let governanceHost: string = host;
     let stopReason: SourceOutcome['stopReason'] = 'page_limit';
     const pageCache = (context: ProviderContext): SourceOutcome['pages'][number]['cache'] => context.cacheHit === null ? {state: 'miss'} :
       {state: 'hit', fetchedAt: context.cacheHit.fetchedAt, responseHash: context.cacheHit.responseHash};
@@ -203,7 +206,8 @@ export class LiteratureSearchService {
         if (valid.length > request.limit) throw new Error('literature_provider_response_invalid');
         if (context.coverage === null || context.url === null) throw new Error('literature_provider_coverage_missing');
         providerSignal.throwIfAborted();
-        if (context.cacheHit === null) this.governor.success(host);
+        governanceHost = context.host;
+        if (context.cacheHit === null) this.governor.success(governanceHost);
         if (context.pendingCache !== null) this.cache.put(context.pendingCache.key, context.pendingCache.response);
         records.push(...valid.map((record, index) => ({record, rank: context.rankOffset + index + 1,
           identifiers: context.identifiers === null ? [] : context.identifiers[index],
@@ -231,19 +235,19 @@ export class LiteratureSearchService {
         const invalidPayload = error instanceof SyntaxError || error instanceof z.ZodError || error instanceof Error &&
           (error.message === 'literature_provider_response_invalid' || error.message === 'research_doi_invalid' ||
             /^research_(?:arxiv|pmid|europe_pmc)_identifier_invalid$/u.test(error.message));
-        if (invalidPayload) this.governor.failure(host, null);
+        if (invalidPayload) this.governor.failure(context.host, null);
         if (context.url !== null) pages.push({position, rankOffset: context.rankOffset, url: context.url, returnedCount: 0, cache: pageCache(context),
           coverage: {state: 'failed', apiHitCount: null, validatedPages: 0, nextPage: null}});
         return {records, source: {source, status: records.length > 0 ? 'partial' : providerSignal.aborted ? 'timeout' : rateLimited ? 'rate_limited' : 'error',
           returnedCount: records.length, errorCode: providerSignal.aborted ? 'literature_provider_timeout' : rateLimited ? 'literature_provider_rate_limited' :
             error instanceof LiteratureProviderAdmissionError ? error.code : invalidPayload ? 'literature_provider_response_invalid' : 'literature_provider_error',
           retryAfterMs: error instanceof ProviderError || error instanceof LiteratureProviderAdmissionError ? error.retryAfterMs : null,
-          requests: receipts, pages, governance: this.governor.observe(host), stopReason: 'failed',
+          requests: receipts, pages, governance: this.governor.observe(context.host), stopReason: 'failed',
           coverage: {...coverage, state: 'failed', nextPage: position}}};
       } finally { context.release?.(); context.release = null; }
     }
     return {records, source: {source, status: records.length === 0 ? 'empty' : 'ok', returnedCount: records.length,
-      errorCode: null, retryAfterMs: null, requests: receipts, pages, coverage, stopReason, governance: this.governor.observe(host)}};
+      errorCode: null, retryAfterMs: null, requests: receipts, pages, coverage, stopReason, governance: this.governor.observe(governanceHost)}};
   }
 
   private async searchSource(
@@ -357,30 +361,107 @@ export class LiteratureSearchService {
   }
 
   private async searchArxiv(query: string, limit: number, offset: number, dates: LiteratureDateRange): Promise<ResearchLiterature[]> {
+    const identifier = arxivQueryFromInput(query);
+    if (identifier !== null) return this.searchExactArxiv(identifier, dates);
     const url = literatureDateFilterUrl(`https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=${limit}&start=${offset}`, 'arxiv', dates);
-    const xml = await this.getText(url);
+    const {totalResults, entry} = await this.readArxivFeed(url);
+    const entries = normalizeArray(entry);
+    this.observeReviews(entries.map(item => arxivReview(item.id)));
+    this.observeCoverage(totalResults, entries.length,
+      totalResults > offset + entries.length ? {kind: 'offset', value: offset + entries.length} : null);
+    return entries.map(item => arxivAtomRecord(item, this.providerTimestamp()));
+  }
+
+  private async readArxivFeed(url: string): Promise<z.infer<typeof arxivSearchPayload>['feed']> {
+    const xml = await this.readResponse(url, 'application/atom+xml, application/xml, text/xml');
     if (XMLValidator.validate(xml) !== true) throw new Error('literature_provider_response_invalid');
-    const payload = arxivSearchPayload.parse(this.xmlParser.parse(xml));
-    const entries = normalizeArray(payload.feed.entry);
-    this.observeReviews(entries.map(entry => arxivReview(entry.id)));
-    this.observeCoverage(payload.feed.totalResults, entries.length,
-      payload.feed.totalResults > offset + entries.length ? {kind: 'offset', value: offset + entries.length} : null);
+    return arxivSearchPayload.parse(this.xmlParser.parse(xml)).feed;
+  }
+
+  private async searchExactArxiv(identifier: string, dates: LiteratureDateRange): Promise<ResearchLiterature[]> {
+    const context = this.requests.getStore()!;
+    const url = new URL('https://export.arxiv.org/api/query');
+    url.searchParams.set('id_list', identifier);
+    url.searchParams.set('max_results', '1');
+
+    let entry: ArxivAtomEntry | undefined;
+    // Reserve time for the official abstract page when the Atom endpoint is slow.
+    const deadline = context.signal;
+    context.signal = AbortSignal.any([deadline, AbortSignal.timeout(8_000)]);
+    try {
+      const feed = await this.readArxivFeed(url.href);
+      const entries = normalizeArray(feed.entry);
+      if (entries.length !== feed.totalResults || entries.length > 1 ||
+          entries.some(item => !matchesArxivLookup(identifier, arxivQueryFromInput(item.id)))) {
+        throw new Error('literature_provider_response_invalid');
+      }
+      entry = entries[0];
+      if (entry === undefined && context.cacheHit === null) this.governor.success(context.host);
+    } catch (error) {
+      if (error instanceof LiteratureRequestAuditError) throw error;
+      deadline.throwIfAborted();
+      if (error instanceof z.ZodError || error instanceof Error && error.message === 'literature_provider_response_invalid') {
+        this.governor.failure(context.host, null);
+      }
+    } finally {
+      context.signal = deadline;
+    }
+    if (entry !== undefined) {
+      const record = arxivAtomRecord(entry, this.providerTimestamp());
+      const resolvedId = arxivQueryFromInput(entry.id)!;
+      return this.finishArxivLookup({...record, openAccessUrl: `https://${arxivAbstractHost}/pdf/${resolvedId}`},
+        entry.published.slice(0, 10), dates);
+    }
+
+    // A single lookup may see the public abstract before the API indexes it.
+    context.release?.();
+    context.release = null;
+    context.cacheHit = null;
+    context.pendingCache = null;
+    context.fetchedAt = null;
+    context.host = arxivAbstractHost;
+    const abstractUrl = `https://${arxivAbstractHost}/abs/${identifier}`;
+    let html: string;
+    try {
+      html = await this.readResponse(abstractUrl, 'text/html');
+    } catch (error) {
+      if (!(error instanceof ProviderError) || error.status !== 404) throw error;
+      this.observeCoverage(0, 0, null);
+      return [];
+    }
+
+    const metadata = readPaperPageMetadata(html);
+    const first = (key: string): string => normalizeWhitespace(metadata.get(key)?.[0] ?? '');
+    const observedId = arxivQueryFromInput(first('citation_arxiv_id'));
+    // arXiv publishes the current version in og:url, even when the citation ID is unversioned.
+    const versionedId = arxivQueryFromInput(first('og:url'));
+    const resolvedId = versionedId ?? observedId;
+    const title = first('citation_title');
+    if (observedId === null || resolvedId === null || !matchesArxivLookup(observedId, resolvedId) ||
+        !matchesArxivLookup(identifier, resolvedId) || !title) {
+      throw new Error('literature_provider_response_invalid');
+    }
+    const published = z.iso.date().safeParse(first('citation_date').replaceAll('/', '-'));
+    const externalId = `https://${arxivAbstractHost}/abs/${resolvedId}`;
     const timestamp = this.providerTimestamp();
-    return entries.map((item) => ({
-      id: `arxiv:${item.id}`,
-      source: 'arxiv' as const,
-      externalId: item.id,
-      doi: optionalResearchDoi(item.doi),
-      title: normalizeWhitespace(item.title),
-      authors: normalizeArray(item.author).map(author => author.name),
-      abstract: normalizeWhitespace(item.summary),
-      publishedYear: Number(item.published.slice(0, 4)),
-      citationCount: null,
-      url: item.id,
-      openAccessUrl: item.id,
-      importedAt: timestamp,
-      updatedAt: timestamp
-    }));
+    const record: ResearchLiterature = {
+      id: `arxiv:${externalId}`, source: 'arxiv', externalId,
+      doi: optionalResearchDoi(first('citation_doi')), title,
+      authors: (metadata.get('citation_author') ?? []).map(normalizeWhitespace).filter(Boolean),
+      abstract: first('citation_abstract') || null, publishedYear: published.success ? Number(published.data.slice(0, 4)) : null,
+      citationCount: null, url: externalId, openAccessUrl: `https://${arxivAbstractHost}/pdf/${resolvedId}`,
+      importedAt: timestamp, updatedAt: timestamp
+    };
+    return this.finishArxivLookup(record, published.success ? published.data : null, dates, versionedId === null ? 'citation_arxiv_id' : 'og:url');
+  }
+
+  private finishArxivLookup(record: ResearchLiterature, published: string | null, dates: LiteratureDateRange, field?: string): ResearchLiterature[] {
+    const matches = (dates.from === null || published !== null && published >= dates.from) &&
+      (dates.to === null || published !== null && published <= dates.to);
+    const records = matches ? [record] : [];
+    this.observeReviews(records.map(item => arxivReview(item.externalId, field)));
+    this.observeCoverage(records.length, records.length, null);
+    return records;
   }
 
   private async searchEuropePmc(query: string, limit: number, source: 'pubmed' | 'europe_pmc', cursor: string, dates: LiteratureDateRange): Promise<ResearchLiterature[]> {
@@ -414,10 +495,6 @@ export class LiteratureSearchService {
     const response = await this.readResponse(url, 'application/json');
     try { return JSON.parse(response) as unknown; }
     catch (cause) { throw new Error('literature_provider_response_invalid', { cause }); }
-  }
-
-  private async getText(url: string): Promise<string> {
-    return this.readResponse(url, 'application/atom+xml, application/xml, text/xml');
   }
 
   private async readResponse(url: string, accept: string): Promise<string> {
@@ -558,6 +635,19 @@ function initialPage(source: typeof literatureSourcePriority[number]): Literatur
 
 class ProviderError extends Error {
   constructor(readonly status: number, readonly retryAfterMs: number | null) { super(`literature_provider_http_${status}`); }
+}
+
+function matchesArxivLookup(requested: string, actual: string | null): boolean {
+  return actual !== null && (actual === requested || actual.replace(/v\d+$/u, '') === requested);
+}
+
+function arxivAtomRecord(item: ArxivAtomEntry, timestamp: string): ResearchLiterature {
+  return {
+    id: `arxiv:${item.id}`, source: 'arxiv', externalId: item.id, doi: optionalResearchDoi(item.doi),
+    title: normalizeWhitespace(item.title), authors: normalizeArray(item.author).map(author => author.name),
+    abstract: normalizeWhitespace(item.summary), publishedYear: Number(item.published.slice(0, 4)),
+    citationCount: null, url: item.id, openAccessUrl: item.id, importedAt: timestamp, updatedAt: timestamp
+  };
 }
 
 function optionalResearchDoi(doi: string | null | undefined): string | null {

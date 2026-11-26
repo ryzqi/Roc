@@ -47,6 +47,7 @@ const arxivEntry = z.looseObject({
   title: text, summary: z.string(), published: z.string().regex(/^\d{4}-\d{2}-\d{2}T/u),
   author: z.union([arxivAuthor, z.array(arxivAuthor)]), doi: z.string().optional()
 });
+export type ArxivAtomEntry = z.infer<typeof arxivEntry>;
 export const arxivSearchPayload = z.looseObject({
   feed: z.looseObject({totalResults: z.number().int().nonnegative(),
     entry: z.union([arxivEntry, z.array(arxivEntry)]).optional()})
