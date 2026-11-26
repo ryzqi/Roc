@@ -1,3 +1,5 @@
+import type {ScientificSearchRequest} from '../../shared/schemas/research-scientific-search';
+import type {ScientificQueryResult} from '../../shared/schemas/research-scientific-query';
 import type { LiteratureSearchInput, LiteratureSearchResult } from '../../shared/schemas/literature-import';
 import type {
   FileWriteResult,
@@ -267,4 +269,8 @@ export function listClaims(
   input: { projectId: string; artifactId?: string }
 ): Promise<IpcLikeResult<ResearchClaim[]>> {
   return client.api.research.listClaims(input);
+}
+
+export function queryScientificKnowledge(client: RocClient, input: ScientificSearchRequest): Promise<IpcLikeResult<ScientificQueryResult>> {
+  return client.api.research.queryScientificKnowledge(input);
 }

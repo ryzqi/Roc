@@ -5,6 +5,7 @@ import type {ScientificSearchPaper} from './scientific-search-snapshot';
 import type {ResearchRerankerService} from './reranker-service';
 import {chunkTokenCount} from './knowledge-chunks';
 import {researchContentHash} from './research-files';
+import {coverScientificCandidates} from './scientific-retrieval-fusion';
 
 export const scientificRerankInputVersion = 'roc-scientific-rerank/1';
 export const scientificRerankBudget = {candidates: 200, documentTokens: 4096, totalTokens: 64_000} as const;
@@ -47,41 +48,58 @@ export async function rerankScientificCandidates(plan: ScientificQueryPlan, cand
     ({ordered: [...candidates], method: 'rrf' as const, reranker, rerank});
   if (!enabled) return fallback(unavailable('not_requested'));
   if (service === null) return fallback(unavailable('config_missing'));
-  const details: RerankDetails = {inputVersion: scientificRerankInputVersion, inputHash: null, scores: [], degradation: []};
-  if (candidates.length > budget.candidates) {
-    details.degradation.push('rerank_candidate_budget_exceeded');
-    return fallback(unavailable('not_requested'), details);
-  }
+  const details: RerankDetails = {inputVersion: scientificRerankInputVersion, inputHash: null, scores: [], degradation: [], skipped: []};
+  if (Object.values(budget).some(value => !Number.isSafeInteger(value) || value < 0) ||
+    budget.candidates > scientificRerankBudget.candidates || budget.documentTokens > scientificRerankBudget.documentTokens ||
+    budget.totalTokens > scientificRerankBudget.totalTokens) throw new Error('research_scientific_rerank_budget_invalid');
   const byGeneration = new Map(papers.map(p => [p.generation.id, p]));
-  const documents: string[] = [];
+  const preferred = coverScientificCandidates(candidates, plan, budget.candidates);
+  const preferredIds = new Set(preferred.map(candidate => candidate.id));
+  const priority = [...preferred, ...candidates.filter(candidate => !preferredIds.has(candidate.id))];
+  const documents: string[] = [], selected: ScientificCandidate[] = [];
   let tokens = chunkTokenCount(plan.query);
-  for (const candidate of candidates) {
+  const skip = (candidate: ScientificCandidate, reason: string) => {
+    details.skipped.push({candidateId: candidate.id, reason});
+    if (!details.degradation.includes(reason)) details.degradation.push(reason);
+  };
+  for (const candidate of priority) {
     signal.throwIfAborted();
     const paper = byGeneration.get(candidate.generationId);
     if (!paper) throw new Error('research_scientific_rerank_source_invalid');
+    if (selected.length >= budget.candidates) {skip(candidate, 'rerank_candidate_budget_exceeded'); continue;}
     const text = scientificRerankDocument(candidate, paper, plan), count = chunkTokenCount(text);
-    tokens += count;
-    if (count > budget.documentTokens || tokens > budget.totalTokens) {
-      details.degradation.push('rerank_token_budget_exceeded');
-      return fallback(unavailable('not_requested'), details);
-    }
-    documents.push(text);
+    if (count > budget.documentTokens) {skip(candidate, 'rerank_document_token_budget_exceeded'); continue;}
+    if (tokens + count > budget.totalTokens) {skip(candidate, 'rerank_total_token_budget_exceeded'); continue;}
+    tokens += count; documents.push(text); selected.push(candidate);
   }
+  if (!selected.length) return fallback(unavailable('not_requested'), details);
   details.inputHash = researchContentHash(JSON.stringify({version: scientificRerankInputVersion, query: plan.query,
-    candidateIds: candidates.map(c => c.id), documents}));
-  const {scores, receipt} = await service.rank(plan.query, documents, signal);
+    candidateIds: selected.map(c => c.id), documents}));
+  let response: Awaited<ReturnType<ResearchRerankerService['rank']>>;
+  try {response = await service.rank(plan.query, documents, signal);} catch (error) {
+    signal.throwIfAborted();
+    if (error instanceof Error && error.message === 'research_reranker_config_changed') throw error;
+    details.degradation.push('rerank_failed');
+    return fallback(unavailable('failed'), details);
+  }
+  const {scores, receipt} = response;
   signal.throwIfAborted();
   if (scores === null) {
     details.degradation.push(`rerank_${receipt.status}`);
     return fallback(receipt, details);
   }
-  if (receipt.status !== 'succeeded' || scores.length !== candidates.length ||
+  if (receipt.status !== 'succeeded' || scores.length !== selected.length ||
     scores.some(score => !Number.isFinite(score) || score < 0 || score > 1)) {
-    throw new Error('research_scientific_rerank_scores_invalid');
+    details.degradation.push('rerank_scores_invalid');
+    return fallback({...receipt, status: 'failed'}, details);
   }
-  details.scores = candidates.map((candidate, index) => ({candidateId: candidate.id, score: scores[index]!}));
-  const ordered = candidates.map((candidate, index) => ({candidate, score: scores[index]!, index}))
+  details.scores = selected.map((candidate, index) => ({candidateId: candidate.id, score: scores[index]!}));
+  const reranked = selected.map((candidate, index) => ({candidate, score: scores[index]!, index}))
     .sort((a, b) => b.score - a.score || b.candidate.score - a.candidate.score || a.index - b.index)
     .map(row => row.candidate);
+  // Replace only ranked slots; unranked full objects keep their fusion positions.
+  const selectedIds = new Set(selected.map(candidate => candidate.id));
+  let index = 0;
+  const ordered = candidates.map(candidate => selectedIds.has(candidate.id) ? reranked[index++]! : candidate);
   return {ordered, method: 'reranker', reranker: receipt, rerank: details};
 }

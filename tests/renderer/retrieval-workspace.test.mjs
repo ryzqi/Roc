@@ -29,7 +29,7 @@ before(async () => {
     }
     window.mount=()=>{
       window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[],questions:[]};
-      window.emptyResults=false;
+      window.emptyResults=false; window.scientificResults=false;
       window.failSearch=false;
       window.holdAssistant=false;
       const status={phase:'idle',generation:2,workspacePath:'/tmp/synthetic-retrieval',error:null,lastScanAt:null,
@@ -41,7 +41,9 @@ before(async () => {
         listIndexJobs:async()=>{window.calls.jobs++;return {ok:true,data:[]};},
         knowledgeJobs:async()=>{window.calls.sourceJobs++;return {ok:true,data:[]};},
         controlIndex:async input=>{window.calls.controls.push(input);return {ok:true,data:status};},
-        searchKnowledge:async input=>{window.calls.search.push(input);if(window.failSearch)return {ok:false,error:{message:'Synthetic retrieval failure'}};return {ok:true,data:researchKnowledgeSearchResultSchema.parse({
+        queryScientificKnowledge:async input=>{window.calls.search.push(input);if(window.failSearch)return {ok:false,error:{message:'Synthetic retrieval failure'}};return {ok:true,data:{version:"roc-scientific-query/1",query:input.query,projectId:"p1",rounds:[],hits:window.scientificResults?[{id:'scientific-hit',documentId:'original-document',paperId:'original-paper',objectId:'original-equation',
+              title:'Original equation',content:'x = y',sourceLocator:{rawLocator:'page:3',parseId:'original-parse',knowledgeDocumentId:'document:original-parse'},
+              signals:[{method:'exact',rank:1}],score:0.03}]:[],sourceRefs:[],degradation:[],elapsedMs:1,stopReason:"complete",retrievalReceiptId:"fixture",searchSnapshotId:"fixture",intent:[],legacy:researchKnowledgeSearchResultSchema.parse({
           query:input.query,hits:window.emptyResults?[]:[
             {chunkId:'paper-hit',documentId:'document:parse-one',sourceId:'paper-one',sourceType:'literature',
               title:'Attention methods: '+ 'A long scientific title '.repeat(5),
@@ -55,7 +57,7 @@ before(async () => {
           ranking:{schemaVersion:3,ranker:'rrf-v1-k60',candidateLimit:80,route:{intent:'general',documentId:null,diversify:false},
             reranker:{status:'not_requested',model:null,configHash:null,elapsedMs:0},degradation:null,inputHash:'0'.repeat(64),
             projectId:'p1',limit:20,embedding:null,coverage:{keyword:'results',vector:'not_searched'},candidates:[]}
-        })};}
+        })}};}
       }}};
       const literature={client,projectId:'p1',status:'ready',items:[],assistant:{pending:false,error:null,threadId:null},action:{error:null,pending:false},
         select:id=>window.calls.selected.push(id),clearActionError:()=>{},
@@ -254,5 +256,18 @@ test('empty results give a next step without exposing technical diagnostics by d
   await page.getByTestId('rag-search').click();
   await expect(page.getByTestId('rag-no-hits')).toContainText('管理索引');
   await expect(page.getByTestId('rag-search-meta')).toBeHidden();
+  assert.deepEqual(errors,[]);
+});
+
+
+test('scientific objects retain reader identity and never call legacy chunk capture',async()=>{
+  await page.evaluate(()=>{window.mount();window.scientificResults=true;});
+  await page.getByTestId('rag-query').fill('Equation 7');
+  await page.getByTestId('rag-query').press('Enter');
+  await expect(page.getByTestId('rag-hit-scientific-hit')).toBeVisible();
+  await expect(page.getByTestId('rag-hit-capture-scientific-hit')).toBeDisabled();
+  await page.getByTestId('rag-hit-open-scientific-hit').click();
+  assert.deepEqual(await page.evaluate(()=>window.calls.opened[0]),{parseId:'original-parse',libraryItemId:null,locator:'page:3',text:'x = y'});
+  assert.deepEqual(await page.evaluate(()=>window.calls.evidence),[]);
   assert.deepEqual(errors,[]);
 });

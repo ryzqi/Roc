@@ -45,3 +45,39 @@ export function fuseScientificCandidates(lists: readonly (readonly ScientificCan
     compareScientificRelevance(a.score, b.score, objectMatch(a), objectMatch(b)) ||
     Number(exact(b)) - Number(exact(a)) || Number(roleMatch(b)) - Number(roleMatch(a)) || a.id.localeCompare(b.id));
 }
+
+/** Reserve a few near-cutoff slots for requested objects, roles and comparison sources.
+ * Raw RRF scores stay intact; unrelated or much weaker candidates never gain a quota. */
+export function coverScientificCandidates(candidates: readonly ScientificCandidate[], plan: ScientificQueryPlan,
+  limit: number): ScientificCandidate[] {
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > 1200) throw new Error('research_scientific_fusion_budget_exceeded');
+  const selected = candidates.slice(0, limit);
+  if (!selected.length || candidates.length <= limit) return selected;
+  const requirements: Array<(candidate: ScientificCandidate) => boolean> = [];
+  for (const kind of ['table', 'equation', 'figure', 'citation'] as const) {
+    if (plan.intents.includes(kind) || kind === 'table' && plan.intents.some(i => ['results', 'experiment', 'comparison'].includes(i))) {
+      requirements.push(candidate => candidate.object.kind === kind);
+    }
+  }
+  for (const role of plan.filters.sectionRoles) requirements.push(candidate => candidate.semanticRoles.includes(role));
+  if (plan.intents.includes('limitations')) requirements.push(candidate => candidate.semanticRoles.includes('limitation'));
+  if (plan.intents.some(i => i === 'comparison' || i === 'cross_paper')) {
+    for (const paperId of [...new Set(candidates.map(candidate => candidate.paperId))].slice(0, 6)) {
+      requirements.push(candidate => candidate.paperId === paperId && candidate.chunkId !== null);
+    }
+  }
+  const cutoff = selected.at(-1)!.score * 0.85, maxReplacements = Math.min(6, Math.max(1, Math.floor(limit / 3)));
+  let replacements = 0;
+  for (const required of requirements) {
+    if (replacements >= maxReplacements || selected.some(required)) continue;
+    const addition = candidates.find(candidate => candidate.score >= cutoff && required(candidate) &&
+      !selected.some(saved => saved.id === candidate.id));
+    if (!addition) continue;
+    const index = selected.findLastIndex(candidate => requirements.every(test => !test(candidate) ||
+      test(addition) || selected.some(other => other.id !== candidate.id && test(other))));
+    if (index < 0) continue;
+    selected[index] = addition; replacements++;
+  }
+  const ids = new Set(selected.map(candidate => candidate.id));
+  return candidates.filter(candidate => ids.has(candidate.id));
+}

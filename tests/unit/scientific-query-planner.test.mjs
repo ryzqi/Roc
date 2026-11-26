@@ -41,18 +41,20 @@ test('external scope cannot be supplied by query text, another project, or a for
   assert.throws(()=>buildScientificQueryPlan(input(' ')),/query_invalid/);
 });
 test('one optional model supplement quotes original UTF16 filters and selects only authorized papers',async()=>{
-  const query = '🧪 Dataset C score?';let calls=0;
+  const query = '🧪 Dataset C method and results?';let calls=0;
   const plan = await planScientificQuery(input(query),async sample=>{
     calls++;assert.equal(sample.query,query);
     return proposal({...extra,datasets:[{text:'Dataset C',start:3,end:12}]});
   });
   assert.equal(calls,1);assert.equal(plan.observation.supplement,'succeeded');
-  assert.deepEqual(plan.intents,['method','results']);assert.deepEqual(plan.scope.documentIds,['doc-A']);
+  assert.deepEqual(plan.intents,['method','results']);
+  assert.ok(plan.subQuestions.length > 0 && plan.subQuestions.length <= 6);
+  assert.equal(plan.maxRetrievalRounds,2);assert.deepEqual(plan.scope.documentIds,['doc-A']);
   assert.deepEqual(plan.filters.datasets,['Dataset C']);assert.equal(plan.observation.modelId,'model');
   await planScientificQuery(input('method'),async()=>{throw new Error('must not invoke');});
 });
 test('unknown IDs, invented spans, malformed output and invalid provider metadata retain rules with explicit failure receipts',async()=>{
-  const base = buildScientificQueryPlan(input('Unclear request'));
+  const base = buildScientificQueryPlan(input('method and results'));
   for (const invalid of [{...extra,documentIds:['foreign']},{...extra,datasets:[{text:'invented',start:0,end:8}]},
     {...extra,extraKey:'prompt injection'},null]) {
     const plan = await planScientificQuery(input(base.query),async()=>proposal(invalid));
@@ -66,16 +68,16 @@ test('unknown IDs, invented spans, malformed output and invalid provider metadat
 });
 test('timeout, cancellation and input budget prevent uncontrolled model work',async()=>{
   let calls=0;
-  const timed = await planScientificQuery(input('unclear'),async(_sample,signal)=>{
+  const timed = await planScientificQuery(input('method and results'),async(_sample,signal)=>{
     calls++;return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
   },new AbortController().signal,10);
   assert.equal(timed.observation.supplement,'timed_out');assert.equal(calls,1);
   const controller = new AbortController();
-  await assert.rejects(()=>planScientificQuery(input('unclear'),async()=>{
+  await assert.rejects(()=>planScientificQuery(input('method and results'),async()=>{
     controller.abort();return proposal(extra);
   },controller.signal));
   const many = Array.from({length:33},(_,index)=>({...papers[0],documentId:`doc-${index}`,paperId:`paper-${index}`}));
-  const limited = await planScientificQuery({...input('unclear'),papers:many},async()=>{throw new Error('must not invoke');});
+  const limited = await planScientificQuery({...input('method and results'),papers:many},async()=>{throw new Error('must not invoke');});
   assert.equal(limited.observation.supplement,'budget_exceeded');assert.equal(limited.observation.calls,0);
 });
 test('LangChain adapter requests bounded structured output and forwards the cancellation signal',async()=>{
@@ -91,4 +93,31 @@ test('LangChain adapter requests bounded structured output and forwards the canc
     }}};
   }});
   assert.deepEqual(await generator({query:'unclear',papers},signal),proposal(extra));
+});
+
+test('simple keywords, Chinese paper titles and exact object requests never invoke the planner model', async () => {
+  for (const query of ['transformer attention', '查询研究方法', 'Table 3 Equation (7)', 'Paper A method', 'DOI 10.1234/A']) {
+    const plan = await planScientificQuery(input(query),async()=>{throw new Error('must not invoke');});
+    assert.equal(plan.observation.calls,0,query);
+    assert.equal(plan.observation.supplement,'not_needed',query);
+    assert.equal(plan.maxRetrievalRounds,1,query);
+  }
+  const plan = buildScientificQueryPlan({...input('请找图神经网络研究的表3'),papers:[{...papers[0],title:'图神经网络研究'}]});
+  assert.deepEqual(plan.scope.documentIds,['doc-A']);
+});
+test('complex plans retain deterministic intents, bounded questions and reject duplicate model subqueries', async () => {
+  const query = 'Compare Paper A and Paper B methods, results and limitations';
+  const base = buildScientificQueryPlan(input(query));
+  assert.ok(base.subQuestions.some(question=>question.requiredEvidence.includes('limitations')));
+  assert.ok(base.subQuestions.some(question=>question.requiredEvidence.includes('conditions')));
+  const q = {id:'custom',question:'Original comparison',intent:'comparison',channels:['text','table'],requiredEvidence:['conditions']};
+  const valid = await planScientificQuery(input(query),async()=>proposal({...extra,intents:['overview'],subQuestions:[q]}));
+  assert.equal(valid.observation.supplement,'succeeded');
+  assert.ok(base.intents.every(intent=>valid.intents.includes(intent)));
+  assert.deepEqual(valid.subQuestions,[q]);
+  for (const subQuestions of [[q,{...q,id:'other',question:' ORIGINAL  COMPARISON '}],Array.from({length:7},(_,i)=>({...q,id:`q${i}`,question:`question ${i}`}))]) {
+    const invalid = await planScientificQuery(input(query),async()=>proposal({...extra,subQuestions}));
+    assert.ok(['invalid','failed'].includes(invalid.observation.supplement));
+    assert.deepEqual(invalid.subQuestions,base.subQuestions);
+  }
 });

@@ -23,7 +23,7 @@ const block = (id, kind, text, y) => ({id, kind, text, label:kind, locator:`page
 
 /** Controlled parser objects and vectors exercise contracts; they are not a scientific quality benchmark. */
 export async function scientificSearchFixture(api, {objects = true, embedded = true, reranker = null, image = false, imageKind = 'figure',
-  emptyTableText = false} = {}) {
+  emptyTableText = false, extraParagraphs = []} = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(),'roc-scientific-search-')));
   const f = createResearchFixture(api,'reading',root);
   let embeddings;
@@ -69,6 +69,10 @@ export async function scientificSearchFixture(api, {objects = true, embedded = t
     blocks = api.attachPaperVisuals(api.attachPaperEquations(blocks,[{regions:[{id:'equation',formula:'x = y \\tag{7}'}]}]));
     if (image) blocks[imageKind === 'table' ? 3 : 4].visual.assetId = 'fixture-figure';
     if (image && imageKind === 'table') blocks[3].table.assetId = 'fixture-figure';
+  }
+  for (const [index, paragraph] of extraParagraphs.entries()) {
+    blocks.push(block(`extra-heading-${index}`, 'heading', paragraph.heading, 280 + index * 60));
+    blocks.push(block(`extra-body-${index}`, 'paragraph', paragraph.text, 305 + index * 60));
   }
   const {structure, ...base} = parsed;
   const content = {...base,blocks:blocks.map(({imagePath,...b})=>({...b,

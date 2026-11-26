@@ -11,6 +11,24 @@ before(async () => {
 });
 after(() => api?.dispose());
 const select = (search, kind) => search.candidates.filter(c => c.object.kind === kind).map(c => c.id);
+test('context reads honor the query plan token ceiling and keep smaller caller budgets', async () => {
+  const f = await scientificSearchFixture(api);
+  try {
+    const request = f.request('Table 3');
+    const plan = await f.router.plan(request);
+    plan.maxContextTokens = 64;
+    const search = await f.router.search(request, undefined, plan);
+    for (const [requested, expected] of [[64_000, 64], [32, 32]]) {
+      const context = await f.router.readContext({search, candidateIds: select(search, 'table'),
+        budget: {maxTokens: requested}});
+      assert.equal(context.budget.maxTokens, expected);
+      assert.ok(context.usage.tokens <= expected);
+      const rebuilt = await f.router.readContext({search, candidateIds: context.selectedCandidateIds,
+        budget: context.budget});
+      assert.deepEqual(rebuilt, context);
+    }
+  } finally {await f.close();}
+});
 test('table contexts merge matching rows and preserve original merged-cell anchors, headers and values', async () => {
   const f = await scientificSearchFixture(api);
   try {
@@ -80,7 +98,10 @@ test('native PDF text expands exact parent, same-section neighbors and original 
 test('whole-object, paragraph, per-paper, token, image count and dimension budgets produce explicit omissions', async () => {
   const f = await scientificSearchFixture(api,{image:true});
   try {
-    const search = await f.router.search(f.request('Table 3 Equation (7) Figure 2 method'));
+    const request = f.request('Table 3 Equation (7) Figure 2 method');
+    const plan = await f.router.plan(request);
+    plan.maxContextTokens = 64_000;
+    const search = await f.router.search(request, undefined, plan);
     const candidateIds = [...select(search,'table'),...select(search,'equation'),...select(search,'figure')];
     for (const [budget,reason] of [
       [{maxObjects:1},'object_budget_exceeded'],[{maxEvidencePerPaper:1},'paper_evidence_budget_exceeded'],
@@ -154,4 +175,38 @@ test('asset mutation and symlink substitution fail closed; cancellation and repa
       release(); await rejected;
     } finally {release?.();await f.close();}
   }
+});
+
+test('comparison and limitation intents expand exact conditions across sections without inventing text', async () => {
+  const setup='We evaluate on Dataset Delta training split with batch size 32.';
+  const limitation='Our method cannot handle long sequences.';
+  const f=await scientificSearchFixture(api,{embedded:false,extraParagraphs:[
+    {heading:'3 Experimental Setup',text:setup},{heading:'4 Limitations',text:limitation}]});
+  try {
+    const search=await f.router.search(f.request('Compare Equation (7) results and limitations'));
+    const context=await f.router.readContext({search,candidateIds:select(search,'equation')});
+    assert.equal(context.evidence.length,1);
+    const passages=context.evidence[0].passages;
+    assert.ok(passages.some(p=>p.role==='experimental_setup' && p.text===setup));
+    assert.ok(passages.some(p=>p.role==='explanation' && p.text===limitation));
+    for(const passage of passages) {
+      const original=f.ir.blocks.find(b=>b.blockId===passage.sourceLocator.blockId),span=passage.sourceLocator.textSpan;
+      assert.equal(passage.text,span?original.text.slice(span.start,span.end):original.text);
+    }
+    assert.equal(context.evidence[0].object.data.rawLatex,'x = y \\tag{7}');
+  } finally {await f.close();}
+});
+
+test('algorithm context restores whole input output and steps when a selected algorithm chunk is partial', async () => {
+  const text='Algorithm 1: Original procedure\nInput: x\n1. Read x\n2. Compute y\nOutput: y';
+  const f=await scientificSearchFixture(api,{embedded:false,extraParagraphs:[{heading:'3 Method',text}]});
+  try {
+    const search=await f.router.search(f.request('Algorithm 1'));
+    const selected=search.candidates.find(candidate=>candidate.object.kind==='algorithm');
+    assert.ok(selected);
+    const context=await f.router.readContext({search,candidateIds:[selected.id]});
+    const evidence=context.evidence[0];
+    assert.ok(evidence.hits.some(hit=>hit.content===text) || evidence.passages.some(passage=>passage.text===text));
+    assert.equal(f.ir.algorithms[0].text,text);
+  } finally {await f.close();}
 });

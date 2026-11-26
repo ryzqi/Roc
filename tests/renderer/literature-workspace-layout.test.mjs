@@ -50,9 +50,9 @@ before(async () => {
       knowledgeJobs:async()=>ok([]),listIndexedFiles:async()=>ok([]),listIndexJobs:async()=>ok([]),
       getIndexStatus:async()=>ok({phase:'idle',generation:1,error:null,workspacePath:'/synthetic',lastScanAt:null,
         counts:{total:0,ready:0,queued:0,running:0,failed:0},settings:{revision:1,projectId:'fixture',paused:false,watch:false,kinds:[],include:[],exclude:[],embeddingConfigId:null}}),
-      searchKnowledge:async input=>ok({query:input.query,hits:[{chunkId:'source-hit',documentId:'document:parse',sourceId:'paper',sourceType:'literature',
+      queryScientificKnowledge:async input=>ok({query:input.query,hits:[],rounds:[],sourceRefs:[],degradation:[],elapsedMs:1,legacy:{query:input.query,hits:[{chunkId:'source-hit',documentId:'document:parse',sourceId:'paper',sourceType:'literature',
         title:item.metadata.title,content:'Evidence and understanding',locator:'page:1',rrfScore:0.03,keywordRank:1,vectorRank:null}],
-        keywordCount:1,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-23T00:00:00.000Z',ranking:{degradation:null,reranker:{status:'not_requested'}}})
+        keywordCount:1,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-23T00:00:00.000Z',ranking:{degradation:null,reranker:{status:'not_requested'}}}})
     }}};
     const scope={client,projectId:'fixture',workspacePath:'/synthetic',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas(){}};
     function Harness(){

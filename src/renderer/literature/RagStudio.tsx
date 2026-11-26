@@ -1,9 +1,11 @@
+import type {ScientificQueryResult} from '../../shared/schemas/research-scientific-query';
+import {scientificQueryHits} from './scientific-query-view';
 import { useViewSelected, useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
 import {ReadingViewBoundary} from './ReadingViewBoundary';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeft, Bookmark, Check, ChevronDown, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
-import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
+import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
@@ -14,7 +16,7 @@ import {ActionStatus} from '../shared/action-status';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
+import { controlIndex, listIndexedFiles, listIndexJobs, queryScientificKnowledge } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 import {RagEvidenceSidebar} from './RagEvidenceSidebar';
 import './rag-studio.css';
@@ -29,7 +31,7 @@ const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
  * no chunks — `index.status.counts` counts files and `index.files` lists files
  * (B14). The panel states that instead of drawing a fake chunk list.
  *
- * Retrieval is `research.knowledge.search`: keyword and vector ranks plus the
+ * Retrieval is `research.knowledge.scientificQuery`: keyword and vector ranks plus the
  * fused RRF score all arrive from the backend, so nothing is re-scored here. The
  * legacy `ragEngine.ts` (local BM25, fake dense vectors, local RRF) is gone.
  *
@@ -114,9 +116,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
   const [rerank,setRerank]=useState<'none'|'semantic'>('semantic');
   const [asking, setAsking] = useState(false);
   const [controlIntent, setControlIntent] = useState<IndexIntent | null>(null);
-  const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
+  const [result, setResult] = useState<(ScientificQueryResult & {displayHits: ResearchKnowledgeSearchHit[]}) | null>(null);
   const searchAction = useAsyncAction(
-    (request: Parameters<typeof searchKnowledge>[1]) => searchKnowledge(client, request),
+    (request: Parameters<typeof queryScientificKnowledge>[1]) => queryScientificKnowledge(client, request),
     { label: '检索知识库' }
   );
   const controlAction = useAsyncAction(
@@ -235,7 +237,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
     reloadJobs();
   };
 
-  const runSearch = async (): Promise<ResearchKnowledgeSearchResult | null> => {
+  const runSearch = async (): Promise<ScientificQueryResult | null> => {
     const trimmed = query.trim();
     if (searchInFlight.current || trimmed.length === 0 || projectId === null) {
       return null;
@@ -245,16 +247,16 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
     const result = await searchAction.run({
       query: trimmed,
       projectId,
-      limit: 20, rerank,
+      limit: 20, candidateLimit: 100, documentIds: [], rerank,
       // Retrieval uses the effective embedding configuration shown by this view.
       embeddingConfigId: status?.settings.embeddingConfigId ?? null
     });
     searchInFlight.current = false;
     if (!mounted.current) return null;
     if (result.ok) {
-      setResult(result.data);
+      setResult({...result.data, displayHits: scientificQueryHits(result.data)});
       setExpandedHits(new Set());
-      setSelectedHitId(result.data.hits[0]?.chunkId ?? null);
+      setSelectedHitId(scientificQueryHits(result.data)[0]?.chunkId ?? null);
       lastOpenedHit.current = null;
     }
     return result.ok ? result.data : null;
@@ -271,10 +273,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
         '请依据当前项目的资料回答以下问题，并在助手中给出答案。',
         `问题：${evidence.query}`,
         '以下是本次检索返回的来源标识。请核验原文后引用来源与页码；证据不足时明确说明，不要把检索片段当作已验证结论。',
-        JSON.stringify(evidence.hits.map(hit => ({
-          title: hit.title, documentId: hit.documentId, sourceId: hit.sourceId,
-          chunkId: hit.chunkId, locator: hit.locator
-        })))
+        JSON.stringify({retrievalReceiptId: evidence.retrievalReceiptId, sourceRefs: evidence.sourceRefs,
+          legacySources: evidence.legacy?.hits.map(hit => ({documentId: hit.documentId, chunkId: hit.chunkId}))}),
+        '请调用 research_search_scientific_knowledge 获取本次运行句柄，再读取原文并验证。'
       ].join('\n'));
     } finally {
       askInFlight.current = false;
@@ -300,6 +301,17 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
     setNote(null);
     setSelectedHitId(hit.chunkId);
     lastOpenedHit.current = hit.chunkId;
+    if (hit.sourceType === 'scientific') {
+      const candidate = result?.hits.find(value => value.id === hit.chunkId);
+      const locator = candidate?.sourceLocator;
+      if (locator?.knowledgeDocumentId.startsWith('project-index:')) {
+        const target = result?.sourceTargets.find(value => value.documentId === locator.documentId);
+        if (target) openInFilesView(target.path);
+        else setNote('请在管理索引中定位该来源文件。');
+      } else if (locator) onOpenInReader({parseId: locator.parseId, libraryItemId: null,
+        locator: locator.rawLocator, text: hit.content});
+      return;
+    }
     if (hit.documentId.startsWith('document:')) {
       onOpenInReader({
         parseId: hit.documentId.slice('document:'.length),
@@ -357,7 +369,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
   const indexedFiles = filesResource.data ?? [];
   const jobs = jobsResource.data ?? [];
   const sourceLabel = (hit: ResearchKnowledgeSearchHit): string =>
-    ({literature: '文献', file: '工作区文件', note: '知识笔记', experiment: '实验记录'} as Readonly<Record<string, string>>)[hit.sourceType] ?? '知识来源';
+    ({literature: '文献', file: '工作区文件', note: '知识笔记', experiment: '实验记录', scientific: '论文原文'} as Readonly<Record<string, string>>)[hit.sourceType] ?? '知识来源';
 
   return (
     <ReadingViewBoundary selected={viewSelected} identity={result} containerRef={readingRoot}
@@ -615,8 +627,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                     : `工作区文件可检索 ${status.counts.ready.toLocaleString()} 个${busy ? '，索引处理中' : status.counts.failed > 0 ? `，${status.counts.failed.toLocaleString()} 个失败` : ''}`}
             </ActionStatus>
             {literature.assistant.error ? <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]" testId="rag-ask-error">{literature.assistant.error}</ActionStatus> : null}
-            {result?.ranking?.degradation ? <ActionStatus state="idle" role="status" className="rag-feedback" testId="rag-degraded" icon={<AlertCircle size={14} aria-hidden="true" />}>
-              语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
+            {result?.degradation.length ? <ActionStatus state="idle" role="status" className="rag-feedback" testId="rag-degraded" icon={<AlertCircle size={14} aria-hidden="true" />}>
+              部分检索能力未完成，请结合来源核验结果。<details><summary>查看原因</summary>{result.degradation.join('、')}</details>
             </ActionStatus> : null}
             {searchError === null ? null : <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]" testId="rag-search-error">{searchError}</ActionStatus>}
             {literature.action.pending ? <ActionStatus state="pending" className="rag-feedback">正在写入资料…</ActionStatus> : null}
@@ -626,29 +638,27 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
             {hitCopy.error ? <ActionStatus state="error" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</ActionStatus> : null}
           </section>
 
-          <div className="rag-results-layout" data-has-evidence={Boolean(result?.hits.length)}>
+          <div className="rag-results-layout" data-has-evidence={Boolean(result?.displayHits.length)}>
           <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
             {!viewSelected ? null : result === null ? (
               <EmptyState tone={searching ? 'loading' : 'empty'} icon={searching ? Loader2 : Search}
                 title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
             ) : <>
               <div className="rag-results-heading">
-                <ActionStatus state="success" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></ActionStatus>
+                <ActionStatus state="success" className="min-w-0 break-words"><strong>{result.displayHits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></ActionStatus>
                 <details className="rag-result-details" data-testid="rag-result-details" data-reading-detail="result">
                   <summary>检索详情</summary>
                   <div className="text-muted" data-testid="rag-search-meta">
-                    <p>关键词命中 {result.keywordCount} 条，语义命中 {result.vectorCount} 条</p>
-                    <p>嵌入模型：{result.embeddingModel ?? '未配置'}</p>
-                    <p>{result.ranking.reranker.status === 'succeeded' ? '已使用语义精排' : result.ranking.reranker.status === 'not_requested' ? '使用融合排序'
-                      : `精排未使用，已回退融合排序（${({config_missing:'未配置',disabled:'已停用',timeout:'超时',failed:'服务故障'} as const)[result.ranking.reranker.status]}）`}</p>
-                    <time dateTime={result.generatedAt}>{result.generatedAt}</time>
+                    <p>科研检索 {result.rounds.length} 轮，原文命中 {result.hits.length} 条，其他资料 {result.legacy?.hits.length ?? 0} 条</p>
+                    <p>来源版本已核对；科学支持关系仍需核验。</p>
+                    <p>用时 {Math.round(result.elapsedMs)} ms</p>
                   </div>
                 </details>
               </div>
-              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="修改关键词，或在管理索引中检查资料。"
+              {result.displayHits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="修改关键词，或在管理索引中检查资料。"
                 action={{label: '修改查询', onClick: () => queryRef.current?.focus()}} testId="rag-no-hits" /> : (
                 <ol className="rag-hit-list" data-testid="rag-hits">
-                  {result.hits.map((hit, index) => {
+                  {result.displayHits.map((hit, index) => {
                     const expanded = expandedHits.has(hit.chunkId);
                     const longContent = hit.content.length > 300 || hit.content.split('\n').length > 5;
                     return <li key={hit.chunkId} className="rag-hit" data-testid={`rag-hit-${hit.chunkId}`} tabIndex={-1}
@@ -665,7 +675,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                         const next = new Set(current); if (next.has(hit.chunkId)) next.delete(hit.chunkId); else next.add(hit.chunkId); return next;
                       })}>{expanded ? '收起原文' : '展开原文'}</button> : null}
                       <footer className="rag-hit-actions">
-                        {['document:', 'library:', 'project-index:'].some(prefix => hit.documentId.startsWith(prefix)) ? <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
+                        {(hit.sourceType === 'scientific' && hit.locator !== null) || ['document:', 'library:', 'project-index:'].some(prefix => hit.documentId.startsWith(prefix)) ? <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
                           <ExternalLink size={13} aria-hidden="true" />{hit.documentId.startsWith('project-index:') ? '打开来源文件' : hit.documentId.startsWith('library:') ? '查看文献信息' : '在阅读器里定位'}
                         </button> : <span className="rag-source-unavailable">此来源暂无可定位原文</span>}
                         <ActionButton variant="unstyled" onClick={() => {hitCopy.copy(hit.content); setCopiedChunkId(hit.chunkId);}}
@@ -673,7 +683,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
                           {hitCopy.copied && copiedChunkId === hit.chunkId ? <Check size={13} aria-hidden="true" /> : <ClipboardCopy size={13} aria-hidden="true" />}
                           {hitCopy.copied && copiedChunkId === hit.chunkId ? '已复制' : '复制'}
                         </ActionButton>
-                        <ActionButton variant="unstyled" disabled={literature.action.pending || !scope.writable} onClick={() => captureHit(hit)}
+                        <ActionButton variant="unstyled" disabled={literature.action.pending || !scope.writable || hit.sourceType === 'scientific'} title={hit.sourceType === 'scientific' ? '请从阅读器核验原文后存为证据' : undefined} onClick={() => captureHit(hit)}
                           data-testid={`rag-hit-capture-${hit.chunkId}`} className="rag-button"><FlaskConical size={13} aria-hidden="true" />存为证据</ActionButton>
                         <ActionButton variant="unstyled" disabled={literature.action.pending || !scope.writable} onClick={() => saveHitAsNote(hit)}
                           data-testid={`rag-hit-save-${hit.chunkId}`} className="rag-button"><Bookmark size={13} aria-hidden="true" />写入知识库</ActionButton>
@@ -689,7 +699,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
               )}
             </>}
           </section>
-          {result?.hits.length ? <RagEvidenceSidebar hits={result.hits} selectedId={selectedHitId} onSelect={hit => {
+          {result?.displayHits.length ? <RagEvidenceSidebar hits={result.displayHits} selectedId={selectedHitId} onSelect={hit => {
             setSelectedHitId(hit.chunkId);
             const element = hitRefs.current.get(hit.chunkId);
             element?.scrollIntoView({block: 'start'});

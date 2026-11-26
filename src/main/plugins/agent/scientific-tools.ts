@@ -1,7 +1,8 @@
+import {scientificQueryResultSchema} from '../../../shared/schemas/research-scientific-query';
 import {tool, ToolInputParsingException, type StructuredToolInterface} from '@langchain/core/tools';
 import {z} from 'zod';
 import type {RocCapabilityRegistry} from '../../kernel/types';
-import {scientificSearchToolRequestSchema, scientificSearchResultSchema,
+import {scientificSearchToolRequestSchema,
   type ScientificSearchResult} from '../../../shared/schemas/research-scientific-search';
 import {scientificContextBudgetSchema, scientificContextResultSchema,
   type ScientificContextResult} from '../../../shared/schemas/research-scientific-context';
@@ -52,20 +53,27 @@ export function createScientificTools(input: {
   };
   return [
     tool(async request => {
-      const result = scientificSearchResultSchema.parse(await invoke('research.knowledge.scientificSearch',
+      const result = scientificQueryResultSchema.parse(await invoke('research.knowledge.scientificQuery',
         {...request, projectId: input.projectId}));
-      if (result.plan.scope.projectId !== input.projectId) throw new Error('research_scientific_tool_project_mismatch');
-      const searchId = `scientific-search:${researchContentHash(JSON.stringify(result))}`;
-      remember(searches, searchId, result, 8);
-      return {searchId, plan: result.plan, snapshotId: result.snapshot.id,
-        generationCount: result.snapshot.generations.length, channels: result.channels,
-        candidates: result.candidates.map(c => ({id: c.id, paperId: c.paperId, objectId: c.objectId,
-          objectType: c.objectType, title: c.title})),
-        hits: result.hits.map(c => ({id: c.id, paperId: c.paperId, objectId: c.objectId,
-          objectType: c.objectType, title: c.title, preview: c.content.slice(0, 400), contentChars: c.content.length})),
+      if (result.projectId !== input.projectId) throw new Error('research_scientific_tool_project_mismatch');
+      const rounds = result.rounds.map(round => {
+        if (round.plan.scope.projectId !== input.projectId) throw new Error('research_scientific_tool_project_mismatch');
+        const searchId = `scientific-search:${researchContentHash(JSON.stringify(round))}`;
+        remember(searches, searchId, round, 8);
+        return {searchId, plan: round.plan, snapshotId: round.snapshot.id,
+          generationCount: round.snapshot.generations.length, channels: round.channels,
+          candidates: round.candidates.map(c => ({id: c.id, paperId: c.paperId, objectId: c.objectId,
+            objectType: c.objectType, title: c.title})),
+          hits: round.hits.map(c => ({id: c.id, paperId: c.paperId, objectId: c.objectId,
+            objectType: c.objectType, title: c.title, preview: c.content.slice(0, 400), contentChars: c.content.length}))};
+      });
+      return {...rounds[0], rounds, retrievalReceiptId: result.retrievalReceiptId,
+        sourceRefs: result.sourceRefs, degradation: result.degradation, stopReason: result.stopReason,
+        legacyHits: result.legacy?.hits.map(hit => ({chunkId: hit.chunkId, documentId: hit.documentId,
+          title: hit.title, preview: hit.content.slice(0, 400)})) ?? [],
         supportStatus: 'requires_validation', nextStep: names.context};
     }, {name: names.search,
-      description: '检索当前项目的论文、表格行、公式、图和引用。返回本次运行的searchId及真实候选ID；用上下文工具读取完整来源，再验证句子。预览不是已验证结论。',
+      description: '检索当前项目的论文、表格行、公式、图和引用。返回每轮本次运行的searchId及真实候选ID，来源身份可持久化但searchId不可跨会话使用；用上下文工具读取完整来源，再验证句子。预览不是已验证结论。',
       schema: scientificSearchToolRequestSchema}),
     tool(async ({searchId, candidateIds, budget}) => {
       active();

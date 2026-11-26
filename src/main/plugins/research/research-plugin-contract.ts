@@ -1,3 +1,4 @@
+import {scientificQueryRequestSchema, scientificQueryResultSchema} from '../../../shared/schemas/research-scientific-query';
 import {researchVisualCapabilities} from './visual-capabilities';
 import {figureUnderstandingCapability} from './figure-understanding-capabilities';
 import { researchWikiCapabilities } from './wiki-capabilities';
@@ -109,6 +110,7 @@ export const knowledgeCapabilities = {
   saveReranker: descriptor('research.reranker.save', rerankerSaveSchema, rerankerConfigSchema),
   upsertDocument: descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
   search: descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema),
+  scientificQuery: descriptor('research.knowledge.scientificQuery', scientificQueryRequestSchema, scientificQueryResultSchema),
   scientificSearch: descriptor('research.knowledge.scientificSearch', scientificSearchRequestSchema, scientificSearchResultSchema),
   scientificGenerations: descriptor('research.knowledge.scientificGenerations', scientificGenerationsRequestSchema, scientificGenerationsResultSchema),
   scientificActivate: descriptor('research.knowledge.scientificActivate', scientificGenerationActivateSchema, scientificGenerationsResultSchema),

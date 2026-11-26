@@ -2,6 +2,7 @@ import {scientificContextRequestSchema, scientificContextResultSchema, scientifi
   type ScientificContextRequest, type ScientificContextResult, type ScientificContextEvidence,
   type ScientificContextPassage, type ScientificContextImage} from '../../../shared/schemas/research-scientific-context';
 import {scientificCandidateSchema, type ScientificCandidate} from '../../../shared/schemas/research-scientific-search';
+import type {ScientificQueryPlan} from '../../../shared/schemas/research-scientific-query-plan';
 import type {ScientificSearchPaper} from './scientific-search-snapshot';
 import {scientificChunkCandidate} from './scientific-search-candidate';
 import {serializeParagraph} from './scientific-text-serializer';
@@ -38,7 +39,7 @@ function mergeObject(candidates: ScientificCandidate[]): ScientificCandidate['ob
     cells: [...new Map(tables.flatMap(t => t.cells).map(c => [c.id, c])).values()]
       .sort((a, b) => a.row - b.row || a.column - b.column || a.id.localeCompare(b.id))};
 }
-function expansions(paper: ScientificSearchPaper, candidates: ScientificCandidate[]): ScientificContextPassage[] {
+function expansions(paper: ScientificSearchPaper, candidates: ScientificCandidate[], plan: ScientificQueryPlan): ScientificContextPassage[] {
   const {ir, chunks} = paper, first = candidates[0]!, proposed: ScientificContextPassage[] = [];
   const seen = new Set(candidates.flatMap(c => c.sources.map(s => digest({text: s.text, locator: s.locator}))));
   const add = (role: ScientificContextPassage['role'], text: string, sourceLocator: ScientificContextPassage['sourceLocator']) => {
@@ -54,6 +55,29 @@ function expansions(paper: ScientificSearchPaper, candidates: ScientificCandidat
     .map(b => ({b, distance: Math.abs(ir.blocks.indexOf(b) - ir.blocks.indexOf(original))}))
     .sort((a, b) => a.distance - b.distance || ir.blocks.indexOf(a.b) - ir.blocks.indexOf(b.b))
     .slice(0, count).map(row => row.b);
+  const needsConditions = plan.intents.some(intent => ['comparison', 'cross_paper', 'experiment', 'results'].includes(intent));
+  if (needsConditions) {
+    // Conditions often live in a separate experimental section; only source-backed role labels qualify.
+    const conditions = ir.blocks.filter(b => b.kind === 'paragraph' && b.semantic.roles.some(role =>
+      ['dataset', 'metric', 'experimental_setup'].includes(role.role)));
+    for (const setup of nearest(conditions, 3)) block(setup, 'experimental_setup');
+  }
+  if (plan.intents.includes('limitations')) {
+    for (const limitation of nearest(ir.blocks.filter(b => b.semantic.roles.some(role => role.role === 'limitation')), 2)) {
+      block(limitation, 'explanation');
+    }
+  }
+  if (first.object.kind === 'algorithm') {
+    const algorithm = ir.algorithms.find(value => value.id === first.objectId)!;
+    add('explanation', algorithm.text, algorithm.sourceLocator);
+    const relatedIds = new Set(ir.relations.filter(relation => relation.status === 'linked' &&
+      (relation.fromId === first.objectId || relation.toId === first.objectId))
+      .map(relation => relation.fromId === first.objectId ? relation.toId : relation.fromId));
+    for (const equation of ir.equations.filter(value => relatedIds.has(value.id))) {
+      const source = ir.blocks.find(value => value.blockId === equation.blockId)!;
+      block(source, 'explanation');
+    }
+  }
   if (first.object.kind === 'text' || first.object.kind === 'algorithm') {
     const parents = chunks.filter(c => c.chunkType === 'paragraph' && c.parentId === null);
     for (const candidate of candidates) {
@@ -84,6 +108,7 @@ function expansions(paper: ScientificSearchPaper, candidates: ScientificCandidat
     };
     for (const variable of first.object.data.variables) evidence(variable.evidence, 'symbol_definition');
     for (const context of first.object.data.contexts) evidence(context, 'explanation');
+    for (const context of nearest(nearby, 2)) block(context, 'explanation');
   } else if (first.object.kind === 'figure') {
     for (const link of [...first.object.data.captions, ...first.object.data.references]) {
       // Ambiguous caption/reference proposals remain proposals in the raw object.
@@ -162,7 +187,7 @@ export async function assembleScientificContext(input: ScientificContextRequest,
     const item = (): ScientificContextEvidence => ({id: `scientific-evidence:${digest(body)}`, ...body});
     if (scientificContextTokens([...evidence, item()]) > budget.maxTokens) {omit('token_budget_exceeded'); continue;}
     paragraphs += baseParagraphs;
-    for (const passage of expansions(paper, candidates)) {
+    for (const passage of expansions(paper, candidates, search.plan)) {
       if (paragraphs >= budget.maxParagraphs) {omit('paragraph_budget_exceeded'); continue;}
       body.passages.push(passage);
       if (scientificContextTokens([...evidence, item()]) > budget.maxTokens) {

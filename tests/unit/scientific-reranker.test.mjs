@@ -107,3 +107,47 @@ test('cancellation and source changes across the provider wait reject the reques
     } finally {release?.();await f.close();}
   }
 });
+
+test('partial reranking skips oversized complete objects while ranking eligible candidates and retaining every source', async () => {
+  const f=await scientificSearchFixture(api,{embedded:false});
+  try {
+    const result=await f.router.search({...f.request('Table 3 Equation (7)'),rerank:'none'});
+    const papers=await f.router.snapshots.capture(f.project.id,[f.generation],new AbortController().signal);
+    const table=result.candidates.find(candidate=>candidate.object.kind==='table');
+    const equation=result.candidates.find(candidate=>candidate.object.kind==='equation');
+    const metadata=result.candidates.find(candidate=>candidate.object.kind==='metadata');
+    const candidates=[{...table,content:table.content+' uncut '.repeat(6000)},equation,...(metadata?[metadata]:[])];
+    let documents;
+    const service={rank:async(_query,input)=>{documents=input;return {scores:input.map((_,i)=>.2+i*.5),
+      receipt:{status:'succeeded',model:'fixture',configHash:null,elapsedMs:1}};}};
+    const ranked=await rerank.rerankScientificCandidates(result.plan,candidates,papers,service,true,new AbortController().signal);
+    assert.equal(ranked.method,'reranker');assert.ok(documents.length>=1);
+    assert.ok(documents.some(document=>document.includes('x = y')));
+    assert.equal(ranked.ordered.find(candidate=>candidate.id===table.id).content,candidates[0].content);
+    assert.deepEqual(ranked.rerank.skipped,[{candidateId:table.id,reason:'rerank_document_token_budget_exceeded'}]);
+    assert.ok(!ranked.rerank.scores.some(score=>score.candidateId===table.id));
+    assert.deepEqual(new Set(ranked.ordered.map(candidate=>candidate.id)),new Set(candidates.map(candidate=>candidate.id)));
+    const limited=await rerank.rerankScientificCandidates(result.plan,result.candidates,papers,service,true,new AbortController().signal,
+      {candidates:1,documentTokens:4096,totalTokens:64000});
+    assert.equal(limited.rerank.scores.length,1);
+    assert.equal(limited.rerank.skipped.length,result.candidates.length-1);
+    const failed=await rerank.rerankScientificCandidates(result.plan,candidates,papers,{rank:async()=>{throw new Error('private');}},true,new AbortController().signal);
+    assert.deepEqual(failed.ordered,candidates);assert.equal(failed.reranker.status,'failed');
+    assert.ok(!JSON.stringify(failed).includes('private'));
+  } finally {await f.close();}
+});
+
+test('reranker configuration changes while the provider is running reject mixed-configuration results', async () => {
+  let release,enter;
+  const entered=new Promise(resolve=>{enter=resolve;}), wait=new Promise(resolve=>{release=resolve;});
+  const service=await provider(async(_url,init)=>{enter();await wait;const body=JSON.parse(init.body);
+    return Response.json({results:body.documents.map((_,index)=>({index,relevance_score:.5}))});});
+  const f=await scientificSearchFixture(api,{embedded:false,reranker:service});
+  try {
+    const pending=f.router.search(f.request('Table 3'));
+    const rejected=assert.rejects(pending,/research_reranker_config_changed/);
+    await entered;
+    await service.saveConfig({endpoint:'https://fixture.invalid/rerank',model:'changed',apiKey:'new-key',enabled:true,timeoutMs:100});
+    release();await rejected;
+  } finally {release?.();await f.close();}
+});

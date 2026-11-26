@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
-const {fuseScientificCandidates,compareScientificRelevance}=await importTypeScriptModule(
+const {fuseScientificCandidates,compareScientificRelevance,coverScientificCandidates}=await importTypeScriptModule(
   'src/main/plugins/research/scientific-retrieval-fusion.ts',{platform:'node',tempDir:'.runtime/tmp'});
 const hash=value=>createHash('sha256').update(value).digest('hex');
 function candidate(id,rank=1,method='fts') {
@@ -30,4 +30,18 @@ test('object, exact identifier and role preferences resolve ties without overrid
   assert.equal(fuseScientificCandidates([[text,{...table,signals:[{channel:'table',method:'exact',rank:2,score:1}]}]],plan)[0].id,'a-text');
   assert.ok(compareScientificRelevance(.02,.01,false,true)<0);
   assert.ok(compareScientificRelevance(.02,.02,false,true)>0);
+});
+
+test('bounded coverage retains nearby relevant object and source evidence without admitting weak candidates',()=>{
+  const rows=Array.from({length:12},(_,i)=>({...candidate(`text-${i}`),score:.02-i*.0001}));
+  const table={...candidate('table'),paperId:'second',objectType:'table',score:.0188,
+    object:{kind:'table',number:'1',caption:'Original',rows:[],columns:[],cells:[],footnotes:[]}};
+  const weak={...candidate('weak'),paperId:'weak-paper',score:.001};
+  const plan={intents:['comparison','table'],filters:{sectionRoles:[]}};
+  const selected=coverScientificCandidates([...rows,table,weak],plan,6);
+  assert.equal(selected.length,6);
+  assert.ok(selected.includes(table));assert.ok(!selected.includes(weak));
+  assert.ok(selected.includes(rows[0]));
+  assert.equal(table.score,.0188);
+  assert.deepEqual(coverScientificCandidates([...rows,table],{intents:['overview'],filters:{sectionRoles:[]}},6),rows.slice(0,6));
 });

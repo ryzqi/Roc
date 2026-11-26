@@ -39,6 +39,12 @@ export class ResearchRerankerService {
     const started = performance.now();
     const value = this.context.config.get<unknown>(storageKey);
     const config = value === null ? null : storedSchema.parse(value);
+    const configSnapshot = JSON.stringify(value);
+    const assertConfig = (): void => {
+      if (JSON.stringify(this.context.config.get<unknown>(storageKey)) !== configSnapshot) {
+        throw new Error('research_reranker_config_changed');
+      }
+    };
     const receipt = (status: RerankerReceipt['status']): RerankerReceipt => ({
       status, model: config?.model ?? null,
       configHash: config === null ? null : createHash('sha256').update(JSON.stringify(config)).digest('hex'),
@@ -51,6 +57,7 @@ export class ResearchRerankerService {
     const signal = AbortSignal.any([external, timeout]);
     try {
       const apiKey = await this.context.secrets.get(config.secretKey);
+      assertConfig();
       if (apiKey === null) return {scores: null, receipt: receipt('config_missing')};
       signal.throwIfAborted();
       const response = await this.fetchImpl(config.endpoint, {method: 'POST', signal,
@@ -59,6 +66,7 @@ export class ResearchRerankerService {
       if (!response.ok) { await response.body?.cancel(); throw new Error(`reranker_http_${response.status}`); }
       const {results} = responseSchema.parse(await response.json());
       signal.throwIfAborted();
+      assertConfig();
       const scores = new Array<number>(documents.length);
       if (results.length !== documents.length) throw new Error('reranker_count_mismatch');
       for (const row of results) {
@@ -68,6 +76,7 @@ export class ResearchRerankerService {
       return {scores, receipt: receipt('succeeded')};
     } catch {
       external.throwIfAborted();
+      assertConfig();
       const status = timeout.aborted ? 'timeout' : 'failed';
       this.context.logger.warn('Semantic reranker fell back to RRF.', {status, model: config.model});
       return {scores: null, receipt: receipt(status)};

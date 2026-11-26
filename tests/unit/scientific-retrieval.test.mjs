@@ -2,6 +2,7 @@ import {before,after,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {writeFile,readFile,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
+import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi,scientificSearchFixture,hash} from './fixtures/scientific-search-fixture.mjs';
 let api;
 before(async()=>{api=await loadScientificSearchApi();});
@@ -109,4 +110,45 @@ test('source, project membership, parse publication and IR changes during embedd
       await assert.rejects(f.router.assertCurrent(saved),/source_changed|scope_invalid|source_size|source_hash|artifact_changed/);
     } finally {release?.();await f.close();}
   }
+});
+
+test('Han terms find embedded scientific keywords in an unspaced question with a bounded vocabulary',async()=>{
+  const terms=api.scientificQueryTerms('请比较图神经网络的实验结果与局限性');
+  for(const term of ['实验','结果','局限']) assert.ok(terms.includes(term),term);
+  assert.ok(terms.length<=32);
+  assert.equal(api.scientificQueryTerms('网络'.repeat(4000)).length<=32,true);
+  assert.deepEqual(api.scientificQueryTerms('F1 Dataset_C 2026'),['f1','dataset_c','2026']);
+});
+test('a planned subquery preserves scope and query receipts and rejects forged scope before retrieval',async()=>{
+  const {scientificSubqueryPlan}=await importTypeScriptModule('src/main/plugins/research/scientific-query-planner.ts',{platform:'node'});
+  const f=await scientificSearchFixture(api,{embedded:false});
+  try {
+    const request=f.request('method and results');
+    const plan=await f.router.plan(request);
+    const sub=scientificSubqueryPlan(plan,plan.subQuestions[0]);
+    const result=await f.router.search({...request,query:sub.query},new AbortController().signal,sub);
+    assert.equal(result.plan.query,sub.query);
+    await f.router.readContext({search:result});
+    const refs=await f.router.sourceRefs(result);
+    assert.ok(refs.length>0);assert.ok(refs.every(ref=>ref.generationId===f.generation.id));
+    await assert.rejects(f.router.search(request,new AbortController().signal,sub),/plan_scope_invalid/);
+    await assert.rejects(f.router.search({...request,query:sub.query},new AbortController().signal,
+      {...sub,scope:{...sub.scope,projectId:'foreign'}}),/plan_scope_invalid/);
+    await assert.rejects(f.router.search({...request,query:sub.query},new AbortController().signal,
+      {...sub,scope:{...sub.scope,documentIds:['foreign']}}),/plan_scope_invalid/);
+  } finally {await f.close();}
+});
+
+test('Chinese keyword decomposition improves controlled lexical recall against the previous whole-query match',async()=>{
+  const text='图神经网络使用多头注意力完成节点分类。';
+  const f=await scientificSearchFixture(api,{embedded:false,extraParagraphs:[{heading:'3 Method',text}]});
+  try {
+    const query='图神经网络的注意力机制是什么';
+    const previousTerms=query.match(/[\p{L}\p{N}_]+/gu);
+    assert.equal(f.repository.scientificIndex.lexicalHits([f.generation.id],previousTerms,100).length,0);
+    const result=await f.router.search({...f.request(query),rerank:'none'});
+    assert.ok(result.hits.some(hit=>hit.content===text));
+    assert.equal(result.plan.observation.calls,0);
+    await f.router.assertCurrent(result);
+  } finally {await f.close();}
 });

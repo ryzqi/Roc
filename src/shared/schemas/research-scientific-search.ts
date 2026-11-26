@@ -91,7 +91,8 @@ export const scientificSearchResultSchema = z.object({
     rerank: z.object({
       inputVersion: z.literal('roc-scientific-rerank/1'), inputHash: hash.nullable(),
       scores: z.array(z.object({candidateId: id, score: z.number().finite().min(0).max(1)}).strict()).max(1200),
-      degradation: z.array(z.string().min(1))
+      degradation: z.array(z.string().min(1)),
+      skipped: z.array(z.object({candidateId: id, reason: z.string().min(1)}).strict()).max(1200).default([])
     }).strict().nullable().default(null)
   }).strict()
 }).strict();

@@ -20,6 +20,7 @@ import type { RocPluginContext } from '../../kernel/types';
 import type { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { ResearchEmbeddingService } from './embedding-service';
 import {ScientificLibraryIndexService} from './scientific-library-index';
+import {ScientificQueryOrchestrator} from './scientific-query-orchestrator';
 import {ScientificRetrievalRouter} from './scientific-retrieval-router';
 import {ScientificShadowRetrieval} from './scientific-shadow-retrieval';
 import {ScientificGenerationService} from './scientific-generation-service';
@@ -67,6 +68,7 @@ export type ResearchProductionServices = {
   researchEmbeddings: ResearchEmbeddingService;
   scientificLibraryIndex: ScientificLibraryIndexService;
   scientificRetrieval: ScientificRetrievalRouter;
+  scientificQuery: ScientificQueryOrchestrator;
   shadowRetrieval: ScientificShadowRetrieval;
   scientificGenerations: ScientificGenerationService;
   scientificExtraction: ScientificExtractionService;
@@ -119,6 +121,9 @@ export function registerResearchProduction(
   const scientificRetrieval = new ScientificRetrievalRouter(researchRepository, researchEmbeddings,
     {library: options.libraryRoot ?? null, index: options.indexRoot ?? null},
     new ScholarlyRelationsRepository(db, researchRepository), createScientificQueryGenerator(options.modelFactory), reranker);
+  const scientificQuery = new ScientificQueryOrchestrator(scientificRetrieval, researchEmbeddings, 20_000,
+    (projectId, documentId, sourceHash) => documentId.startsWith('project-index:')
+      ? researchRepository.indexing.source(projectId, documentId.slice('project-index:'.length), sourceHash).source.path : null);
   const shadowRetrieval = new ScientificShadowRetrieval(researchEmbeddings, scientificRetrieval,
     () => context.config.get<unknown>('research.shadowRetrieval'),
     event => context.logger.info('research_shadow_retrieval', event));
@@ -216,7 +221,7 @@ export function registerResearchProduction(
   const productionInputs = new ResearchProductionInputService(researchRepository, researchExperiments, researchFigures, researchExports);
   lifecycle.own('productionInputs', productionInputs);
   registerResearchProductionInputCapabilities(context, productionInputs);
-  return { db, toolchain, visual, figureUnderstanding, researchRepository, researchEmbeddings, scientificLibraryIndex, scientificRetrieval, shadowRetrieval, scientificGenerations, scientificExtraction, researchIndexer, researchPythonEnvironments,
+  return { db, toolchain, visual, figureUnderstanding, researchRepository, researchEmbeddings, scientificLibraryIndex, scientificRetrieval, scientificQuery, shadowRetrieval, scientificGenerations, scientificExtraction, researchIndexer, researchPythonEnvironments,
     researchExperiments, researchResults, researchFigures, researchTemplates, researchExports, zenodoPublication,
     productionJob, notifyWorkspacePathStructureChanged };
 }

@@ -35,6 +35,8 @@ export function registerResearchKnowledge(
   context.capabilities.register(pluginId, knowledgeCapabilities.upsertDocument, async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
   context.capabilities.register(pluginId, knowledgeCapabilities.search, async (input) =>
     await production.shadowRetrieval.search(input as ResearchKnowledgeSearchRequest, getCapabilityAbortSignal()));
+  context.capabilities.register(pluginId, knowledgeCapabilities.scientificQuery, async input =>
+    production.scientificQuery.search(scientificSearchRequestSchema.parse(input), getCapabilityAbortSignal()));
   context.capabilities.register(pluginId, knowledgeCapabilities.scientificSearch, async input =>
     await production.scientificRetrieval.search(scientificSearchRequestSchema.parse(input), getCapabilityAbortSignal()));
   context.capabilities.register(pluginId, knowledgeCapabilities.scientificGenerations, async input =>

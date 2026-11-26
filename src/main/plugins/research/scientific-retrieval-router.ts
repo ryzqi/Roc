@@ -1,8 +1,10 @@
 import {performance} from 'node:perf_hooks';
+import type {ScientificSourceRef} from '../../../shared/schemas/research-scientific-source-ref';
+import {createScientificSourceRefs} from './scientific-source-ref';
 import {scientificSearchRequestSchema, scientificSearchResultSchema, scientificSearchVersion,
   type ScientificSearchRequest, type ScientificSearchResult, type ScientificCandidate,
   type ScientificChannelReceipt} from '../../../shared/schemas/research-scientific-search';
-import type {ScientificQueryPlan, ScientificRetrievalChannel} from '../../../shared/schemas/research-scientific-query-plan';
+import {scientificQueryPlanSchema, type ScientificQueryPlan, type ScientificRetrievalChannel} from '../../../shared/schemas/research-scientific-query-plan';
 import type {ResearchRepository} from './repository';
 import type {ResearchEmbeddingService} from './embedding-service';
 import {planScientificQuery, type ScientificQueryGenerator} from './scientific-query-planner';
@@ -12,7 +14,7 @@ import type {ScholarlyRelationsRepository} from './scholarly-relations-repositor
 import {normalizeEmbeddingBlob} from './embedding-vectors';
 import {researchContentHash} from './research-files';
 import {normalizeResearchDoi} from './literature-identity';
-import {fuseScientificCandidates, scientificFusionVersion} from './scientific-retrieval-fusion';
+import {fuseScientificCandidates, coverScientificCandidates, scientificFusionVersion} from './scientific-retrieval-fusion';
 import {rerankScientificCandidates} from './scientific-reranker';
 import type {ResearchRerankerService} from './reranker-service';
 import {scientificContextRequestSchema, type ScientificContextRequest,
@@ -32,9 +34,16 @@ const stopWords = new Set(['a', 'an', 'the', 'and', 'or', 'of', 'for', 'from', '
   'table', 'tables', 'figure', 'figures', 'fig', 'equation', 'equations', 'eq', 'doi',
   '解释', '比较', '对比', '论文', '公式', '方程', '表', '图', '的', '和', '在', '上']);
 
+/** ICU word segments plus bounded Han bigrams retrieve terms inside unspaced questions. */
 export function scientificQueryTerms(query: string): string[] {
-  return [...new Set((query.match(/[\p{L}\p{N}_]+/gu) ?? []).map(t => t.toLowerCase())
-    .filter(t => !stopWords.has(t)))].slice(0, 32);
+  const segments = new Intl.Segmenter('zh', {granularity: 'word'}).segment(query.normalize('NFKC'));
+  const words = [...segments].filter(segment => segment.isWordLike).map(segment => segment.segment.toLowerCase());
+  const useful = words.filter(word => !stopWords.has(word) && !/^\p{Script=Han}$/u.test(word));
+  const bigrams = (query.match(/\p{Script=Han}{2,}/gu) ?? []).flatMap(run => {
+    const chars = Array.from(run);
+    return chars.slice(0, -1).map((char, index) => char + chars[index + 1]!);
+  }).filter(word => !stopWords.has(word));
+  return [...new Set([...useful, ...bigrams])].slice(0, 32);
 }
 const lexicalScore = (text: string, terms: readonly string[]): number =>
   terms.reduce((score, term) => score + Number(text.toLowerCase().includes(term.toLowerCase())), 0);
@@ -58,11 +67,26 @@ export class ScientificRetrievalRouter {
     this.snapshots = new ScientificSearchSnapshots(repository, roots);
   }
 
-  async search(input: ScientificSearchRequest, signal: AbortSignal = new AbortController().signal): Promise<ScientificSearchResult> {
+  async plan(input: ScientificSearchRequest, signal: AbortSignal = new AbortController().signal): Promise<ScientificQueryPlan> {
     signal.throwIfAborted();
     const request = scientificSearchRequestSchema.parse(input), catalog = this.snapshots.catalog(request.projectId, request.documentIds);
-    const plan = await planScientificQuery({query: request.query, projectId: request.projectId,
-      documentIds: request.documentIds, papers: this.snapshots.papers(request.projectId, catalog)}, this.generator, signal);
+    return planScientificQuery({query: request.query, projectId: request.projectId, documentIds: request.documentIds,
+      papers: this.snapshots.papers(request.projectId, catalog)}, this.generator, signal);
+  }
+
+  async search(input: ScientificSearchRequest, signal: AbortSignal = new AbortController().signal,
+    suppliedPlan?: ScientificQueryPlan): Promise<ScientificSearchResult> {
+    signal.throwIfAborted();
+    const request = scientificSearchRequestSchema.parse(input), catalog = this.snapshots.catalog(request.projectId, request.documentIds);
+    const available = this.snapshots.papers(request.projectId, catalog);
+    const plan = suppliedPlan ? scientificQueryPlanSchema.parse(suppliedPlan) :
+      await planScientificQuery({query: request.query, projectId: request.projectId,
+        documentIds: request.documentIds, papers: available}, this.generator, signal);
+    if (plan.query !== request.query || plan.scope.projectId !== request.projectId ||
+      plan.scope.documentIds.some((id, index) => !available.some(p => p.documentId === id &&
+        p.paperId === plan.scope.paperIds[index]) || request.documentIds.length && !request.documentIds.includes(id))) {
+      throw new Error('research_scientific_plan_scope_invalid');
+    }
     const papers = await this.snapshots.capture(request.projectId,
       catalog.filter(g => plan.scope.documentIds.includes(g.snapshot.paperIR.identity.documentId) &&
         (!plan.filters.years.length || plan.filters.years.includes(g.snapshot.paperIR.metadata.year!))), signal);
@@ -82,14 +106,28 @@ export class ScientificRetrievalRouter {
     signal.throwIfAborted();
     const receipts = papers.map(p => p.receipt);
     await this.snapshots.assertCurrent(request.projectId, receipts, signal);
-    const candidates = fuseScientificCandidates(channels.map(c => c.candidates), plan);
+    const fused = fuseScientificCandidates(channels.map(c => c.candidates), plan);
+    const candidates = coverScientificCandidates(fused, plan, Math.min(plan.maxCandidates, fused.length));
     const reranked = await rerankScientificCandidates(plan, candidates, papers, this.reranker,
       request.rerank !== 'none', signal);
     await this.snapshots.assertCurrent(request.projectId, receipts, signal);
     return scientificSearchResultSchema.parse({version: scientificSearchVersion, plan,
       snapshot: {id: scientificSnapshotId(receipts), generations: receipts}, channels: channels.map(c => c.receipt),
-      candidates, hits: reranked.ordered.slice(0, request.limit), ranking: {method: reranked.method, k: 60,
+      candidates, hits: reranked.method === 'rrf' ? coverScientificCandidates(reranked.ordered, plan, request.limit) :
+        reranked.ordered.slice(0, request.limit), ranking: {method: reranked.method, k: 60,
         fusionVersion: scientificFusionVersion, reranker: reranked.reranker, rerank: reranked.rerank}});
+  }
+
+  async sourceRefs(input: ScientificSearchResult,
+    signal: AbortSignal = new AbortController().signal): Promise<ScientificSourceRef[]> {
+    const search = scientificSearchResultSchema.parse(input), papers = await this.currentPapers(search, signal);
+    const projections = new Map(papers.map(paper => [paper.generation.id, createScientificSourceRefs(paper.receipt, paper.ir)]));
+    const refs = search.hits.flatMap(candidate => {
+      signal.throwIfAborted();
+      const ref = projections.get(candidate.generationId)!.fromCandidate(candidate);
+      return ref === null ? [] : [ref];
+    });
+    return [...new Map(refs.map(ref => [hash(ref), ref])).values()];
   }
 
   async assertCurrent(input: ScientificSearchResult, signal: AbortSignal = new AbortController().signal): Promise<void> {
@@ -115,6 +153,7 @@ export class ScientificRetrievalRouter {
   async readContext(input: ScientificContextRequest,
     signal: AbortSignal = new AbortController().signal): Promise<ScientificContextResult> {
     const request = scientificContextRequestSchema.parse(input);
+    request.budget.maxTokens = Math.min(request.budget.maxTokens, request.search.plan.maxContextTokens);
     const papers = await this.currentPapers(request.search, signal);
     const projectId = request.search.plan.scope.projectId;
     const result = await assembleScientificContext(request, papers, this.snapshots.readImage, signal);

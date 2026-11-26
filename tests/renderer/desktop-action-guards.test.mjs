@@ -37,7 +37,7 @@ before(async () => {
         getIndexStatus: async () => ({ok: false, error: {message: 'Index not configured'}}),
         listIndexedFiles: async () => ok([]), listIndexJobs: async () => ok([]),
         knowledgeJobs: async () => ok([]),
-        searchKnowledge: request => {
+        queryScientificKnowledge: request => {
           window.searchRequests.push(request);
           if (window.throwSearch) throw new Error('Search bridge disconnected');
           return new Promise(resolve => {window.finishSearch = resolve;});

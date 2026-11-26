@@ -5,20 +5,22 @@ import {join} from 'node:path';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi, scientificSearchFixture, hash} from './fixtures/scientific-search-fixture.mjs';
 
-let api, toolsApi, snapshots;
+let api, toolsApi, snapshots, orchestrator;
 before(async () => {
-  [api, toolsApi, snapshots] = await Promise.all([
+  [api, toolsApi, snapshots, orchestrator] = await Promise.all([
     loadScientificSearchApi(),
     importTypeScriptModule('src/main/plugins/agent/scientific-tools.ts',
       {platform:'node', tempDir:'.runtime/tmp', external:['@langchain/core/tools', 'zod']}),
     importTypeScriptModule('src/main/plugins/research/scientific-search-snapshot.ts',
-      {platform:'node', tempDir:'.runtime/tmp', external:['@napi-rs/canvas']})
+      {platform:'node', tempDir:'.runtime/tmp', external:['@napi-rs/canvas']}),
+    importTypeScriptModule('src/main/plugins/research/scientific-query-orchestrator.ts', {platform:'node', tempDir:'.runtime/tmp'})
   ]);
 });
 after(() => api?.dispose());
 const ids = (search, kind) => search.candidates.filter(c => c.object.kind === kind).map(c => c.id);
 const savedContext = async f => {
   const search = await f.router.search(f.request('Dataset C Table 3 Equation (7) Figure 2'));
+  search.plan.maxContextTokens = 64_000;
   const context = await f.router.readContext({search,
     candidateIds:[...ids(search, 'table'), ...ids(search, 'equation'), ...ids(search, 'figure')],
     budget:{maxTokens:64_000}});
@@ -39,7 +41,7 @@ const rawStatements = context => {
 };
 const capability = (f, calls = []) => ({invoke:async (name, request, signal) => {
   calls.push({name, request:structuredClone(request)});
-  if (name === 'research.knowledge.scientificSearch') return f.router.search(request, signal);
+  if (name === 'research.knowledge.scientificQuery') return new orchestrator.ScientificQueryOrchestrator(f.router, f.embeddings).search(request, signal);
   if (name === 'research.knowledge.scientificContext') return f.router.readContext(request, signal);
   if (name === 'research.knowledge.scientificEvidence') return f.router.validateEvidence(request, signal);
   assert.fail(`unexpected capability ${name}`);
@@ -221,7 +223,7 @@ test('actual Agent tools bind project scope and full search/context handles thro
     const validation = await call('validate', {searchId:search.searchId, contextId:context.contextId,
       statements:rawStatements(context)});
     assert.equal(validation.canAnswerAsFacts, true);
-    assert.deepEqual(calls.map(c => c.name), ['research.knowledge.scientificSearch',
+    assert.deepEqual(calls.map(c => c.name), ['research.knowledge.scientificQuery',
       'research.knowledge.scientificContext', 'research.knowledge.scientificEvidence']);
     assert.equal(calls[0].request.projectId, f.project.id);
     assert.deepEqual(calls[1].request.search, calls[2].request.search);

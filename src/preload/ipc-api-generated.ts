@@ -389,6 +389,7 @@ export const rocApi: RocPreloadApi = {
     rebuildVisualIndex: (...args) => ipcRenderer.invoke(ipcChannels.researchVisualRebuild, ...args),
     searchVisualKnowledge: (...args) => ipcRenderer.invoke(ipcChannels.researchVisualSearch, ...args),
     understandScientificFigure: (...args) => ipcRenderer.invoke(ipcChannels.researchFigureUnderstanding, ...args),
+    queryScientificKnowledge: (...args) => ipcRenderer.invoke(ipcChannels.researchScientificQuery, ...args),
     searchScientificKnowledge: (...args) => ipcRenderer.invoke(ipcChannels.researchScientificSearch, ...args),
     listScientificGenerations: (...args) => ipcRenderer.invoke(ipcChannels.researchScientificGenerations, ...args),
     activateScientificGeneration: (...args) => ipcRenderer.invoke(ipcChannels.researchScientificActivate, ...args),
