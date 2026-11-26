@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -9,11 +9,12 @@ import { seedHistoricalResearch } from '../fixtures/research-historical-database
 import { fingerprintTable } from '../../scripts/database/research-migration-lib.mjs';
 
 const options = { platform: 'node', external: ['better-sqlite3', 'pino'], tempDir: resolve('.runtime/database-migration-tests') };
-const [{ migrateDatabasesOnStartup, researchLegacyChecksums }, schemas, schemaHelpers, { KernelRuntime }] = await Promise.all([
+const [{ migrateDatabasesOnStartup, researchLegacyChecksums }, schemas, schemaHelpers, { KernelRuntime }, experimentSchemas] = await Promise.all([
   importTypeScriptModule('src/main/infrastructure/database-migrations.ts', options),
   importTypeScriptModule('src/main/infrastructure/database-schemas.ts', options),
   importTypeScriptModule('src/main/infrastructure/database-schema.ts', options),
-  importTypeScriptModule('src/main/kernel/kernel-runtime.ts', options)
+  importTypeScriptModule('src/main/kernel/kernel-runtime.ts', options),
+  importTypeScriptModule('src/shared/schemas/research-experiments.ts', options)
 ]);
 
 function fixture(version) {
@@ -28,6 +29,196 @@ function fixture(version) {
 
 const preserved = ['research_projects', 'research_artifacts', 'research_wiki_pages',
   'research_knowledge_chunks', 'research_knowledge_keywords', 'research_experiment_runs'];
+
+function typescriptExecution(status = 'failed') {
+  return experimentSchemas.researchExperimentExecutionSchema.parse({
+    id: 'legacy', projectId: 'p',
+    request: {
+      projectId: 'p', requestId: 'legacy-request', label: 'Historical TypeScript',
+      engine: 'typescript', runtime: { kind: 'bundled-node' }, sourceVersion: 1,
+      sourcePath: 'historical.mts', inputPaths: [], parameters: {},
+      timeoutMs: 1000, network: 'disabled'
+    },
+    ownerRunId: null, workspacePath: '/historical/workspace', workspaceRoot: '/historical',
+    status, environment: null, files: [], inputHash: null, exitCode: null,
+    error: status === 'failed' ? 'historical failure' : null, artifactId: null,
+    createdAt: 'old', startedAt: null, endedAt: status === 'preparing' ? null : 'old'
+  });
+}
+
+function seedExecution(db, snapshotJson, status = 'failed') {
+  const runStatus = status === 'preparing' ? 'running' : status === 'interrupted' ? 'failed' : status;
+  db.prepare(`INSERT INTO research_experiment_runs
+    (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
+    VALUES('legacy','p','Historical TypeScript','["typescript-v1","historical.mts"]','{}','{}',?,'[]','old','old')`)
+    .run(runStatus);
+  db.prepare(`INSERT INTO research_experiment_executions
+    (run_id,project_id,request_id,status,snapshot_json,root_path,created_at)
+    VALUES('legacy','p','legacy-request',?,?,'/historical','old')`).run(status, snapshotJson);
+}
+
+async function assertRefusesWithoutWriting(f) {
+  const before = readFileSync(f.path);
+  await assert.rejects(migrateDatabasesOnStartup(f.pluginData), /database_migration_legacy_execution_requires_review/u);
+  assert.deepEqual(readFileSync(f.path), before, 'refusal must preserve original database bytes');
+  assert.throws(() => readdirSync(join(f.pluginData, 'schema-backups')), /ENOENT/u);
+}
+
+for (const [label, value] of [
+  ['missing fields', {}],
+  ['incomplete TypeScript request', { request: { engine: 'typescript' } }],
+  ['unknown engine', { ...typescriptExecution(), request: { ...typescriptExecution().request, engine: 'rust' } }],
+  ['unknown stored field', { ...typescriptExecution(), futureContract: 2 }],
+  ['array', []],
+  ['scalar', 42],
+  ['null', null],
+  ['malformed JSON', undefined]
+]) {
+  test(`historical execution with ${label} refuses before backup or source writes`, async () => {
+    const f = fixture(75);
+    try {
+      const db = new Database(f.path);
+      const snapshotJson = JSON.stringify(value === undefined ? typescriptExecution() : value);
+      seedExecution(db, snapshotJson);
+      db.close();
+      if (value === undefined) {
+        // Simulate damaged stored content without changing the frozen DDL or
+        // rebuilding expression indexes, which normally reject malformed JSON.
+        const bytes = readFileSync(f.path);
+        const offset = bytes.indexOf(Buffer.from(snapshotJson));
+        assert.ok(offset >= 0);
+        assert.equal(bytes.lastIndexOf(Buffer.from(snapshotJson)), offset);
+        bytes[offset] = '['.charCodeAt(0);
+        writeFileSync(f.path, bytes);
+      }
+      await assertRefusesWithoutWriting(f);
+    } finally { f.dispose(); }
+  });
+}
+
+for (const [label, change] of [
+  ['run ID', value => { value.id = 'other-run'; }],
+  ['snapshot project', value => { value.projectId = 'other-project'; }],
+  ['request project', value => { value.request.projectId = 'other-project'; }],
+  ['request ID', value => { value.request.requestId = 'other-request'; }],
+  ['execution status', value => { value.status = 'cancelled'; }]
+]) {
+  test(`historical execution with mismatched ${label} refuses without changing frozen history`, async () => {
+    const f = fixture(75);
+    try {
+      const value = typescriptExecution();
+      change(value);
+      const db = new Database(f.path);
+      seedExecution(db, JSON.stringify(value));
+      db.close();
+      await assertRefusesWithoutWriting(f);
+    } finally { f.dispose(); }
+  });
+}
+
+for (const change of ["UPDATE research_experiment_runs SET status='completed'",
+  "UPDATE research_experiment_runs SET project_id='other-project'"]) {
+  test(`historical execution refuses mismatched relational run: ${change}`, async () => {
+    const f = fixture(75);
+    try {
+      const db = new Database(f.path);
+      db.prepare(`INSERT INTO research_projects(id,title,description,status,current_stage,created_at,updated_at)
+        VALUES('other-project','Other project','','paused','reading','old','old')`).run();
+      seedExecution(db, JSON.stringify(typescriptExecution()));
+      db.exec(change);
+      db.close();
+      await assertRefusesWithoutWriting(f);
+    } finally { f.dispose(); }
+  });
+}
+
+for (const engine of ['python', 'r', 'julia']) {
+  for (const [label, environment, command] of [
+    ['runtime identity', { runtime: { kind: engine } }, '[]'],
+    ['engine identity', { engine }, '[]'],
+    ['recorded environment kind', { kind: engine }, '[]'],
+    ['conflicting engine identity', { runtime: { kind: 'bundled-node' }, engine }, '[]'],
+    ['queued command', {}, JSON.stringify([`${engine}-v1`, 'historical-source'])],
+    ['started command', {}, JSON.stringify(['/historical/executable', `${engine}-v1`, 'historical-source'])]
+  ]) {
+    test(`unpaired ${engine} history with ${label} refuses before backup or writes`, async () => {
+      const f = fixture(75);
+      try {
+        const db = new Database(f.path);
+        db.prepare(`INSERT INTO research_experiment_runs
+          (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
+          VALUES('unpaired','p','Unpaired historical run',?,'{}',?,'failed','[]','old','old')`)
+          .run(command, JSON.stringify(environment));
+        db.close();
+        await assertRefusesWithoutWriting(f);
+      } finally { f.dispose(); }
+    });
+  }
+}
+
+test('supported TypeScript execution snapshots retain source bytes and valid run status mappings', async () => {
+  for (const status of ['preparing', 'failed', 'interrupted']) {
+    const f = fixture(75);
+    try {
+      const db = new Database(f.path);
+      const value = typescriptExecution(status);
+      seedExecution(db, JSON.stringify(value), status);
+      const before = {
+        runs: fingerprintTable(db, 'research_experiment_runs'),
+        executions: fingerprintTable(db, 'research_experiment_executions')
+      };
+      db.close();
+      await migrateDatabasesOnStartup(f.pluginData);
+      const current = new Database(f.path, { readonly: true });
+      try {
+        assert.deepEqual(fingerprintTable(current, 'research_experiment_runs'), before.runs);
+        assert.deepEqual(fingerprintTable(current, 'research_experiment_executions'), before.executions);
+        assert.equal(current.prepare('SELECT snapshot_json FROM research_experiment_executions').pluck().get(), JSON.stringify(value));
+      } finally { current.close(); }
+    } finally { f.dispose(); }
+  }
+});
+
+test('transactional migration failure preserves the original journal mode and database bytes', async (t) => {
+  const f = fixture(75);
+  try {
+    const before = readFileSync(f.path);
+    const originalExec = Database.prototype.exec;
+    t.mock.method(Database.prototype, 'exec', function (sql) {
+      const result = originalExec.call(this, sql);
+      if (this.name === f.path && sql === 'DROP TABLE research_python_environment_selections') {
+        throw new Error('forced_transactional_migration_failure');
+      }
+      return result;
+    });
+    await assert.rejects(migrateDatabasesOnStartup(f.pluginData), /forced_transactional_migration_failure/u);
+    const unchanged = new Database(f.path, { readonly: true });
+    try {
+      assert.equal(unchanged.pragma('journal_mode', { simple: true }), 'delete');
+      assert.equal(unchanged.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 75);
+    } finally { unchanged.close(); }
+    assert.deepEqual(readFileSync(f.path), before, 'rollback must preserve original database bytes');
+  } finally { f.dispose(); }
+});
+
+test('failed backup removes only its incomplete directory and leaves the source unchanged', async (t) => {
+  const f = fixture(75);
+  try {
+    const backupBase = join(f.pluginData, 'schema-backups');
+    const retained = join(backupBase, 'retained');
+    mkdirSync(retained, { recursive: true });
+    writeFileSync(join(retained, 'manifest.json'), '{"status":"complete"}');
+    const before = readFileSync(f.path);
+    t.mock.method(Database.prototype, 'backup', async function (destination) {
+      writeFileSync(destination, 'partial backup');
+      throw new Error('forced_backup_failure');
+    });
+    await assert.rejects(migrateDatabasesOnStartup(f.pluginData), /forced_backup_failure/u);
+    assert.deepEqual(readdirSync(backupBase), ['retained']);
+    assert.equal(readFileSync(join(retained, 'manifest.json'), 'utf8'), '{"status":"complete"}');
+    assert.deepEqual(readFileSync(f.path), before);
+  } finally { f.dispose(); }
+});
 
 for (const version of [71, 72, 73, 74, 75]) {
   test(`v${version} research database upgrades automatically, preserving all old rows and index matches`, async () => {

@@ -12,8 +12,13 @@ Core 1、Agent 25、Memory 2、Task 1、Workspace 1、Diagnostics 1、Research 7
 当前支持 **Research v71～v75 自动升级到 v76**：升级前验证冻结的历史结构校验和、
 SQLite 完整性及历史执行记录，使用 SQLite Backup API 在 `plugin-data/schema-backups/upgrade-*/`
 保存原始数据库，完成备份验证后才在单个事务内升级表、索引、触发器及版本元数据。
+迁移连接保留来源的 journal mode，只设置连接级外键、超时及同步参数；事务失败时原库字节与
+journal mode 保持不变，迁移提交后由正常启动的 `DatabasePool` 配置 WAL。
+备份或备份验证失败时只清理本次新建的不完整备份目录；已完成的备份保留供恢复。
 升级完成仍使用原有严格结构校验；重复启动不会重复迁移，也不会重复备份。
-涉及旧 Python 环境选择或无法安全解码的 Python/R/Julia 执行历史时，拒绝自动迁移并保留原库，
+历史 TypeScript 执行快照必须满足当前 strict 合同，并匹配 run、project、request 与 status 的
+关系身份；不改写原快照或已有回执。涉及旧 Python 环境选择、Python/R/Julia 执行历史，或未知、
+损坏、身份不匹配的执行快照时，在备份和原库写入前拒绝自动迁移并保留原库，
 交由离线迁移工具处理；未知历史版本、意外 DDL、未来版本和损坏数据库同样拒绝自动修改。
 自动迁移 **不删除用户业务数据**，也不为不支持的结构猜测转换规则。
 
@@ -49,6 +54,7 @@ v76 将旧 Python 选择表替换为当前环境回执表，并新增准备操�
 
 科研文档重解析后的来源定位候选属于当前业务数据，仍按[证据来源合同](research-evidence-relations.md)保存和审核。
 
-验证入口：`node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs`，
-覆盖七库初始化、只读重开、历史库自动升级、数据与 FTS 保留、异常拒绝与事务回滚边界；
-实际启动由 Electron smoke 验证。
+验证入口：`node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-schema-migration.test.mjs tests/unit/research-paper-card-versions.test.mjs tests/unit/research-scientific-generations.test.mjs`，
+覆盖七库初始化、只读重开、历史库自动升级、数据与 FTS 保留、快照身份拒绝、事务失败时原库字节
+与 journal mode 保留、备份失败清理，以及历史卡片和科学代次恢复。PR CI 运行这些回归；
+打包后仍须使用隔离的、已有历史内容的数据根验证实际启动，空数据根的 smoke 不能替代该检查。

@@ -4,10 +4,24 @@ on:
   pull_request:
     paths:
       - 'src/main/infrastructure/*schema*.ts'
-      - 'src/main/infrastructure/database-migrations.ts'
+      - 'src/main/infrastructure/database*.ts'
+      - 'src/main/infrastructure/execution-events.ts'
+      - 'src/main/infrastructure/observe-database.ts'
       - 'src/main/kernel/kernel-runtime.ts'
+      - 'src/shared/schemas/*.ts'
       - 'tests/unit/database-*.test.mjs'
+      - 'tests/unit/research-schema-migration.test.mjs'
+      - 'tests/unit/research-paper-card-versions.test.mjs'
+      - 'tests/unit/research-scientific-generations.test.mjs'
+      - 'tests/fixtures/research-historical-database.mjs'
+      - 'tests/fixtures/research-*/**'
       - 'scripts/database/**'
+      - 'scripts/verify-research-schema-migration.mjs'
+      - 'scripts/lib/bundle-ts.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.node-version'
+      - 'tsconfig*.json'
       - '.github/workflows/database-compatibility.yml'
   workflow_dispatch:
 
@@ -30,4 +44,4 @@ jobs:
           run_install: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs
+      - run: node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-schema-migration.test.mjs tests/unit/research-paper-card-versions.test.mjs tests/unit/research-scientific-generations.test.mjs

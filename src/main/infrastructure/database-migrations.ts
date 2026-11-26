@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import { managedDatabaseDefinitions } from './database-fast-probe';
 import { DatabasePool } from './database-pool';
-import { configureRocDatabaseConnection, type RocLogicalDatabaseName } from './database-pragmas';
+import type { RocLogicalDatabaseName } from './database-pragmas';
+import { researchExperimentExecutionSchema } from '../../shared/schemas/research-experiments';
 import {
   checksumSchemaObjects,
   expectedSchemaObjects,
@@ -93,9 +94,12 @@ export async function migrateDatabasesOnStartup(rootDir: string): Promise<void> 
   for (const plan of plans) {
     const db = new Database(plan.filePath);
     try {
-      configureRocDatabaseConnection(db, {
-        databaseName: plan.dbName, busyTimeoutMs: 5000, synchronous: 'FULL'
-      });
+      // Keep the source's persistent journal mode unchanged until migration
+      // commits. DatabasePool configures WAL after this pre-startup step.
+      registerExecutionEventFunctions(db);
+      db.pragma('foreign_keys = ON');
+      db.pragma('busy_timeout = 5000');
+      db.pragma('synchronous = FULL');
       if (plan.dbName === 'plugin:@roc/plugin-research') {
         migrateResearchToV76(db, plan.fromVersion);
       }
@@ -130,24 +134,54 @@ function assertResearchHistoryCanBePreserved(db: DatabaseConnection): void {
   if (db.prepare('SELECT count(*) FROM ' + oldTable).pluck().get() !== 0) {
     throw new Error('migration_python_receipts_require_archive');
   }
-  for (const row of db.prepare('SELECT run_id,snapshot_json FROM research_experiment_executions').iterate() as
-    Iterable<{ run_id: string; snapshot_json: string }>) {
-    const snapshot = JSON.parse(row.snapshot_json) as { request?: { engine?: string } };
-    if (['python', 'r', 'julia'].includes(snapshot.request?.engine ?? '')) {
+  for (const row of db.prepare(`SELECT e.run_id,e.project_id,e.request_id,e.status,e.snapshot_json,
+    r.id AS history_run_id,r.project_id AS history_project_id,r.status AS history_status
+    FROM research_experiment_executions e LEFT JOIN research_experiment_runs r ON r.id=e.run_id`).iterate() as
+    Iterable<{ run_id: string; project_id: string; request_id: string; status: string; snapshot_json: string;
+      history_run_id: string | null; history_project_id: string | null; history_status: string | null }>) {
+    const parsed = researchExperimentExecutionSchema.safeParse(readHistoryJson(row.snapshot_json, row.run_id));
+    if (!parsed.success || parsed.data.request.engine !== 'typescript') {
+      throw new Error(`database_migration_legacy_execution_requires_review:${row.run_id}`);
+    }
+    const snapshot = parsed.data;
+    const runStatus = snapshot.status === 'preparing' ? 'running'
+      : snapshot.status === 'interrupted' ? 'failed' : snapshot.status;
+    if (snapshot.id !== row.run_id || snapshot.projectId !== row.project_id
+      || snapshot.request.projectId !== row.project_id || snapshot.request.requestId !== row.request_id
+      || snapshot.status !== row.status || row.history_run_id !== row.run_id
+      || row.history_project_id !== row.project_id || row.history_status !== runStatus) {
       throw new Error(`database_migration_legacy_execution_requires_review:${row.run_id}`);
     }
   }
   for (const row of db.prepare(`SELECT r.id,r.environment_json,r.command FROM research_experiment_runs r
     LEFT JOIN research_experiment_executions e ON e.run_id=r.id WHERE e.run_id IS NULL`).iterate() as
     Iterable<{ id: string; environment_json: string; command: string }>) {
-    const environment = JSON.parse(row.environment_json) as { runtime?: { kind?: string }; engine?: string };
+    const environment = readHistoryJson(row.environment_json, row.id);
+    if (!isHistoryObject(environment)) {
+      throw new Error(`database_migration_legacy_execution_requires_review:${row.id}`);
+    }
+    const engines = [environment.engine, environment.kind];
+    if (isHistoryObject(environment.runtime)) engines.push(environment.runtime.kind);
     let command: unknown;
     try { command = JSON.parse(row.command); } catch { command = null; }
-    if (['r', 'julia'].includes(environment.runtime?.kind ?? environment.engine ?? '')
-      || Array.isArray(command) && ['r-v1', 'julia-v1'].includes(command[0])) {
+    if (engines.some(engine => typeof engine === 'string' && ['python', 'r', 'julia'].includes(engine))
+      || Array.isArray(command) && command.slice(0, 2).some(part =>
+        typeof part === 'string' && ['python-v1', 'r-v1', 'julia-v1'].includes(part))) {
       throw new Error(`database_migration_legacy_execution_requires_review:${row.id}`);
     }
   }
+}
+
+function readHistoryJson(json: string, runId: string): unknown {
+  try {
+    return JSON.parse(json) as unknown;
+  } catch (cause) {
+    throw new Error(`database_migration_legacy_execution_requires_review:${runId}`, { cause });
+  }
+}
+
+function isHistoryObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void {
@@ -195,31 +229,36 @@ function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void
 async function backupMigrationSources(rootDir: string, plans: readonly Migration[]): Promise<void> {
   const directory = join(rootDir, 'schema-backups', `upgrade-${Date.now()}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const backups = [];
-  for (const plan of plans) {
-    const fileName = `${plan.dbName.replaceAll(/[^a-z0-9-]/giu, '-')}.db`;
-    const backupPath = join(directory, fileName);
-    const source = new Database(plan.filePath, { readonly: true, fileMustExist: true });
-    try {
-      await source.backup(backupPath);
-    } finally {
-      source.close();
-    }
-    const backup = new Database(backupPath, { readonly: true, fileMustExist: true });
-    try {
-      const metadata = readMetadata(backup);
-      if (metadata?.version !== plan.fromVersion ||
-        metadata.checksum !== researchLegacyChecksums[plan.fromVersion] ||
-        checksumSchemaObjects(plan.dbName, plan.fromVersion, readSchemaObjects(backup)) !== metadata.checksum ||
-        backup.pragma('integrity_check', { simple: true }) !== 'ok') {
-        throw new Error('database_migration_backup_verification_failed');
+  try {
+    const backups = [];
+    for (const plan of plans) {
+      const fileName = `${plan.dbName.replaceAll(/[^a-z0-9-]/giu, '-')}.db`;
+      const backupPath = join(directory, fileName);
+      const source = new Database(plan.filePath, { readonly: true, fileMustExist: true });
+      try {
+        await source.backup(backupPath);
+      } finally {
+        source.close();
       }
-    } finally {
-      backup.close();
+      const backup = new Database(backupPath, { readonly: true, fileMustExist: true });
+      try {
+        const metadata = readMetadata(backup);
+        if (metadata?.name !== plan.dbName || metadata.version !== plan.fromVersion ||
+          metadata.checksum !== researchLegacyChecksums[plan.fromVersion] ||
+          checksumSchemaObjects(plan.dbName, plan.fromVersion, readSchemaObjects(backup)) !== metadata.checksum ||
+          backup.pragma('integrity_check', { simple: true }) !== 'ok') {
+          throw new Error('database_migration_backup_verification_failed');
+        }
+      } finally {
+        backup.close();
+      }
+      backups.push({ dbName: plan.dbName, fromVersion: plan.fromVersion, toVersion: plan.toVersion, fileName });
     }
-    backups.push({ dbName: plan.dbName, fromVersion: plan.fromVersion, toVersion: plan.toVersion, fileName });
+    const manifest = join(directory, 'manifest.json');
+    writeFileSync(manifest + '.tmp', JSON.stringify({ status: 'complete', createdAt: new Date().toISOString(), backups }, null, 2));
+    renameSync(manifest + '.tmp', manifest);
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
   }
-  const manifest = join(directory, 'manifest.json');
-  writeFileSync(manifest + '.tmp', JSON.stringify({ status: 'complete', createdAt: new Date().toISOString(), backups }, null, 2));
-  renameSync(manifest + '.tmp', manifest);
 }
