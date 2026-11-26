@@ -49,7 +49,17 @@ Both commands exited 0. Counts and aggregate X bias reproduce the frozen
 independent scores within `1e-15`. Re-running requires new output paths. No model
 inference or runtime mutation was needed and no temporary directories were created.
 
-A revised semantic region contract would require an explicit decision, a fixed
-association rule, and complete-cohort evaluation. It must preserve ambiguous and
-missing associations, raw coordinates and all original failures. The pending
-decoder candidate continues under the existing contract until that decision.
+The user approved measuring each formula together with its separately emitted
+number. The frozen [v3 contract](../evaluation/ovis-decoder/FORMULA-REGIONS.md)
+associates regions independently within gold and prediction using fixed geometry
+rules. Ambiguous and missing associations, original coordinates, region counts,
+reading order and every numerical threshold remain unchanged.
+
+The saved 1.05 candidate passes formula geometry under v3, but still fails caption
+recall by 4/382 (delta -0.0104712; limit -0.01). The independent backend check
+passes. Neither result changes the original v2 failures. Evidence is in
+`.artifacts/research-toolchain-p3/formula-regions-v3/`.
+
+The user subsequently reduced new evaluation to twenty samples. The new 1.03
+candidate uses that fixed subset, including this formula-number regression page;
+see the [sample protocol](../evaluation/ovis-decoder/sample-20-1.03.json).

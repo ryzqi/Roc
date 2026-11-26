@@ -1,5 +1,33 @@
 # Ovis 8-bit decoder candidate
 
+The active evaluation is now **twenty fixed samples**, as requested by the user.
+`sample-20-1.03.json` supersedes the interrupted 347-page `candidate-1.03.json`
+run. Its seven anchors cover the three independent backend inputs, both caption
+regressions, formula-number separation and repeated output. Thirteen other pages
+are selected by a fixed SHA256 ordering, before new sample results are inspected.
+No page may be substituted or dropped. This is an observed regression sample,
+not held-out or full-cohort qualification.
+
+`score-ovis-sample.py` re-scores saved BF16 output on exactly the same twenty pages
+as the new 8-bit candidate, using the v3 semantic formula regions and unchanged
+CER/CDM/TEDS, source and order thresholds. Its backend comparison reuses three
+pages from the twenty-page run. All denominator audits and old failures remain.
+Run from the repository root, with a new output directory:
+
+```sh
+/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  .runtime/ovis-evaluator/venv/bin/python -B scripts/research/score-ovis-sample.py \
+  --inference .artifacts/research-toolchain-p3/sample-20-repetition-1.03 \
+  --runtime .runtime/ovis-evaluator \
+  --runtime-receipt .artifacts/research-toolchain-p3/evaluator-runtime-receipt.json \
+  --baseline .artifacts/research-toolchain-p3/scoring-gold-baseline-audit-v2-linked \
+  --output .artifacts/research-toolchain-p3/sample-20-repetition-1.03-score \
+  --wait
+```
+
+The following describes the retained historical 1.05 experiment. Its full-cohort
+run is complete; do not launch another full run for the active sample evaluation.
+
 The original 347-page 8-bit evaluation failed. Its outputs and acceptance contract
 remain frozen. `candidate-1.05.json` fixes a separate full-cohort run with a 1.05
 repetition penalty and the unchanged 20-token repetition context. The selected

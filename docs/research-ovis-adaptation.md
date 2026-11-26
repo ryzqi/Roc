@@ -51,17 +51,26 @@ The complete independent metrics also fail CER delta (0.0067811254 versus maximu
 0.005), formula region precision delta (-0.0129728059 versus minimum -0.01), and
 formula horizontal center bias (0.0155339379 versus maximum 0.01). BF16's own
 formula horizontal bias is 0.0151225660. These are recorded in
-`quality-v2-interim.json`; official 8-bit CDM/TEDS are still being scored. The
-question of permitting verified page-only citations while retaining unverified
-regions has been raised separately. No acceptance requirement has been waived.
+`quality-v2-original-comparison.json`; the completed official 8-bit CDM is
+0.9849614740 and TEDS is 0.9381436012. Original quality failures are preserved.
 
 A [saved-output formula geometry diagnostic](research-ovis-formula-geometry.md)
 reproduces both biases and identifies a region-semantics mismatch in tagged
 equations: some gold regions include the right-side number, while Ovis emits the
-body and number separately. This does not change the existing failure or qualify
-an alternative region metric. The [new decoder candidate](../evaluation/ovis-decoder/README.md)
-has separate full-cohort and independent-backend checks; neither automatically
-enables the application parser.
+body and number separately. The user approved the separately frozen v3 formula
+and number association rule, retaining original coordinates and all numerical
+thresholds. The 1.05 candidate passes formula geometry under v3 but still loses
+four caption matches out of 382. Its independent backend check passes.
+
+The 1.03 diagnostic restores the two captions on `scientific-240`, finishes the
+repetition failure on `scientific-253`, and still loses two caption matches on
+`scientific-043`. The user then requested **only twenty samples**. The 347-page
+1.03 run was stopped; its interruption evidence is retained. The
+[new fixed sample](../evaluation/ovis-decoder/sample-20-1.03.json) includes seven
+known regression/backend pages and thirteen pages selected by fixed SHA256 order.
+Sample BF16 and 8-bit scores use identical gold and unchanged quality margins.
+The independent backend check reuses three of those twenty pages. No full-cohort
+or held-out qualification claim is made, and the application route stays pending.
 
 `scripts/research/probe-ovis-repetition.py` creates an explicitly labelled
 diagnostic copy of the frozen inference script. It changes only the repetition
@@ -139,5 +148,7 @@ checks. The evaluator regression suite passed 26/26 from the repository root:
   -s evaluation/ovis-evaluator -p 'test_*.py' -v
 ```
 
-P3 remains incomplete until the full 347-page quantization comparison and resource
-qualification finish. No application parser has been enabled by these results.
+P3 remains incomplete pending the user-authorized twenty-page candidate check and
+remaining resource qualification. No application parser has been enabled by these
+results. The latest sample scope supersedes the earlier full-cohort requirement
+for the new candidate; historical full-cohort failures remain recorded.
