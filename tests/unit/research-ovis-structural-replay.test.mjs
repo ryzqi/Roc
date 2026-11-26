@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, writeFile, rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, writeFile, rm, stat} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createCanvas} from '@napi-rs/canvas';
@@ -43,5 +43,13 @@ test('structural replay retains invalid pages and original errors while auditing
     assert.equal(audit.pages[0].error.message, 'research_ovis_replay_invalid_model_output');
     assert.equal(audit.temporaryRemoved, true); assert.equal(audit.qualityQualification, false);
     assert.equal(await readFile(join(input, 'report.json'), 'utf8'), encoded);
+    // Original decoder fixtures must not be relabelled as a candidate run.
+    const candidateOutput = join(root, 'candidate-audit');
+    const changedIdentity = spawnSync(process.execPath, ['scripts/research/verify-ovis-structural-replay.mjs',
+      '--inference', input, '--output', candidateOutput,
+      '--candidate', 'evaluation/ovis-decoder/sample-20-1.03.json'], {encoding: 'utf8', timeout: 60000});
+    assert.equal(changedIdentity.status, 1);
+    assert.match(changedIdentity.stderr, /diagnostic\.json/u);
+    await assert.rejects(stat(candidateOutput), {code: 'ENOENT'});
   } finally {await rm(root, {recursive: true, force: true});}
 });

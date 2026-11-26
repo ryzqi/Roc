@@ -1,12 +1,13 @@
 /** Stress the application contract with saved 8-bit output. Synthetic capture envelopes are NOT new inference evidence. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {copyFile, mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {extname, join, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
 import {importTypeScriptModule} from '../lib/bundle-ts.mjs';
 
-const {values} = parseArgs({options: {inference: {type: 'string'}, output: {type: 'string'}}, strict: true});
+const {values} = parseArgs({options: {inference: {type: 'string'}, output: {type: 'string'}, candidate: {type: 'string'}}, strict: true});
 if (!values.inference || !values.output) throw new Error('--inference (completed 8bit report directory) and --output are required');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const inference = resolve(values.inference), output = resolve(values.output);
@@ -16,7 +17,32 @@ assert.ok(report.pages.length > 0); assert.equal(new Set(report.pages.map(page =
 assert.equal(report.status, report.pages.every(page => page.valid === true) ? 'completed' : 'invalid-output');
 const config = JSON.parse(await readFile('evaluation/ovis-evaluator/paired-inference.json'));
 assert.equal(report.revision, config.modelRevision); assert.equal(report.receiptSha256, config.installationReceiptSha256);
-assert.equal(report.evaluatorSha256, config.inferenceScriptSha256); assert.equal(report.promptSha256, config.settings.promptSha256);
+assert.equal(report.promptSha256, config.settings.promptSha256);
+let candidateSha256 = null;
+if (values.candidate) {
+  // Candidate decoders retain their own identity. Never relabel their output as
+  // the original inference implementation to satisfy structural replay.
+  const candidatePath = resolve(values.candidate);
+  execFileSync('python3', ['-B', '-c', `
+import hashlib,importlib.util,json,subprocess,sys
+from pathlib import Path
+root=Path.cwd().resolve(); path=Path(sys.argv[1]).resolve(); inference=Path(sys.argv[2]).resolve()
+assert subprocess.check_output(['git','show','HEAD:'+path.relative_to(root).as_posix()])==path.read_bytes()
+candidate=json.loads(path.read_text())
+for item in candidate['identities'].values():
+ assert hashlib.sha256((root/item['path']).read_bytes()).hexdigest()==item['sha256']
+diagnostic=json.loads((inference.parent/'diagnostic.json').read_text())
+report=json.loads((inference/'report.json').read_text())
+spec=importlib.util.spec_from_file_location('candidate','scripts/research/score-ovis-candidate.py')
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+module.validate_candidate(candidate,diagnostic,report)
+for path,expected in [(inference/'report.json',diagnostic['inferenceReportSha256']),
+ (inference.parent/'infer-probe.py',diagnostic['probeSha256']),
+ (inference.parent/'pages.json',diagnostic['pagesManifestSha256'])]:
+ assert hashlib.sha256(path.read_bytes()).hexdigest()==expected
+`, candidatePath, inference], {stdio: 'pipe'});
+  candidateSha256 = hash(await readFile(candidatePath));
+} else assert.equal(report.evaluatorSha256, config.inferenceScriptSha256);
 const model = {engine: 'ovisocr3-mlx', revision: report.revision, quantization: '8bit', groupSize: 64,
   visionPrecision: 'bfloat16', device: 'metal', installationReceiptSha256: report.receiptSha256,
   inferenceSha256: report.evaluatorSha256, promptSha256: report.promptSha256};
@@ -29,7 +55,7 @@ const controller = new AbortController();
 process.once('SIGINT', () => controller.abort()); process.once('SIGTERM', () => controller.abort());
 const summary = {status: 'running', scope: 'Structural replay of saved 8-bit content through synthetic image captures, collection and Paper IR',
   sourceBindingQualification: false, qualityQualification: false, automaticAdoption: false, workerStarted: false,
-  inferenceReportSha256: hash(bytes), model, totalPages: report.pages.length, modules: {}, pages: []};
+  inferenceReportSha256: hash(bytes), candidateSha256, model, totalPages: report.pages.length, modules: {}, pages: []};
 for (const name of [...names, 'ovis-paper-content', 'pdf-table-extractor', 'pdf-equation-extractor', 'pdf-caption-linker']) {
   summary.modules[name] = hash(await readFile(`src/main/plugins/research/${name}.ts`));
 }
