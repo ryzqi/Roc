@@ -6,6 +6,7 @@
 .library-search svg { flex-shrink: 0; }
 .library-search input { width: 100%; min-width: 0; height: var(--control-height); background: transparent; color: var(--ink); font-size: var(--font-meta-size); }
 .library-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.library-list .library-search input:focus-visible { outline: none; }
 .library-filter-row select { flex: 1; height: var(--control-height-compact); padding-inline: var(--space-2); font-size: var(--font-meta-size); }
 .library-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: var(--control-height-compact); height: var(--control-height-compact); border-radius: var(--r-control); color: var(--muted); }
 .library-icon-button:enabled:hover { background: var(--overlay-hover); color: var(--ink); }
