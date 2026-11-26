@@ -13,6 +13,7 @@ import { MessagesValue, StateSchema, type BaseCheckpointSaver, type BaseStore } 
 import {
   anthropicPromptCachingMiddleware,
   createMiddleware,
+  toolStrategy,
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
@@ -35,8 +36,9 @@ import {
   resolveMiddlewareStack,
   readMiddlewareName
 } from './middleware-stack';
-import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
+import { isPlanModeModelVisibleToolName, filterRocModelVisibleTools } from './model-tool-exposure';
 import { createCapabilityFilesystemMiddleware } from './framework-capability-middleware';
+import { supportsNativeResponseContract } from './response-contract-middleware';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunUsageLedger } from './run-usage-ledger';
 import type { RunUsageObserver } from './run-usage-observer';
@@ -157,18 +159,20 @@ export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<
   const policy = compileDeepAgentBuildPolicy(input);
   const knownToolCandidates = (): RescueToolCandidate[] => {
     const candidates = [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
-    if (policy.mode !== 'plan') {
-      return candidates;
-    }
-    return candidates.filter((candidate) =>
-      isPlanModeModelVisibleToolName(typeof candidate === 'string' ? candidate : candidate.name)
-    );
+    return filterRocModelVisibleTools(
+      candidates.map(candidate => typeof candidate === 'string' ? { name: candidate, candidate } : { name: candidate.name, candidate }),
+      policy.capabilityManifest, 'main', policy.mode
+    ).map(entry => entry.candidate);
   };
   const tools = policy.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
   const subagentSpecs = createDeepAgentSubagentSpecs(input, policy, tools);
   const subagents = subagentSpecs.map(spec => compileRocSubagent(input, policy, spec));
 
   const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
+  const responseContract = input.snapshot.taskContract.responseContract;
+  const nativeResponseFormat = responseContract !== undefined && supportsNativeResponseContract(responseContract)
+    ? toolStrategy(responseContract.schema)
+    : undefined;
   const revision = input.usageLedger.freezeRevision(input.snapshot.runId, {
     schemaVersion: 1, implementation: harnessImplementationHash, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
     manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 2,
@@ -196,6 +200,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<
     tools,
     permissions: policy.filesystemPermissions,
     interruptOn: policy.interruptOn,
+    responseFormat: nativeResponseFormat,
     checkpointer: input.checkpointer,
     middleware
   });

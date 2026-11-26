@@ -1,6 +1,6 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1 } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionMode } from '../../../shared/types';
 
 export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'write_file',
@@ -60,35 +60,31 @@ export function createRocPlanRuntimeToolGuardMiddleware() {
   });
 }
 
-export function createRocPlanToolExposureMiddleware() {
-  return createMiddleware({
-    name: 'RocPlanToolExposureMiddleware',
-    wrapModelCall: async (request, handler) => {
-      if (request.tools === undefined) {
-        return await handler(request);
-      }
-      return await handler({
-        ...request,
-        tools: filterPlanModeModelTools(request.tools)
-      });
-    }
+/** One policy for the model, rescue parsing and tool listing. Execution guards remain independent. */
+export function filterRocModelVisibleTools<TTool>(
+  tools: readonly TTool[],
+  manifest: RunCapabilityManifestV1,
+  scope: RunCapabilityExecutionScopeV1,
+  mode: RunExecutionMode
+): TTool[] {
+  const allowed = new Set(manifest.tools.filter(tool => tool.executionScopes.includes(scope)).map(tool => tool.modelVisibleName));
+  return tools.filter(tool => {
+    const name = readToolName(tool);
+    return name !== null && allowed.has(name) && (mode !== 'plan' || isPlanModeModelVisibleToolName(name));
   });
 }
 
-/** Framework middleware can register tools beyond Roc's custom tool list. Filter at the model boundary. */
-export function createRocCapabilityToolExposureMiddleware(
+/** The last model wrapper also filters tools registered by Deep Agents profiles. */
+export function createRocToolExposureMiddleware(
   manifest: RunCapabilityManifestV1,
-  scope: RunCapabilityExecutionScopeV1
+  scope: RunCapabilityExecutionScopeV1,
+  mode: RunExecutionMode
 ) {
-  const allowed = new Set(manifest.tools.filter(tool => tool.executionScopes.includes(scope)).map(tool => tool.modelVisibleName));
   return createMiddleware({
-    name: 'RocCapabilityToolExposureMiddleware',
+    name: 'RocToolExposureMiddleware',
     wrapModelCall: async (request, handler) => handler({
       ...request,
-      tools: (request.tools ?? []).filter(tool => {
-        const name = readToolName(tool);
-        return name !== null && allowed.has(name);
-      })
+      tools: filterRocModelVisibleTools(request.tools ?? [], manifest, scope, mode)
     })
   });
 }

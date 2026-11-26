@@ -17,7 +17,7 @@ const options = {
   external: [...Object.keys(packages.dependencies), ...Object.keys(packages.devDependencies)]
 };
 const { responseContractSchema, createResponseValidator } = await importTypeScriptModule('src/shared/schemas/response-contract.ts', options);
-const { createResponseContractMiddleware } = await importTypeScriptModule('src/main/services/deep-agent/response-contract-middleware.ts', options);
+const { createResponseContractMiddleware, supportsNativeResponseContract } = await importTypeScriptModule('src/main/services/deep-agent/response-contract-middleware.ts', options);
 const { TaskContractStore } = await importTypeScriptModule('src/main/services/deep-agent/task-contract-store.ts', options);
 const input = {
   kind: 'qasper', prompt: 'Return the answer and inspected evidence.',
@@ -25,6 +25,19 @@ const input = {
 };
 const contract = withQasperResponseContract(input).responseContract;
 const valid = '{"answer":"Two datasets.","evidence":["p0","p1"]}';
+
+test('native output is limited to structural-only fully required objects', () => {
+  const simple = { format: 'json', schema: { type: 'object', additionalProperties: false,
+    properties: { answer: { type: 'string' } }, required: ['answer'] } };
+  assert.equal(supportsNativeResponseContract(simple), true);
+  assert.equal(supportsNativeResponseContract(contract), false, 'QASPER evidence requires custom strict correction');
+  assert.equal(supportsNativeResponseContract({ ...simple, schema: { ...simple.schema,
+    properties: { answer: { type: 'string', minLength: 1 } } } }), false,
+  'existing constrained response contracts retain checkpointed correction semantics');
+  assert.equal(supportsNativeResponseContract({ ...simple, schema: { ...simple.schema, required: [] } }), false);
+  assert.equal(supportsNativeResponseContract({ ...simple, schema: { ...simple.schema,
+    properties: { evidence: { type: 'array', items: { type: 'string' }, uniqueItems: true } }, required: ['evidence'] } }), false);
+});
 
 test('strict response validation rejects malformed whole outputs, fields, types and citation IDs without repair', () => {
   const validate = createResponseValidator(contract);

@@ -78,6 +78,7 @@
     "@langchain/anthropic": "1.6.5",
     "@langchain/core": "1.4.1",
     "@langchain/langgraph": "1.7.5",
+    "@langchain/mcp-adapters": "2.0.3",
     "@langchain/openai": "1.8.4",
     "@modelcontextprotocol/client": "2.4.0",
     "@napi-rs/canvas": "1.1.1",

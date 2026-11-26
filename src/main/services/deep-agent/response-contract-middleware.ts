@@ -1,8 +1,32 @@
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { z } from 'zod';
-import { createResponseValidator, type ResponseContract } from '../../../shared/schemas/response-contract';
+import { createResponseValidator, type ResponseContract, type ResponseJsonSchema } from '../../../shared/schemas/response-contract';
 import { readMessageContentSummary } from './record-utils';
+
+/**
+ * Native ToolStrategy can enforce this structural-only, fully-required subset.
+ * Refinements, optional fields and uniqueItems stay on Roc's checkpointed one-
+ * correction path; their retry semantics must survive restart unchanged.
+ * Final acceptance independently validates the complete contract in both cases.
+ */
+export function supportsNativeResponseContract(contract: ResponseContract): boolean {
+  if (contract.schema.type !== 'object') return false;
+  const eligible = (schema: ResponseJsonSchema): boolean => {
+    if (schema.type === 'array') return schema.uniqueItems !== true &&
+      schema.minItems === undefined && schema.maxItems === undefined && eligible(schema.items);
+    if (schema.type === 'string') return schema.enum === undefined &&
+      schema.minLength === undefined && schema.maxLength === undefined;
+    if (schema.type === 'number' || schema.type === 'integer') return schema.enum === undefined &&
+      schema.minimum === undefined && schema.maximum === undefined;
+    if (schema.type === 'boolean') return schema.enum === undefined;
+    if (schema.type === 'null') return true;
+    const keys = Object.keys(schema.properties);
+    return schema.required.length === keys.length &&
+      keys.every(key => schema.required.includes(key) && eligible(schema.properties[key]!));
+  };
+  return eligible(contract.schema);
+}
 
 /** One correction in the ordinary model loop; the checkpoint owns its run-scoped counter. */
 export function createResponseContractMiddleware(runId: string, contract: ResponseContract) {

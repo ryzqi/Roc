@@ -188,6 +188,9 @@ importers:
       '@langchain/langgraph':
         specifier: 1.7.5
         version: 1.7.5(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
+      '@langchain/mcp-adapters':
+        specifier: 2.0.3
+        version: 2.0.3(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(@langchain/langgraph@1.7.5(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7))
       '@langchain/openai':
         specifier: 1.8.4
         version: 1.8.4(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(undici@7.30.2)
@@ -726,6 +729,13 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.3.4
       zod: ^3.25.32 || ^4.2.0
+
+  '@langchain/mcp-adapters@2.0.3':
+    resolution: {integrity: sha512-DQ75p5pQIzscmxp18uDxMRZJ4d9kDJQ/uFpfd5xcMvdmrQn0xKnF//fOdu3FKCejAHNa/Qi3j2ZpMeJ+n8+EHA==}
+    engines: {node: '>=20.10.0'}
+    peerDependencies:
+      '@langchain/core': ^1.2.6
+      '@langchain/langgraph': ^1.4.18
 
   '@langchain/openai@1.8.4':
     resolution: {integrity: sha512-SMbIgGuZrjntuzOr1K6SR+6www3niEGvQ2mLDWHuEHNjYqxGBwelmfb/Mqd9GeFhb5BXFhnpbvHDpy6O2jtQKg==}
@@ -4093,37 +4103,37 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 ignoredOptionalDependencies:
-  - '@esbuild/win32-*'
-  - '@esbuild/linux-*'
+  - '@esbuild/aix-*'
   - '@esbuild/android-*'
   - '@esbuild/freebsd-*'
-  - '@esbuild/aix-*'
+  - '@esbuild/linux-*'
   - '@esbuild/netbsd-*'
   - '@esbuild/openbsd-*'
-  - '@esbuild/sunos-*'
   - '@esbuild/openharmony-*'
-  - '@rolldown/binding-win32-*'
-  - '@rolldown/binding-linux-*'
+  - '@esbuild/sunos-*'
+  - '@esbuild/win32-*'
+  - '@napi-rs/canvas-android-*'
+  - '@napi-rs/canvas-linux-*'
+  - '@napi-rs/canvas-win32-*'
   - '@rolldown/binding-android-*'
-  - '@rolldown/binding-openharmony-*'
   - '@rolldown/binding-freebsd-*'
-  - '@typescript/typescript-win32-*'
-  - '@typescript/typescript-linux-*'
+  - '@rolldown/binding-linux-*'
+  - '@rolldown/binding-openharmony-*'
+  - '@rolldown/binding-win32-*'
   - '@typescript/typescript-aix-*'
+  - '@typescript/typescript-android-*'
   - '@typescript/typescript-freebsd-*'
+  - '@typescript/typescript-linux-*'
   - '@typescript/typescript-netbsd-*'
   - '@typescript/typescript-openbsd-*'
   - '@typescript/typescript-sunos-*'
-  - '@typescript/typescript-android-*'
-  - lightningcss-win32-*
-  - lightningcss-linux-*
+  - '@typescript/typescript-win32-*'
   - lightningcss-android-*
   - lightningcss-freebsd-*
+  - lightningcss-linux-*
+  - lightningcss-win32-*
   - sqlite-vec-linux-*
   - sqlite-vec-windows-*
-  - '@napi-rs/canvas-win32-*'
-  - '@napi-rs/canvas-linux-*'
-  - '@napi-rs/canvas-android-*'
 
 snapshots:
 
@@ -4521,6 +4531,14 @@ snapshots:
     transitivePeerDependencies:
       - react
       - react-dom
+
+  '@langchain/mcp-adapters@2.0.3(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(@langchain/langgraph@1.7.5(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7))':
+    dependencies:
+      '@langchain/core': 1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7))
+      '@langchain/langgraph': 1.7.5(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
+      '@modelcontextprotocol/client': 2.4.0
+      '@modelcontextprotocol/core': 2.4.0
+      zod: 4.6.7
 
   '@langchain/openai@1.8.4(@langchain/core@1.4.1(@opentelemetry/api@1.10.0)(openai@7.59.0(undici@7.30.2)(zod@4.6.7)))(undici@7.30.2)':
     dependencies:

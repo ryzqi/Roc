@@ -19,7 +19,7 @@ before(async () => {
       export * from './src/main/plugins/mcp/mcp-bounded-fetch';
       export { createLangChainTool, createMcpOutputValidator } from './src/main/plugins/mcp/mcp-client-adapter';
       export { createToolProtocolMiddleware } from './src/main/services/deep-agent/tool-protocol';
-      export { createRocCapabilityToolExposureMiddleware, createRocPlanToolExposureMiddleware } from './src/main/services/deep-agent/model-tool-exposure';
+      export { createRocToolExposureMiddleware } from './src/main/services/deep-agent/model-tool-exposure';
       export { WebReadService } from './src/main/services/web-read-service';
     `, resolveDir: process.cwd() },
     outfile, bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent'
@@ -43,18 +43,24 @@ test('model exposure intersects scope authority with available tools and preserv
   ] };
   const read = { name: 'read_file', schema: { path: 'original' } }, write = { name: 'write_file' };
   const tools = [read, write, { name: 'task' }, { name: 'write_todos' }, null, {}];
-  const main = api.createRocCapabilityToolExposureMiddleware(manifest, 'main');
-  const child = api.createRocCapabilityToolExposureMiddleware(manifest, 'subagent');
+  const main = api.createRocToolExposureMiddleware(manifest, 'main', 'run');
+  const child = api.createRocToolExposureMiddleware(manifest, 'subagent', 'run');
   const handler = async request => request.tools;
   assert.deepEqual(await main.wrapModelCall({ tools }, handler), [read, write]);
   const childTools = await child.wrapModelCall({ tools }, handler);
   assert.deepEqual(childTools, [read]); assert.equal(childTools[0], read);
   assert.deepEqual(await main.wrapModelCall({}, handler), []);
-  const plan = api.createRocPlanToolExposureMiddleware();
-  assert.deepEqual(await plan.wrapModelCall({ tools }, request => main.wrapModelCall(request, handler)), [read]);
+  const plan = api.createRocToolExposureMiddleware(manifest, 'main', 'plan');
+  assert.deepEqual(await plan.wrapModelCall({ tools }, handler), [read]);
   // Hiding tools never replaces execution authorization, including malicious/hallucinated calls.
   const guard = api.createToolProtocolMiddleware({ capabilityManifest: manifest, executionScope: 'subagent', boundToolNames: ['write_file'] });
   await assert.rejects(guard.wrapToolCall({ tool: write, toolCall: { name: 'write_file' } }, async () => assert.fail('must not execute')), /scope_denied/);
+  const planGuard = api.createToolProtocolMiddleware({ capabilityManifest: manifest, executionScope: 'main',
+    mode: 'plan', boundToolNames: ['read_file', 'write_file'] });
+  const unknownTool = await planGuard.wrapToolCall({ tool: undefined, toolCall: { name: 'hallucinated_tool', id: 'bad' } },
+    async () => assert.fail('hallucinated tools must never dispatch'));
+  assert.match(unknownTool.content, /read_file/);
+  assert.doesNotMatch(unknownTool.content, /write_file/, 'plan-mode error feedback must not advertise hidden mutation tools');
 });
 function input(overrides = {}) {
   return {
@@ -64,7 +70,7 @@ function input(overrides = {}) {
   };
 }
 
-function makeMcpTool({ client, semaphore, timeoutMs, description = 'Fixture lookup.' } = {}) {
+async function makeMcpTool({ client, semaphore, timeoutMs, description = 'Fixture lookup.' } = {}) {
   const inputSchema = {
     type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false
   };
@@ -83,7 +89,7 @@ function makeMcpTool({ client, semaphore, timeoutMs, description = 'Fixture look
       return () => undefined;
     }
   };
-  const tool = api.createLangChainTool({
+  const tool = await api.createLangChainTool({
     client, contract, description: remoteTool.description, remoteTool, runtimeToolName: contract.runtimeToolName,
     runSignal: new AbortController().signal, semaphore: semaphore ?? defaultSemaphore, timeoutMs
   });
@@ -130,7 +136,7 @@ test('hostile web text remains untrusted and its forged execution proposals disp
 });
 
 test('hostile MCP description cannot expand frozen tools or remove approval before effect dispatch', async () => {
-  const {contract} = makeMcpTool({description: hostileText});
+  const {contract} = await makeMcpTool({description: hostileText});
   const manifest = api.bindMcpToolContracts(api.compileRunCapabilityManifest(input({mode: 'plan'})).manifest, [contract]);
   assert.equal(manifest.tools.find(tool => tool.modelVisibleName === 'fixture_lookup').approvalPolicy.kind, 'required');
   await assertHostileProposalsDenied(hostileText, manifest, 'mcp-description-sentinel');
@@ -138,7 +144,7 @@ test('hostile MCP description cannot expand frozen tools or remove approval befo
 
 test('hostile MCP result stays tool data and forged follow-up effects are not dispatched', async () => {
   let reads = 0;
-  const {tool, contract} = makeMcpTool({client: {callTool: async () => {
+  const {tool, contract} = await makeMcpTool({client: {callTool: async () => {
     reads++; return {isError: false, content: [{type: 'text', text: hostileText}],
       structuredContent: {result: hostileText, count: 1}};
   }}});
@@ -146,6 +152,29 @@ test('hostile MCP result stays tool data and forged follow-up effects are not di
   assert.equal(result.type, 'tool'); assert.equal(reads, 1);
   const manifest = api.bindMcpToolContracts(api.compileRunCapabilityManifest(input({mode: 'plan'})).manifest, [contract]);
   await assertHostileProposalsDenied(JSON.stringify(result.content), manifest, 'mcp-result-sentinel');
+});
+
+test('native MCP conversion preserves remote error status and the exact approved tool identity', async () => {
+  const { tool } = await makeMcpTool({ client: { callTool: async () => ({
+    isError: true, content: [{ type: 'text', text: 'upstream rejected the input' }]
+  }) } });
+  const message = await tool.invoke({ type: 'tool_call', name: tool.name, id: 'approved-call',
+    args: { query: 'fixture' } });
+  assert.equal(message.type, 'tool');
+  assert.equal(message.status, 'error');
+  assert.equal(message.name, 'fixture_fixture_lookup');
+  assert.equal(message.tool_call_id, 'approved-call');
+  assert.match(JSON.stringify(message.content), /upstream rejected the input/);
+});
+
+test('native MCP tool keeps the frozen schema, description, and contract metadata', async () => {
+  const description = 'A bounded, approved remote lookup tool.';
+  const { tool, contract } = await makeMcpTool({ description });
+  assert.equal(tool.name, contract.runtimeToolName);
+  assert.equal(tool.description, description);
+  assert.deepEqual(tool.metadata.mcpContract, contract);
+  assert.equal(tool.schema.properties.query.type, 'string');
+  assert.deepEqual(tool.schema.required, ['query']);
 });
 
 test('capability previews and runtime compile the same manifest and approval policies', () => {
@@ -351,7 +380,7 @@ test('MCP tool invocation propagates caller cancellation to the remote request',
   let requestSignal;
   let markStarted;
   const started = new Promise((resolve) => { markStarted = resolve; });
-  const { tool } = makeMcpTool({
+  const { tool } = await makeMcpTool({
     timeoutMs: 5_000,
     client: {
       callTool: (_request, options) => {
@@ -384,7 +413,7 @@ test('MCP invocation timeout aborts while waiting for a server permit', async ()
       });
     }
   };
-  const { tool } = makeMcpTool({
+  const { tool } = await makeMcpTool({
     timeoutMs: 25,
     semaphore: waitingSemaphore,
     client: { callTool: async () => { providerCalls += 1; return successResult(); } }
@@ -396,7 +425,7 @@ test('MCP invocation timeout aborts while waiting for a server permit', async ()
 
 test('MCP tool rejects oversized input before the provider call', async () => {
   let providerCalls = 0;
-  const { tool } = makeMcpTool({
+  const { tool } = await makeMcpTool({
     client: { callTool: async () => { providerCalls += 1; return successResult(); } }
   });
   await assert.rejects(tool.invoke({ query: 'x'.repeat(api.MCP_MAX_TOOL_INPUT_BYTES + 1) }), /mcp_tool_input_limit/);
@@ -405,7 +434,7 @@ test('MCP tool rejects oversized input before the provider call', async () => {
 
 test('MCP tool rejects oversized structured responses', async () => {
   let providerCalls = 0;
-  const { tool } = makeMcpTool({
+  const { tool } = await makeMcpTool({
     client: {
       callTool: async () => {
         providerCalls += 1;
@@ -474,11 +503,11 @@ test('unselected enabled MCP servers cannot contribute tools or require contract
   assert.doesNotThrow(() => api.bindMcpToolContracts(compiled.manifest, []));
 });
 
-test('MCP tools and contracts are limited to the requested enabled server', () => {
+test('MCP tools and contracts are limited to the requested enabled server', async () => {
   const unselected = {...server, id: 'unselected', allowedTools: ['other_tool']};
   const compiled = api.compileRunCapabilityManifest(input({mcpServers: [unselected, server]}));
   assert.deepEqual(compiled.manifest.tools.filter(tool => tool.provenance.kind === 'mcp').map(tool => tool.provenance.serverId), ['fixture']);
-  const {contract} = makeMcpTool();
+  const {contract} = await makeMcpTool();
   assert.doesNotThrow(() => api.bindMcpToolContracts(compiled.manifest, [contract]));
   assert.throws(() => api.bindMcpToolContracts(compiled.manifest, []), /mcp_tool_contract_missing/);
 });

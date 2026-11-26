@@ -1,6 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
-import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1 } from '../../../shared/types';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionMode } from '../../../shared/types';
+import { filterRocModelVisibleTools } from './model-tool-exposure';
 
 const JSON_HANDOFF_FIELDS_BY_TOOL = {
   propose_background_task: new Set(['trigger']),
@@ -10,6 +11,7 @@ const JSON_HANDOFF_FIELDS_BY_TOOL = {
 export type ToolProtocolOptions = {
   capabilityManifest: RunCapabilityManifestV1;
   executionScope: RunCapabilityExecutionScopeV1;
+  mode?: RunExecutionMode;
   /** 运行时实际绑定给 ToolNode 的工具名。用于把模型幻觉的名字与真实授权泄漏区分开。 */
   boundToolNames: readonly string[];
 };
@@ -62,9 +64,10 @@ function detectUnboundToolCall(
   if (options.boundToolNames.includes(request.toolCall.name)) {
     return null;
   }
-  const authorizedToolNames = options.capabilityManifest.tools
-    .filter((tool) => tool.executionScopes.includes(options.executionScope))
-    .map((tool) => tool.modelVisibleName);
+  const authorizedToolNames = filterRocModelVisibleTools(
+    options.capabilityManifest.tools.map(tool => ({ name: tool.modelVisibleName })),
+    options.capabilityManifest, options.executionScope, options.mode ?? 'run'
+  ).map(tool => tool.name);
   return new ToolMessage({
     tool_call_id: request.toolCall.id === undefined || request.toolCall.id.length === 0
       ? `unknown_${request.toolCall.name}`

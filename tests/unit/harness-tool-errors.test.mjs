@@ -94,7 +94,7 @@ test('resolution failure settles usage as failed and keeps idempotency failure n
   };
   const usage = api.createRunUsageMiddleware(ledger, 'run', {}, {});
   const effects = api.createToolEffectIdempotencyMiddleware({ runId: 'run', threadId: 'thread',
-    capabilityManifest: { tools: [{ modelVisibleName: 'task', canonicalIdentity: 'agent.task', toolVersion: 'v1',
+    executionScope: 'main', capabilityManifest: { tools: [{ modelVisibleName: 'task', canonicalIdentity: 'agent.task', toolVersion: 'v1',
       idempotencyStrategy: 'tool_call', effectClass: 'workspace_mutation', reconcileStrategy: 'retry_safe' }] },
     store: {
       beginOperation: () => ({ kind: 'execute', lease: { operationId: 'operation', idempotencyKey: 'key',
@@ -106,7 +106,7 @@ test('resolution failure settles usage as failed and keeps idempotency failure n
   });
   const input = request('task');
   input.toolCall.args = { description: 'Read the record.', subagent_type: 'research' };
-  input.runtime.configurable = { checkpoint_ns: 'tools:fixture', checkpoint_map: { '': 'checkpoint' }, ls_agent_type: 'root' };
+  input.runtime.executionInfo = { checkpointNs: 'tools:fixture', checkpointId: 'checkpoint', taskId: 'fixture-tool-task' };
   const error = new api.RocToolResolutionError('Missing record id.');
   // Match the production nesting: usage > runtime > resolution > idempotency.
   const result = await usage.wrapToolCall(input, a => runtime.wrapToolCall(a, b =>

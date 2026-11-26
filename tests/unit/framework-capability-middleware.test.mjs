@@ -14,7 +14,7 @@ const options = { platform: 'node', tempDir: root,
   external: [...Object.keys(packages.dependencies), ...Object.keys(packages.devDependencies)] };
 const { createCapabilityFilesystemMiddleware, createCapabilityMemoryMiddleware, createCapabilityTodoMiddleware } = await importTypeScriptModule(
   'src/main/services/deep-agent/framework-capability-middleware.ts', options);
-const { createRocCapabilityToolExposureMiddleware } = await importTypeScriptModule(
+const { createRocToolExposureMiddleware } = await importTypeScriptModule(
   'src/main/services/deep-agent/model-tool-exposure.ts', options);
 const { resolveMiddlewareStack, readMiddlewareName } = await importTypeScriptModule(
   'src/main/services/deep-agent/middleware-stack.ts', options);
@@ -182,7 +182,7 @@ test('disabled todo overrides model-profile additions in the real graph with a f
       middleware: [
         createCapabilityFilesystemMiddleware(backend, [], readonly, 'main'),
         ...(override ? [createCapabilityTodoMiddleware(readonly, 'main')] : []),
-        createRocCapabilityToolExposureMiddleware(readonly, 'main')
+        createRocToolExposureMiddleware(readonly, 'main', 'run')
       ]
     });
     await agent.invoke({ messages: [new HumanMessage('Return done.')] });

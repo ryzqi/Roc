@@ -1,52 +1,43 @@
+import type { RunCapabilityExecutionScopeV1 } from '../../../shared/types';
+import { getConfig } from '@langchain/langgraph';
+
 export type DeepAgentsExecutionIdentity = {
   executionPath: string;
   checkpointId: string;
 };
 
-export function readDeepAgentsExecutionIdentity(configurable: unknown): DeepAgentsExecutionIdentity | null {
-  if (!isRecord(configurable)) {
-    return null;
-  }
-  const checkpointNamespace = configurable.checkpoint_ns;
-  const checkpointMap = configurable.checkpoint_map;
-  const agentType = configurable.ls_agent_type;
-  if (
-    typeof checkpointNamespace !== 'string' ||
-    !isRecord(checkpointMap) ||
-    typeof agentType !== 'string'
-  ) {
-    return null;
-  }
-  const agentNamespace = readAgentNamespace(checkpointNamespace);
-  if (agentNamespace === null) {
-    return null;
-  }
-  const expectedAgentType = agentNamespace.length === 0 ? 'root' : 'subagent';
-  if (agentType !== expectedAgentType) {
-    return null;
-  }
-  const checkpointId = checkpointMap[agentNamespace];
-  if (typeof checkpointId !== 'string' || checkpointId.length === 0) {
+/** Use LangGraph's public executionInfo, not private configurable fields or node-name prefixes. */
+export function readDeepAgentsExecutionIdentity(
+  executionInfo: unknown,
+  scope: RunCapabilityExecutionScopeV1
+): DeepAgentsExecutionIdentity | null {
+  if (!isRecord(executionInfo) || typeof executionInfo.checkpointId !== 'string' ||
+      executionInfo.checkpointId.length === 0 || typeof executionInfo.checkpointNs !== 'string' ||
+      typeof executionInfo.taskId !== 'string' || executionInfo.taskId.length === 0) {
     return null;
   }
   return {
-    executionPath: agentNamespace.length === 0 ? 'main' : `subagent/${agentNamespace}`,
-    checkpointId
+    executionPath: scope === 'main' ? 'main' : `subagent/${executionInfo.checkpointNs}`,
+    checkpointId: executionInfo.checkpointId
   };
 }
 
-function readAgentNamespace(checkpointNamespace: string): string | null {
-  const separatorIndex = checkpointNamespace.lastIndexOf('|');
-  if (separatorIndex === 0) {
+/**
+ * LangChain 1.6 ToolNode does not copy `executionInfo` into middleware runtime.
+ * LangGraph's public getConfig() retains it in the current async task context.
+ */
+export function readCurrentDeepAgentsExecutionIdentity(
+  runtime: { executionInfo?: unknown } | undefined,
+  scope: RunCapabilityExecutionScopeV1
+): DeepAgentsExecutionIdentity | null {
+  if (runtime?.executionInfo !== undefined) {
+    return readDeepAgentsExecutionIdentity(runtime.executionInfo, scope);
+  }
+  try {
+    return readDeepAgentsExecutionIdentity(getConfig().executionInfo, scope);
+  } catch {
     return null;
   }
-  const toolSegment = separatorIndex === -1
-    ? checkpointNamespace
-    : checkpointNamespace.slice(separatorIndex + 1);
-  if (!toolSegment.startsWith('tools:') || toolSegment.length === 'tools:'.length) {
-    return null;
-  }
-  return separatorIndex === -1 ? '' : checkpointNamespace.slice(0, separatorIndex);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

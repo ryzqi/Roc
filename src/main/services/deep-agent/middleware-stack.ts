@@ -28,9 +28,8 @@ import {
 } from './context/context-compaction-pipeline';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import {
-  createRocCapabilityToolExposureMiddleware,
+  createRocToolExposureMiddleware,
   createRocPlanRuntimeToolGuardMiddleware,
-  createRocPlanToolExposureMiddleware
 } from './model-tool-exposure';
 import { createRocPlanFilesystemDefaultPathMiddleware } from './plan-filesystem-defaults';
 import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
@@ -41,7 +40,7 @@ import type { RunUsageLedger, RunModelConfig } from './run-usage-ledger';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
 import type { RunUsageObserver } from './run-usage-observer';
 import { createRunUsageMiddleware, createRunCorrectionMiddleware } from './run-usage-middleware';
-import { createResponseContractMiddleware } from './response-contract-middleware';
+import { createResponseContractMiddleware, supportsNativeResponseContract } from './response-contract-middleware';
 import { createCapabilityFilesystemMiddleware, createCapabilityMemoryMiddleware, createCapabilityTodoMiddleware } from './framework-capability-middleware';
 import type { FilesystemPermission } from 'deepagents';
 import { createToolProtocolMiddleware } from './tool-protocol';
@@ -149,7 +148,8 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     name: 'RocResponseContractMiddleware',
     scopes: ['main'],
     modes: ALL_MODES,
-    create: context => context.taskContract.responseContract === undefined ? null
+    create: context => context.taskContract.responseContract === undefined ||
+      supportsNativeResponseContract(context.taskContract.responseContract) ? null
       : createResponseContractMiddleware(context.policy.runId, context.taskContract.responseContract)
   },
   {
@@ -178,12 +178,6 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       backend: context.backend,
       memorySources: [...context.memorySources]
     })
-  },
-  {
-    name: 'RocPlanToolExposureMiddleware',
-    scopes: ALL_SCOPES,
-    modes: ['plan'],
-    create: () => createRocPlanToolExposureMiddleware()
   },
   {
     name: 'RocPlanRuntimeToolGuardMiddleware',
@@ -217,6 +211,7 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     create: (context) => createToolProtocolMiddleware({
       capabilityManifest: context.policy.capabilityManifest,
       executionScope: context.executionScope,
+      mode: context.policy.mode,
       boundToolNames: context.policy.boundToolNames
     })
   },
@@ -312,7 +307,9 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
       context.usageObserver,
       context.toolEffectStore,
       context.taskContract,
-      context.contextCompaction.tokenCounter
+      context.contextCompaction.tokenCounter,
+      undefined,
+      context.executionScope
     )
   },
   {
@@ -338,7 +335,8 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
           runId: context.policy.runId,
           threadId: context.policy.threadId,
           store: context.toolEffectStore,
-          capabilityManifest: context.policy.capabilityManifest
+          capabilityManifest: context.policy.capabilityManifest,
+          executionScope: context.executionScope
         })
   },
   {
@@ -353,8 +351,8 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
   },
   {
     // Innermost model wrapper: intersect framework-added tools with this scope's frozen authority.
-    name: 'RocCapabilityToolExposureMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
-    create: context => createRocCapabilityToolExposureMiddleware(context.policy.capabilityManifest, context.executionScope)
+    name: 'RocToolExposureMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
+    create: context => createRocToolExposureMiddleware(context.policy.capabilityManifest, context.executionScope, context.policy.mode)
   }
 ];
 

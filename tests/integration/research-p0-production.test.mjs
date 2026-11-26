@@ -2495,10 +2495,10 @@ test('MCP timeout after a local external write requires a matching receipt and r
       const manifest = api.bindMcpToolContracts(compiled, loaded.map(tool => tool.metadata.mcpContract));
       const store = new api.AgentToolEffectStore(f.agentDb);
       const middleware = api.createToolEffectIdempotencyMiddleware({
-        runId: f.run.id, threadId: 'p0-mcp-thread', store, capabilityManifest: manifest
+        runId: f.run.id, threadId: 'p0-mcp-thread', store, capabilityManifest: manifest, executionScope: 'main'
       });
       const request = {toolCall: {id: 'p0-write', name: 'write', args: {requestId: 'p0-committed-write'}},
-        runtime: {configurable: {checkpoint_ns: 'tools:p0', checkpoint_map: {'': 'p0-checkpoint'}, ls_agent_type: 'root'}}};
+        runtime: {executionInfo: {checkpointNs: 'tools:p0', checkpointId: 'p0-checkpoint', taskId: 'p0-tool-task'}}};
       const policy = manifest.tools.find(tool => tool.modelVisibleName === request.toolCall.name);
       assert.equal(policy.reconcileStrategy, 'manual_confirmation');
       const operation = {runId: f.run.id, threadId: 'p0-mcp-thread', executionPath: 'main',

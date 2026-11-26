@@ -3,12 +3,13 @@ import { AIMessage, HumanMessage, RemoveMessage, ToolMessage, type BaseMessage }
 import { createMiddleware } from 'langchain';
 import { Command, REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { z } from 'zod';
-import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
+import { readCurrentDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
 import { RunUsageLedger, runInputMessageId, type RunModelConfig } from './run-usage-ledger';
 import type { RunUsageObserver } from './run-usage-observer';
 import { hashToolInput, type AgentToolEffectStore } from './tool-effect-store';
 import { childTaskEnvelopeSchema } from '../../../shared/schemas/task-acceptance';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
+import type { RunCapabilityExecutionScopeV1 } from '../../../shared/types';
 import { deriveContextCapacityProfile, type ContextTokenCounter } from './context/context-capacity';
 
 export function createRunUsageMiddleware(
@@ -19,7 +20,8 @@ export function createRunUsageMiddleware(
   effects?: AgentToolEffectStore,
   taskContract?: TaskContract,
   tokenCounter?: ContextTokenCounter,
-  toolProgressScope?: string
+  toolProgressScope?: string,
+  executionScope: RunCapabilityExecutionScopeV1 = 'main'
 ) {
   return createMiddleware({
     name: 'RocRunUsageMiddleware',
@@ -50,7 +52,7 @@ export function createRunUsageMiddleware(
       });
     },
     wrapToolCall: async (request, handler) => {
-      const identity = readDeepAgentsExecutionIdentity(request.runtime?.configurable);
+      const identity = readCurrentDeepAgentsExecutionIdentity(request.runtime, executionScope);
       request.runtime.signal?.throwIfAborted();
       const isChildTask = request.toolCall.name === 'task';
       if (isChildTask && identity?.executionPath !== 'main') throw new Error('run_child_task_depth_exhausted');

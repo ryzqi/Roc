@@ -56,10 +56,10 @@ test('rejecting completed reading permits a replacement run while unreviewed out
 
 function effectMiddleware(f, name='research_approve_gate') {
   const store=new api.AgentToolEffectStore(f.agentDb);
-  const request={toolCall:{id:'gate-call',name,args:{}},runtime:{configurable:{
-    checkpoint_ns:'tools:gate',checkpoint_map:{'':'gate-checkpoint'},ls_agent_type:'root'
+  const request={toolCall:{id:'gate-call',name,args:{}},runtime:{executionInfo:{
+    checkpointNs:'tools:gate',checkpointId:'gate-checkpoint',taskId:'gate-task'
   }}};
-  const middleware=api.createToolEffectIdempotencyMiddleware({runId:f.run.id,threadId:'effect-gate',store,
+  const middleware=api.createToolEffectIdempotencyMiddleware({runId:f.run.id,threadId:'effect-gate',store,executionScope:'main',
     capabilityManifest:{manifestHash:'gate-test',tools:[{modelVisibleName:name,canonicalIdentity:`research.${name}`,
       toolVersion:'1',effectClass:'external_call',idempotencyStrategy:'operation_key',reconcileStrategy:'manual_confirmation'}]}});
   return {store,request,middleware,status:()=>f.agentDb.prepare('SELECT status FROM agent_tool_effects WHERE run_id=?').pluck().get(f.run.id)};

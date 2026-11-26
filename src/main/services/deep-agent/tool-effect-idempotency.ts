@@ -6,7 +6,8 @@ import { createMiddleware } from 'langchain';
 import type {
   RunCapabilityManifestToolV1,
   RunCapabilityManifestV1,
-  RunCapabilityReconcileStrategyV1
+  RunCapabilityReconcileStrategyV1,
+  RunCapabilityExecutionScopeV1
 } from '../../../shared/types';
 import { RocToolResolutionError } from '../forge-guardrails/errors';
 import { unwrapMiddlewareError } from '../forge-guardrails/middleware/middleware-error';
@@ -16,7 +17,7 @@ import {
   createCapabilityOperationContext,
   runWithCapabilityOperationContext
 } from '../../kernel/capability-operation-context';
-import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
+import { readCurrentDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
 import { AgentToolEffectStore, type ToolEffectKey } from './tool-effect-store';
 
 type ToolEffectIdempotencyOptions = {
@@ -24,6 +25,7 @@ type ToolEffectIdempotencyOptions = {
   threadId: string;
   store: AgentToolEffectStore;
   capabilityManifest: RunCapabilityManifestV1;
+  executionScope: RunCapabilityExecutionScopeV1;
 };
 
 type ToolCallRequest = {
@@ -34,7 +36,7 @@ type ToolCallRequest = {
     name: string;
   };
   runtime?: {
-    configurable?: unknown;
+    executionInfo?: unknown;
   };
 };
 
@@ -65,7 +67,7 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
       if (toolCallId === null) {
         return createEffectErrorMessage(typedRequest.toolCall.name, 'unknown-tool-call', 'agent_tool_effect_call_id_missing');
       }
-      const executionIdentity = readDeepAgentsExecutionIdentity(typedRequest.runtime?.configurable);
+      const executionIdentity = readCurrentDeepAgentsExecutionIdentity(typedRequest.runtime, options.executionScope);
       if (executionIdentity === null) {
         return createEffectErrorMessage(typedRequest.toolCall.name, toolCallId, 'agent_tool_effect_execution_info_missing');
       }

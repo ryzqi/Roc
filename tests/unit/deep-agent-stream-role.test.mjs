@@ -93,3 +93,15 @@ test('malformed message role fails before visible output', async () => {
   }, /deep_agents_v3_message_role_invalid/);
   assert.equal(events.some(event => event.type === 'assistant_delta'), false);
 });
+
+test('native Deep Agents structuredResponse is projected as a complete JSON final answer', async () => {
+  const adapted = adaptDeepAgentRun({
+    messages: values([]), toolCalls: values([]), subagents: values([]), interrupted: false,
+    output: Promise.resolve({ messages: [{ role: 'assistant', content: '' }],
+      structuredResponse: { answer: 'verified', count: 2 } })
+  }, { projectToolOutput: ({ output }) => output });
+  assert.equal(await adapted.output, '{"answer":"verified","count":2}');
+  const events = [];
+  for await (const event of adapted.events) events.push(event);
+  assert.deepEqual(events, []);
+});

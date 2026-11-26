@@ -708,6 +708,11 @@ function adaptUsage(value: unknown): TokenUsage {
 
 function adaptOutput(value: unknown, owner: 'run' | 'subagent'): string | null {
   const output = requireRecord(value, `deep_agents_v3_${owner}_output_invalid`);
+  if (owner === 'run' && output.structuredResponse !== undefined) {
+    const text = JSON.stringify(output.structuredResponse);
+    if (text === undefined) throw contractError('deep_agents_v3_structured_response_invalid');
+    return text;
+  }
   const messages = readRequiredField(
     output,
     'messages',

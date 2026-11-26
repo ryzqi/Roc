@@ -1,6 +1,5 @@
-import { DynamicStructuredTool, type StructuredToolInterface } from '@langchain/core/tools';
-import { ToolMessage } from '@langchain/core/messages';
-import type { JsonSchema7Type } from '@langchain/core/utils/json_schema';
+import { type StructuredToolInterface } from '@langchain/core/tools';
+import { loadMcpTools } from '@langchain/mcp-adapters';
 import {
   Client,
   fromJsonSchema,
@@ -79,7 +78,7 @@ class BoundedMcpClientAdapter implements McpClientAdapter {
             serverId: server.id,
             transport: server.transport
           });
-          tools.push(createLangChainTool({
+          tools.push(await createLangChainTool({
             client: connected.client,
             contract,
             description,
@@ -237,7 +236,12 @@ class BoundedMcpClientAdapter implements McpClientAdapter {
   }
 }
 
-export function createLangChainTool(input: {
+/**
+ * Use LangChain's official tool conversion, but keep the frozen Roc MCP contract
+ * and the bounded per-run transport. The facade contains only the tools admitted
+ * by the user's server allowlist, not every remote-advertised tool.
+ */
+export async function createLangChainTool(input: {
   client: InstanceType<typeof Client>;
   contract: McpToolContractV1;
   description: string;
@@ -246,34 +250,27 @@ export function createLangChainTool(input: {
   runSignal: AbortSignal;
   semaphore: { acquire(signal: AbortSignal): Promise<() => void> };
   timeoutMs?: number;
-}): StructuredToolInterface {
-  // SAFETY: the MCP SDK schema is validated immediately by createJsonSchemaParser before the provider schema is exposed.
-  const jsonSchema = input.remoteTool.inputSchema as unknown as JsonSchemaType;
-  const inputParser = createJsonSchemaParser(jsonSchema);
+}): Promise<StructuredToolInterface> {
   const validateOutput = createMcpOutputValidator(input.remoteTool.outputSchema);
-  const modelSchema = structuredClone(jsonSchema) as Record<string, unknown>;
-  if (!isRecord(modelSchema.properties)) modelSchema.properties = {};
-  // SAFETY: the MCP JSON Schema was validated by fromJsonSchema before this provider-facing schema is used.
-  const schema = modelSchema as unknown as JsonSchema7Type;
-  const tool: StructuredToolInterface = new DynamicStructuredTool({
-    name: input.runtimeToolName,
-    description: input.description,
-    schema,
-    responseFormat: 'content_and_artifact',
-    metadata: { mcpContract: input.contract },
-    func: async (args, _runManager, config) => {
-      const parsed = await inputParser.safeParseAsync(args);
-      if (!parsed.success) {
-        throw new Error(`mcp_tool_input_invalid:${parsed.error.issues.map((issue) => issue.message).join('; ')}`);
-      }
-      const argumentsObject = parsed.data as Record<string, unknown>;
+  const timeoutMs = input.timeoutMs ?? MCP_TOOL_TIMEOUT_MS;
+  const facade = {
+    getProtocolEra: () => input.client?.getProtocolEra?.() ?? 'legacy',
+    // Keep the already size-checked, contract-frozen provider description. Do not
+    // re-read the remote server's descriptor when the official adapter loads it.
+    listTools: async () => ({ tools: [{ ...input.remoteTool, description: input.description }] }),
+    callTool: async (request: { name: string; arguments?: Record<string, unknown> }, options?: {
+      signal?: AbortSignal;
+      timeout?: number;
+      toolDefinition?: McpRemoteTool;
+    }): Promise<McpCallToolResult> => {
+      if (request.name !== input.remoteTool.name) throw new Error('mcp_tool_not_in_run_allowlist');
+      const argumentsObject = request.arguments ?? {};
       const serializedInput = JSON.stringify(argumentsObject);
       if (serializedInput === undefined || Buffer.byteLength(serializedInput, 'utf8') > input.contract.maxInputBytes) {
         throw new Error('mcp_tool_input_limit');
       }
-      const timeoutMs = input.timeoutMs ?? MCP_TOOL_TIMEOUT_MS;
       const timeoutSignal = AbortSignal.timeout(timeoutMs);
-      const signal = combineSignals(combineSignals(input.runSignal, config?.signal), timeoutSignal);
+      const signal = combineSignals(combineSignals(input.runSignal, options?.signal), timeoutSignal);
       const release = await input.semaphore.acquire(signal);
       try {
         const result = await input.client.callTool(
@@ -284,29 +281,13 @@ export function createLangChainTool(input: {
             toolDefinition: input.remoteTool
           }
         );
-        if (result.isError) {
-          const message = result.content
-            .filter((content) => content.type === 'text')
-            .map((content) => content.text)
-            .join('\\n');
-          const toolCallId = getToolCallId(config);
-          if (toolCallId !== undefined) {
-            return [new ToolMessage({
-              content: message || 'mcp_tool_remote_error',
-              tool_call_id: toolCallId,
-              name: tool.name,
-              status: 'error'
-            }), []];
-          }
-          throw new Error(message || 'mcp_tool_remote_error');
-        }
-        await validateOutput(result.structuredContent);
-        const converted = convertCallToolResult(result);
-        const serializedOutput = JSON.stringify({ structuredContent: result.structuredContent ?? null, converted });
+        if (!result.isError) await validateOutput(result.structuredContent);
+        // Apply the bound before the official adapter materializes multimodal content.
+        const serializedOutput = JSON.stringify(result);
         if (serializedOutput === undefined || Buffer.byteLength(serializedOutput, 'utf8') > input.contract.maxOutputBytes) {
           throw new Error('mcp_tool_output_limit');
         }
-        return converted;
+        return result;
       } catch (error) {
         if (signal.aborted) throw error;
         throw new Error(`Error calling tool ${input.remoteTool.name}: ${String(error)}`, { cause: error });
@@ -314,7 +295,19 @@ export function createLangChainTool(input: {
         release();
       }
     }
+  };
+  // loadMcpTools accepts an already-owned MCP Client. Its invocation only needs
+  // listTools/getProtocolEra/callTool, which this constrained, run-scoped facade supplies.
+  const tools = await loadMcpTools(input.contract.serverId, facade as unknown as InstanceType<typeof Client>, {
+    prefixToolNameWithServerName: true,
+    throwOnLoadError: true,
+    defaultToolTimeout: timeoutMs
   });
+  const tool = tools[0];
+  if (tools.length !== 1 || tool === undefined || tool.name !== input.runtimeToolName) {
+    throw new Error('mcp_tool_adapter_name_mismatch');
+  }
+  tool.metadata = { ...tool.metadata, mcpContract: input.contract };
   return tool;
 }
 
@@ -345,15 +338,6 @@ function createJsonSchemaParser(jsonSchema: JsonSchemaType): z.ZodType {
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function getToolCallId(config: unknown): string | undefined {
-  const toolCall = isRecord(config) ? config.toolCall : undefined;
-  return isRecord(toolCall) && typeof toolCall.id === 'string' ? toolCall.id : undefined;
-}
-
 function selectAllowedRemoteTools(server: McpServerConfig, tools: readonly McpRemoteTool[]): McpRemoteTool[] {
   const allowed = new Set(server.allowedTools);
   const selected = tools.filter((remoteTool) => allowed.has(remoteTool.name));
@@ -363,46 +347,6 @@ function selectAllowedRemoteTools(server: McpServerConfig, tools: readonly McpRe
   const preferred = selected.find((remoteTool) => remoteTool.name === 'web_search_exa')
     ?? selected.find((remoteTool) => remoteTool.name === 'web_search_advanced_exa');
   return preferred === undefined ? [] : [preferred];
-}
-
-function convertCallToolResult(result: McpCallToolResult): [string | Array<Record<string, unknown>>, Record<string, unknown>] {
-  const content: Array<Record<string, unknown>> = [];
-  const artifacts: unknown[] = [];
-  for (const block of result.content) {
-    if (block.type === 'text') {
-      content.push({ type: 'text', text: block.text });
-    } else if (block.type === 'image') {
-      content.push({ type: 'image', source_type: 'base64', data: block.data, mime_type: block.mimeType });
-      artifacts.push(block);
-    } else if (block.type === 'audio') {
-      content.push({ type: 'audio', source_type: 'base64', data: block.data, mime_type: block.mimeType });
-      artifacts.push(block);
-    } else if (block.type === 'resource') {
-      if ('text' in block.resource) {
-        content.push({ type: 'text', text: block.resource.text, metadata: { uri: block.resource.uri } });
-      } else {
-        const mimeType = block.resource.mimeType ?? 'application/octet-stream';
-        const contentType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('audio/') ? 'audio' : 'file';
-        content.push({ type: contentType, source_type: 'base64', data: block.resource.blob, mime_type: mimeType });
-      }
-      artifacts.push(block);
-    } else if (block.type === 'resource_link') {
-      content.push({ type: 'file', source_type: 'url', url: block.uri, mime_type: block.mimeType, metadata: { name: block.name } });
-      artifacts.push(block);
-    } else {
-      artifacts.push(block);
-      content.push({ type: 'text', text: JSON.stringify(block) });
-    }
-  }
-  const hasExtraMetadata = result.structuredContent !== undefined || result._meta !== undefined;
-  const artifact: Record<string, unknown> = {};
-  if (artifacts.length > 0) artifact.content = artifacts;
-  if (result.structuredContent !== undefined) artifact.structuredContent = result.structuredContent;
-  if (result._meta !== undefined) artifact._meta = result._meta;
-  const renderedContent = content.length === 1 && content[0]?.type === 'text'
-    ? String(content[0].text ?? '')
-    : content;
-  return [renderedContent, hasExtraMetadata || artifacts.length > 0 ? artifact : {}];
 }
 
 function parseMcpUrl(value: string): URL {
