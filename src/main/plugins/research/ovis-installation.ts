@@ -91,6 +91,8 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
       const installed = await installOvisPackages({runtime, destination: root, wheelhouse: join(bundle.root, 'wheels'),
         requirements: join(input.specification, 'requirements.lock'), signal, projectId: input.projectId,
         onPhase: phase => input.onProgress?.({phase})});
+      // The supervised installer has exited; its disposable uv cache is not part of the generation.
+      await rm(join(root, 'scratch'), {recursive: true});
       // All source bytes belong to this transaction; the bundle no longer needs them.
       await rename(join(bundle.root, 'model-8bit'), join(root, 'model-8bit'));
       const spec = join(root, 'spec'); await mkdir(spec, {mode: 0o700});

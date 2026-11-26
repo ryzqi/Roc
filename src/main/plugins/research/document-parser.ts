@@ -1,3 +1,4 @@
+import {parsePageRange} from './parse-page-range';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
@@ -14,7 +15,6 @@ import {assessPdfQuality} from './pdf-quality-assessor';
 import {paperQualityVersion} from '../../../shared/schemas/research-paper-quality';
 import * as ort from 'onnxruntime-node';
 import {
-  createFormulaTokenizerVocabulary,
   getObjectDetectionPreset,
   matchTableStructureToOcr,
   parseRecognitionDictionary,
@@ -107,11 +107,12 @@ export async function parseResearchDocument(input: ParserInput): Promise<ParseDo
 
 async function parseResearchDocumentImpl(input: ParserInput): Promise<ParseDocument> {
   const options = researchParseOptionsSchema.parse(input.options);
+  if (options.tier !== 'compact') researchJobError('research_model_pack_unsupported');
   const extension = extname(input.sourcePath).toLowerCase();
   if (!(SUPPORTED_EXTENSIONS as readonly string[]).includes(extension)) {
     researchJobError('research_document_format_unsupported');
   }
-  if (input.modelFiles !== null && input.modelManifest !== modelPackManifest(options.tier)) {
+  if (input.modelFiles !== null && input.modelManifest !== modelPackManifest('compact')) {
     researchJobError('research_model_manifest_mismatch');
   }
   const maxSourceBytes = extension === '.html' || extension === '.htm' ? MAX_HTML_BYTES : MAX_SOURCE_BYTES;
@@ -155,8 +156,8 @@ async function parsePdf(
     const nativeTextPages: string[] = [];
     let usedOcr = false;
     let actualDevice: 'coreml' | 'cpu' = 'cpu';
-    // FormulaNet loses small numerators/subscripts at the compact raster's 108 DPI.
-    const ocrScale = options.tier === 'complete' ? 3 : 1.5;
+    // Basic OCR uses the fixed 108 DPI raster.
+    const ocrScale = 1.5;
     for (const pageNumber of pages) {
       if (input.trace) input.trace.page = pageNumber;
       throwIfAborted(signal);
@@ -224,7 +225,7 @@ async function parsePdf(
         const inferenceStartedAt = performance.now();
         let inference: Awaited<ReturnType<PaddleStructureService['run']>>;
         try {
-          inference = await service.service.run(ocrImage, structureRunOptions(service.hasFormula));
+          inference = await service.service.run(ocrImage, structureRunOptions());
           await service.sessions.releaseIdle();
         } catch (error) {
           input.trace?.flushModels(error);
@@ -352,7 +353,7 @@ async function parseImage(
     throwIfAborted(signal);
     let inference: Awaited<ReturnType<PaddleStructureService['run']>>;
     try {
-      inference = await service.service.run(raster, structureRunOptions(service.hasFormula));
+      inference = await service.service.run(raster, structureRunOptions());
       await service.sessions.releaseIdle();
     } catch (error) {
       input.trace?.flushModels(error);
@@ -430,7 +431,7 @@ async function parseHtml(job: ResearchJobPaths, options: ResearchParseOptions, t
   });
 }
 
-type StructureRuntime = { service: PaddleStructureService; sessions: OcrStageSessions; device: 'coreml' | 'cpu'; hasFormula: boolean };
+type StructureRuntime = { service: PaddleStructureService; sessions: OcrStageSessions; device: 'coreml' | 'cpu' };
 
 // Legacy CoreML neural networks trap on PP-DocLayout-S and misplace SLANet row bounds.
 const COREML_FLAG_CREATE_MLPROGRAM = 0x010;
@@ -457,12 +458,6 @@ async function createStructureService(
   const fileEntries: Array<[string, string]> = [
     ['ocr-det', files.detection], ['ocr-rec', files.recognition], ['ocr-dictionary', files.dictionary], ['layout', files.layout], ['table', files.table]
   ];
-  const formulaPath = files.formula;
-  const tokenizerPath = files.formulaTokenizer;
-  const hasFormula = formulaPath !== undefined && tokenizerPath !== undefined;
-  if (hasFormula) {
-    fileEntries.push(['formula', formulaPath], ['formula-tokenizer', tokenizerPath]);
-  }
   const buffers = new Map<string, Buffer>();
   const modelValidationStartedAt = performance.now();
   try {
@@ -530,10 +525,6 @@ async function createStructureService(
   throwIfAborted(signal);
   const modelInitializationStartedAt = performance.now();
   try {
-    const formulaOptions = hasFormula
-      ? await createFormulaOptions(buffers.get('formula'), buffers.get('formula-tokenizer'))
-      : undefined;
-    if (formulaOptions) modelStages.set(formulaOptions.modelBuffer, 'formula_recognition');
     const service = await PaddleStructureService.createInstance({
       ort: configuredOrt,
       ocr: {
@@ -543,35 +534,16 @@ async function createStructureService(
       },
       layout: { modelBuffer: modelBuffer(layout, 'layout_inference'), preset: layoutPreset.name, threshold: layoutThresholds },
       tableStructure: { modelBuffer: modelBuffer(table, 'table_reconstruction'), preset: 'SLANet' },
-      formulaRecognition: formulaOptions,
-      options: structureRunOptions(hasFormula)
+      options: structureRunOptions()
     });
     await sessions.releaseIdle();
-    return { service, sessions, hasFormula, get device() { return preferredDevice === 'coreml' && !usedCpuFallback ? 'coreml' : 'cpu'; } };
+    return { service, sessions, get device() { return preferredDevice === 'coreml' && !usedCpuFallback ? 'coreml' : 'cpu'; } };
   } finally {
     recordPdfStage(onStage, 'model-initialization', null, modelInitializationStartedAt);
   }
 }
 
-async function createFormulaOptions(formula: Buffer | undefined, tokenizer: Buffer | undefined): Promise<{
-  modelBuffer: ArrayBuffer;
-  preset: 'PP-FormulaNet-S';
-  tokenizerVocabulary: string[];
-} | undefined> {
-  if (formula === undefined || tokenizer === undefined) return undefined;
-  try {
-    const tokenizerJson: unknown = JSON.parse(tokenizer.toString('utf8')) as unknown;
-    return {
-      modelBuffer: toArrayBuffer(formula),
-      preset: 'PP-FormulaNet-S',
-      tokenizerVocabulary: createFormulaTokenizerVocabulary(tokenizerJson)
-    };
-  } catch {
-    throw new ResearchProcessError('research_model_tokenizer_invalid');
-  }
-}
-
-function structureRunOptions(hasFormula: boolean): PaddleStructureRunOptions {
+function structureRunOptions(): PaddleStructureRunOptions {
   return {
     documentOrientation: { enabled: false },
     textImageUnwarping: { enabled: false },
@@ -580,7 +552,7 @@ function structureRunOptions(hasFormula: boolean): PaddleStructureRunOptions {
     readingOrder: { enabled: true },
     ocr: { enabled: true },
     table: { enabled: true },
-    formula: { enabled: hasFormula },
+    formula: { enabled: false },
     seal: { enabled: false },
     markdown: { enabled: true },
     includeRegionImage: true
@@ -675,26 +647,6 @@ async function writeText(root: string, relativePath: string, content: string): P
   await writeFile(target, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
 }
 
-function parsePageRange(value: string, pageCount: number): number[] {
-  if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 10_000) researchJobError('research_pdf_page_limit');
-  if (value.trim().length === 0) {
-    if (pageCount > MAX_SELECTED_PAGES) researchJobError('research_parse_page_limit');
-    return Array.from({ length: pageCount }, (_, index) => index + 1);
-  }
-  const pages = new Set<number>();
-  for (const part of value.split(',')) {
-    const match = /^(\d+)(?:-(\d+))?$/u.exec(part.trim());
-    if (match === null) researchJobError('research_parse_page_range_invalid');
-    const start = Number(match[1]);
-    const end = match[2] === undefined ? start : Number(match[2]);
-    if (start < 1 || end < start || end > pageCount || end - start + 1 > MAX_SELECTED_PAGES) {
-      researchJobError('research_parse_page_range_invalid');
-    }
-    for (let page = start; page <= end; page += 1) pages.add(page);
-    if (pages.size > MAX_SELECTED_PAGES) researchJobError('research_parse_page_limit');
-  }
-  return [...pages].sort((a, b) => a - b);
-}
 
 function makeBlock(id: string, kind: ParseBlock['kind'], label: string, text: string, page: number,
   bbox: [number, number, number, number] | null, imagePath: string | null): ParseBlock {

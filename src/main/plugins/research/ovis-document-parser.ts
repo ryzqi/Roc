@@ -10,7 +10,7 @@ import {readResearchFile, researchContentHash} from './research-files';
 
 type Dependencies = {capture: typeof createOvisSourceArtifact; write: typeof writeOvisParsedDocument};
 
-/** Complete source-to-result transaction, intentionally not registered in the production toolchain. */
+/** Complete source-to-result transaction used by the production complete tier. */
 export async function parseOvisDocument(input: Omit<OvisSourceArtifactInput, 'installation'>,
   models: Pick<OvisInstallationManager, 'acquire'>,
   dependencies: Dependencies = {capture: createOvisSourceArtifact, write: writeOvisParsedDocument}

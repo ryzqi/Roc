@@ -32,12 +32,27 @@ const POLL_INTERVAL_MS = 2_000;
 
 const PACK_LABELS: Readonly<Record<ResearchModelsStatus['selectedPack'], { label: string; note: string }>> = {
   compact: { label: '轻量结构解析', note: '文字、布局与表格识别' },
-  complete: { label: '完整解析', note: '轻量包及公式识别' }
+  complete: { label: '完整解析', note: 'OvisOCR3 8-bit，复杂文档、公式与表格解析' }
 };
+
+function modelErrorMessage(error: string | null | undefined): string {
+  if (!error) return '无';
+  const messages: Readonly<Record<string, string>> = {
+    research_ovis_installation_missing: '请下载完整解析模型',
+    research_model_asset_missing: '请下载基础解析模型',
+    research_download_cancelled: '下载已取消，可重新下载',
+    research_ovis_platform_unsupported: '完整解析需要 Apple Silicon 和 macOS 15 或更新版本',
+    research_ovis_previous_operation_unresolved: '上次模型操作异常中断，请重新启动 macOS 后重试'
+  };
+  return messages[error] ?? error;
+}
 
 const STATE_LABELS: Readonly<Record<ResearchModelsStatus['packs'][number]['state'], string>> = {
   missing: '未下载',
   downloading: '下载中',
+  downloading_runtime: '下载 Python 运行时',
+  creating_runtime: '创建运行环境',
+  installing_wheels: '安装运行依赖',
   importing: '导入中',
   verifying: '校验中',
   ready: '已就绪',
@@ -67,7 +82,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
     (input: { pack: ResearchModelsStatus['selectedPack'] }) => selectModels(store.client, input),
     { label: '切换解析模型配置' }
   );
-  const importAction = useAsyncAction((input: { directory: string; pack: ResearchModelsStatus['selectedPack'] }) =>
+  const importAction = useAsyncAction((input: { directory: string; pack: 'compact' }) =>
     importModels(store.client, input.directory, input.pack), {
       label: '导入解析模型'
     });
@@ -84,7 +99,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
     pendingRef: removing,
     discard: () => setImportPath('')
   });
-  const downloading = models.data?.downloading === true;
+  const downloading = models.data?.downloading === true || download.pending;
   const reloadModels = models.reload;
   useEffect(() => {
     if (!downloading) {
@@ -130,8 +145,8 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           testId="settings-models-downloading"
         />
         <KeyValueRow
-          label="后端错误"
-          value={status?.error ?? '无'}
+          label="状态说明"
+          value={modelErrorMessage(status?.error)}
           testId="settings-models-error"
         />
       </dl>
@@ -153,11 +168,11 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
               <li key={pack.pack} className="flex flex-wrap items-center gap-2 text-[length:var(--font-micro-size)]">
                 <span className="text-muted">{PACK_LABELS[pack.pack].label}</span>
                 <span className="text-subtle">
-                  {pack.installedBytes > 0 ? `${formatBytes(pack.installedBytes)} / ` : ''}{formatBytes(pack.bytes)}
+                  下载 {formatBytes(pack.bytes)}{pack.installedBytes > 0 ? ` · 已安装 ${formatBytes(pack.installedBytes)}` : ''}
                 </span>
                 <span className="text-subtle">{STATE_LABELS[pack.state]}</span>
                 {pack.state === 'ready' || pack.error === null ? null : (
-                  <span className="font-mono text-subtle">{pack.error}</span>
+                  <span className="text-subtle">{modelErrorMessage(pack.error)}</span>
                 )}
                 <span className="text-subtle">{PACK_LABELS[pack.pack].note}</span>
               </li>
@@ -173,7 +188,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
             {status.job === null ? null : (
               <KeyValueRow
                 label="进度"
-                value={`${status.job.phase === 'verifying' ? '校验' : '下载'} ${formatBytes(status.job.bytesDone)} / ${formatBytes(status.job.bytesTotal)}`}
+                value={`${STATE_LABELS[status.job.phase]}${status.job.bytesTotal > 0 ? ` ${formatBytes(status.job.bytesDone)} / ${formatBytes(status.job.bytesTotal)}` : ''}`}
                 testId="settings-models-progress"
               />
             )}
@@ -210,7 +225,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         <button
           type="button"
           data-testid="settings-models-remove"
-          disabled={removeAction.pending || downloading || status === null || selected?.installedBytes === 0}
+          disabled={removeAction.pending || downloading || status === null || selected?.state === 'missing'}
           onClick={() => {
             if (status === null) return;
             setRemovePack(status.selectedPack);
@@ -222,7 +237,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         </button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
+      {status?.selectedPack === 'compact' ? <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
           <TextField
             label="从已有目录导入"
@@ -239,7 +254,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           disabled={importAction.pending || downloading || importPath.trim() === ''}
           onClick={() => {
             if (status === null) return;
-            void importAction.run({ directory: importPath.trim(), pack: status.selectedPack }).then((result) => {
+            void importAction.run({ directory: importPath.trim(), pack: 'compact' }).then((result) => {
               if (result.ok) {
                 setImportPath('');
                 refresh();
@@ -251,7 +266,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           <FolderInput size={11} aria-hidden="true" />
           校验并导入
         </button>
-      </div>
+      </div> : <FormNote>完整解析直接下载 OvisOCR3 8-bit 模型及运行依赖。</FormNote>}
 
       {download.error === null ? null : (
         <FormNote tone="warn" testId="settings-models-download-error">

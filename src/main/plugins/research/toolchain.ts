@@ -5,7 +5,7 @@ import { dirname, extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
-import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParserIdentityPayload, researchRenderedPdfSchema, researchToolchainStatusSchema,
+import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchRenderedPdfSchema, researchToolchainStatusSchema,
   type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import type { ResearchModelPack } from '../../../shared/schemas/research-production';
@@ -13,8 +13,10 @@ import { researchFigureRenderJobResultSchema, researchFigureRenderJobSchema, typ
 import { assertResearchDescendant, createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
-import { ResearchModelStore, type ModelPreferences, type ResearchModelFiles, type ResearchModelsStatus } from './model-store';
-import { modelPackManifest } from './model-catalog';
+import type {ResearchModelFiles, ResearchModelsStatus} from './model-store';
+import {ResearchProductionModels, type OvisProductionConfig} from './production-models';
+import {parseOvisDocument} from './ovis-document-parser';
+import {selectedPageNumbers} from './parse-page-range';
 import type { ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
 import { experimentFileLimit } from './experiment-files';
 import {processingTraceContextSchema, type ResearchProcessingTrace} from './processing-trace';
@@ -50,32 +52,17 @@ export type ResearchTypeScriptRuntime = {
 
 type ResolvedToolchain = { root: string; manifest: Manifest };
 
-/** 用户模型选择在 `plugin_config` 里的键（包的持久化位置见 `ConfigStore`）。 */
-const MODEL_PREFERENCES_KEY = 'researchModelPreferences';
-
 export class ResearchToolchain {
   private verification: Promise<ResolvedToolchain> | null = null;
-  private models: ResearchModelStore;
-  private readonly modelsRoot: string | null;
-  /** 当前下载任务的取消句柄：设置页的「取消」中止官方 CLI，staging 保留供续传。 */
-  private downloadController: AbortController | null = null;
+  private readonly models: ResearchProductionModels;
 
-  constructor(private readonly rootPath: string | null, modelsRoot: string | null = null) {
-    this.modelsRoot = modelsRoot;
-    this.models = new ResearchModelStore(modelsRoot);
+  constructor(private readonly rootPath: string | null, modelsRoot: string | null = null,
+    ovis: OvisProductionConfig | null = null) {
+    this.models = new ResearchProductionModels(modelsRoot, ovis);
   }
 
-  /**
-   * 把用户选择接到插件的持久化配置上（`plugin_config` 表）。
-   *
-   * 只在 `initialize` 时调用一次：存储构造时还没有 `RocPluginContext`，
-   * 所以选择项必须在拿到 context 之后重新装配。
-   */
-  attachModelConfig(config: { get<T>(key: string): T | null; set<T>(key: string, value: T): void }): void {
-    const saved = config.get<Partial<ModelPreferences>>(MODEL_PREFERENCES_KEY);
-    this.models = new ResearchModelStore(this.modelsRoot, saved ?? {}, (next) => {
-      config.set(MODEL_PREFERENCES_KEY, next);
-    });
+  attachModelConfig(config: {get<T>(key: string): T | null; set<T>(key: string, value: T): void}): void {
+    this.models.attachConfig(config);
   }
 
   async status(): Promise<z.infer<typeof researchToolchainStatusSchema>> {
@@ -87,8 +74,8 @@ export class ResearchToolchain {
     }
   }
 
-  async identity(): Promise<string> {
-    return researchContentHash(JSON.stringify(researchParserIdentityPayload(modelPackManifest(this.models.selectedPack))));
+  async identity(mediaType = 'application/pdf'): Promise<string> {
+    return this.models.identity(this.defaultParseOptions(mediaType).tier);
   }
 
   /** Utility provenance includes pinned binaries, rules and styles; parser identity stays stable. */
@@ -135,24 +122,30 @@ export class ResearchToolchain {
       environment: await this.baseEnvironment(root, jobDir, false) };
   }
 
-  /** Parse uses available pinned ONNX models; born-digital PDF and HTML still work without model files. */
+  /** Complete PDF/image parsing requires the verified Ovis installation; compact retains native text support. */
   async parseDocument(input: WorkerInput & { options: ResearchParseOptions }): Promise<z.infer<typeof researchParsedDocumentSchema>> {
     const isHtml = ['.html', '.htm'].includes(extname(input.sourcePath).toLowerCase());
-    const models = isHtml ? null : await this.models.tryRequireReady(input.options.tier);
+    if (!isHtml && input.options.tier === 'complete') {
+      return parseOvisDocument({projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir,
+        sourceKind: extname(input.sourcePath).toLowerCase() === '.pdf' ? 'pdf' : 'image',
+        pages: selectedPageNumbers(input.options.pageRange), admission: {...input.admission, resourceClass: 'parse'},
+        timeoutMs: 3_600_000, signal: input.signal ?? new AbortController().signal}, await this.models.ovis());
+    }
+    const models = isHtml ? null : await this.models.tryRequireCompact();
     try {
       return await this.job(input, {
-        operation: 'parse_document', options: input.options,
+        operation: 'parse_document', options: {...input.options, tier: 'compact'},
         ...(input.trace ? {traceContext: processingTraceContextSchema.parse(input.trace.context)} : {}),
         modelFiles: models?.files ?? null, modelManifest: models?.manifest ?? ''
       }, researchParsedDocumentSchema);
     } finally {
-      if (models !== null) this.models.release(models.pack);
+      if (models !== null) this.models.releaseCompact();
     }
   }
 
-  /** Ordinary parsing uses CPU; explicit main-process device choices retain their actual parser fingerprint. */
-  defaultParseOptions(_mediaType: string): ResearchParseOptions {
-    return researchParseOptionsSchema.parse({ tier: this.models.selectedPack, device: 'cpu', pageRange: '' });
+  /** Basic parsing defaults to CPU; the complete route records its actual Metal device. */
+  defaultParseOptions(mediaType: string): ResearchParseOptions {
+    return researchParseOptionsSchema.parse({ tier: mediaType === 'text/html' ? 'compact' : this.models.selectedPack, device: 'cpu', pageRange: '' });
   }
 
   async renderFigure(input: FigureWorkerInput): Promise<z.infer<typeof researchFigureRenderJobResultSchema>> {
@@ -331,35 +324,17 @@ export class ResearchToolchain {
   }
 
   async selectModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
-    this.models.selectPack(pack);
-    return await this.models.status();
+    this.models.select(pack);
+    return this.models.status();
   }
 
-  /** Download a pinned pack; the selected pack changes with the download action. */
-  async downloadModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
-    if (this.downloadController !== null) throw new ResearchProcessError('research_model_download_locked');
-    this.models.selectPack(pack);
-    const controller = new AbortController();
-    this.downloadController = controller;
-    try {
-      return await this.models.download(pack, controller.signal);
-    } finally {
-      if (this.downloadController === controller) this.downloadController = null;
-    }
+  async downloadModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {return this.models.download(pack);}
+  async cancelModelsDownload(): Promise<ResearchModelsStatus> {return this.models.cancel();}
+  async importModels(directory: string, pack: 'compact'): Promise<ResearchModelsStatus> {
+    if (pack !== 'compact') throw new Error('research_model_import_unsupported');
+    return this.models.importCompact(directory);
   }
-
-  async cancelModelsDownload(): Promise<ResearchModelsStatus> {
-    this.downloadController?.abort();
-    return await this.models.status();
-  }
-
-  async importModels(directory: string, pack: ResearchModelPack): Promise<ResearchModelsStatus> {
-    return await this.models.importDirectory(directory, pack);
-  }
-
-  async removeModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
-    return await this.models.remove(pack);
-  }
+  async removeModels(pack: ResearchModelPack): Promise<ResearchModelsStatus> {return this.models.remove(pack);}
 
   private async job<T>(input: WorkerInput, operation: Record<string, unknown>, schema: z.ZodType<T>): Promise<T> {
     const request = { ...operation, projectRoot: input.projectRoot, sourcePath: input.sourcePath, outputDir: input.outputDir };

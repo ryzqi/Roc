@@ -31,6 +31,7 @@ before(async () => {
       model: 'embedding-model', dimensions: 768, enabled: true, keyConfigured: true};
     const models = {ready: true, downloading: false, selectedPack: 'compact', job: null, error: null,
       packs: [{pack: 'compact', ready: true, bytes: 20000000, installedBytes: 20000000, state: 'ready', error: null, models: []}], models: []};
+    window.parsingModels = models;
     const client = {api: {
       app: {getStatus: async () => ok({appName: 'Roc', version: '0.1.0'})},
       settings: {
@@ -46,7 +47,18 @@ before(async () => {
           window.embeddings.push(request);
           return new Promise(resolve => {window.finishEmbedding = resolve;});
         },
-        getModelsStatus: async () => ok(models),
+        getModelsStatus: async () => ok(window.parsingModels),
+        downloadModels: request => {
+          window.downloads.push(request);
+          window.parsingModels = {...window.parsingModels, downloading: true,
+            job: {pack: 'complete', phase: 'installing_wheels', bytesDone: 0, bytesTotal: 0, startedAt: new Date().toISOString()}};
+          return new Promise(resolve => {window.finishDownload = resolve;});
+        },
+        cancelModelsDownload: async () => {
+          window.parsingModels = {...window.parsingModels, downloading: false, job: null};
+          window.finishDownload({ok: false, error: {message: 'Download cancelled'}});
+          return ok(window.parsingModels);
+        },
         removeModels: request => {
           window.removals.push(request);
           return new Promise(resolve => {window.finishRemoval = resolve;});
@@ -66,7 +78,7 @@ before(async () => {
     const root = createRoot(document.getElementById('root'));
     let instance = 0;
     window.mount = mode => {
-      window.secrets = []; window.embeddings = []; window.removals = []; window.reloads = 0; window.clipboardCalls=[];
+      window.downloads = []; window.secrets = []; window.embeddings = []; window.removals = []; window.reloads = 0; window.clipboardCalls=[];
       flushSync(() => root.render(<MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict>
         <Harness key={++instance} mode={mode} />
       </LazyMotion></MotionConfig>));
@@ -211,4 +223,22 @@ test('application session diagnostics copy only the bounded anonymous events and
     assert.equal(audit.cut,0);
     if(process.env.ROC_UI_CAPTURE_DIR) await page.screenshot({path:join(process.env.ROC_UI_CAPTURE_DIR,`session-diagnostics-${theme}.png`)});
   }
+});
+
+
+test('complete parsing shows installation phases, hides unsupported import and can cancel a pending download', async () => {
+  await page.evaluate(() => {
+    window.parsingModels = {ready: false, downloading: false, selectedPack: 'complete', job: null, error: null,
+      packs: [{pack: 'complete', ready: false, bytes: 1220236780, installedBytes: 0, state: 'missing', error: null, models: []}], models: []};
+    window.mount('literature');
+  });
+  await expect(page.getByTestId('settings-models-list')).toContainText('OvisOCR3 8-bit');
+  await expect(page.getByTestId('settings-models-import')).toHaveCount(0);
+  await page.getByTestId('settings-models-download').click();
+  await expect(page.getByTestId('settings-models-cancel')).toBeEnabled();
+  await expect(page.getByTestId('settings-models-progress')).toContainText('安装运行依赖');
+  assert.deepEqual(await page.evaluate(() => window.downloads), [{pack: 'complete'}]);
+  await page.getByTestId('settings-models-cancel').click();
+  await expect(page.getByTestId('settings-models-download-error')).toContainText('Download cancelled');
+  await expect(page.getByTestId('settings-models-cancel')).toBeDisabled();
 });

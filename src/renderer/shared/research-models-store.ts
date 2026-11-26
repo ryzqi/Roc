@@ -20,7 +20,7 @@ export function selectModels(
   return client.api.research.selectModels(input);
 }
 
-export function importModels(client: RocClient, directory: string, pack: ResearchModelsStatus['selectedPack']): Promise<IpcLikeResult<ResearchModelsStatus>> {
+export function importModels(client: RocClient, directory: string, pack: 'compact'): Promise<IpcLikeResult<ResearchModelsStatus>> {
   return client.api.research.importModels({ directory, pack });
 }
 
@@ -31,7 +31,7 @@ export function removeModels(
   return client.api.research.removeModels({ pack });
 }
 
-/** 取消下载：已下载的文件保留供续传。 */
+/** 取消当前安装；后端回收其持有的任务和临时文件。 */
 export function cancelModels(client: RocClient): Promise<IpcLikeResult<ResearchModelsStatus>> {
   return client.api.research.cancelModelsDownload();
 }

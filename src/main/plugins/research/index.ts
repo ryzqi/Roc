@@ -17,7 +17,8 @@ export type { ResearchPluginOptions } from './research-plugin-options';
 
 export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin {
   const lifecycle = new ResearchPluginLifecycle();
-  const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
+  const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null,
+    options.ovisSpecificationRoot ? {pythonRoot: options.pythonRoot, specification: options.ovisSpecificationRoot} : null);
   const providerGovernor = createLiteratureProviderGovernor();
   const literatureService = lifecycle.own('literature', new LiteratureSearchService(options.literatureFetch, providerGovernor));
   const zotero = lifecycle.own('zotero', new ZoteroAdapter(options.zoteroFetch));

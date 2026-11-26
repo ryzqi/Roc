@@ -25,7 +25,7 @@ export type OvisSourceArtifactInput = Pick<OvisWorkerInput, 'installation' | 'ad
   pages: readonly number[] | null;
 };
 
-/** Retain source-bound evidence for qualification. Not a registered parser or Paper IR publication. */
+/** Capture source-bound evidence before producing Paper IR and publishing a document. */
 export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
   run: (request: OvisWorkerInput) => Promise<OvisWorkerResult> = runOvisDocumentPages
 ): Promise<OvisSourceArtifact> {

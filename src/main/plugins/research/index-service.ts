@@ -545,7 +545,7 @@ export class ResearchIndexService {
     // 否则换档位后旧索引会被当成命中，用户看不到新结果。
     const tier = this.tools.defaultParseOptions(kind === 'html' ? 'text/html' : 'application/pdf').tier;
     return ['pdf', 'image', 'html'].includes(kind)
-      ? `paddleocr.js:${await this.tools.identity()}:${tier}:${knowledgeChunkVersion}:${paperIrVersion}:${paperIrV2Version}:${this.semanticGenerator ? paperSemanticModelVersion : 'rules'}:${scholarlyParserVersion}:${this.scholarlyParser?.identity ?? 'disabled'}`
+      ? `document:${await this.tools.identity(kind === 'html' ? 'text/html' : 'application/pdf')}:${tier}:${knowledgeChunkVersion}:${paperIrVersion}:${paperIrV2Version}:${this.semanticGenerator ? paperSemanticModelVersion : 'rules'}:${scholarlyParserVersion}:${this.scholarlyParser?.identity ?? 'disabled'}`
       : knowledgeChunkVersion;
   }
 

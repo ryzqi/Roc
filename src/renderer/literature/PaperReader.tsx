@@ -32,7 +32,7 @@ const OpenReviewPanel = retryableLazy(() => import('./OpenReviewPanel'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
-  { value: 'complete', label: '完整', title: '轻量解析加公式识别，约 330 MB' }
+  { value: 'complete', label: '完整', title: 'OvisOCR3 8-bit，复杂文档、公式与表格识别' }
 ];
 
 /** Structured reading stays bound to the selected source and parse. Personal notes and

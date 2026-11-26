@@ -17,7 +17,7 @@ const PARSER_COMMAND = [process.execPath, '--import', import.meta.resolve('tsx')
 
 export const OFFLINE_PROFILE = '(version 1)(allow default)(deny network*)';
 
-type SmokeParseOptions = { tier: 'compact' | 'complete'; pageRange: string; device: 'coreml' | 'cpu' };
+type SmokeParseOptions = { tier: 'compact'; pageRange: string; device: 'coreml' | 'cpu' };
 type SmokeParseResult = {
   device: SmokeParseOptions['device'];
   content: string;
@@ -165,7 +165,7 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   await mkdir(outputPath, { recursive: true });
   const output = await realpath(outputPath);
   const modelStore = new ResearchModelStore(await realpath(modelsPath));
-  const modelSet = await modelStore.requireReady('complete');
+  const modelSet = await modelStore.requireReady('compact');
   const cache = join(output, 'cache');
   const temporary = join(cache, 'tmp');
   await mkdir(temporary, { recursive: true });
@@ -243,7 +243,7 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   console.log('通过：render');
   if (!rendered.text.includes('研究数据与方法')) fail('research_smoke_pdf_text_missing');
   const parsed = await parseDocument(
-    'ocr-table-formula', rendered.path, join(output, 'parsed'), smokeOptions('complete'), modelSet
+    'ocr-table', rendered.path, join(output, 'parsed'), smokeOptions('compact'), modelSet
   );
   const content = parsed.content;
   const kinds = new Set(parsed.blocks.map((block) => block.kind));
@@ -251,14 +251,13 @@ export async function smokeWithModels(toolchainPath: string, outputPath: string,
   const tableText = parsed.blocks.find((block) => block.kind === 'table')?.text ?? '';
   const tableRows = tableText.split('\n').map(row => row.replaceAll('|', ' ').replace(/\s+/gu, ' ').trim());
   const tableCellsKept = ['Group Patients Improvement', 'Control 12 10', 'Treatment 18 50'].every(row => tableRows.includes(row));
-  const formula = parsed.blocks.find(block => block.kind === 'formula')?.text ?? '';
-  if (parsed.device !== 'coreml' || !content.includes('研究数据与方法') || !tableCellsKept || !/E=mc\^(?:\{2\}|2)/u.test(formula.replace(/\s/gu, ''))
-      || !['table', 'formula', 'figure'].every((kind) => kinds.has(kind))) {
+  if (parsed.device !== 'coreml' || !content.includes('研究数据与方法') || !tableCellsKept
+      || !['table', 'figure'].every((kind) => kinds.has(kind))) {
     fail(`research_smoke_parse_content_incomplete:${[...kinds].sort().join(',')}`);
   }
   await writeFile(join(output, 'parse-result.json'), `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
   const native = await parseDocument(
-    'native-pdf', pdf, join(output, 'parsed-pdf'), smokeOptions('complete'), modelSet
+    'native-pdf', pdf, join(output, 'parsed-pdf'), smokeOptions('compact'), modelSet
   );
   if (!native.content.includes('Treatment') || native.pageCount !== 1) {
     fail('research_smoke_native_pdf_incomplete');

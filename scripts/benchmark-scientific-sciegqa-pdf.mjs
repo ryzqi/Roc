@@ -49,11 +49,11 @@ export async function benchmarkSciegqaPdf(outputParent) {
   const [{parseResearchDocument}, {ResearchModelStore}] = await Promise.all(entries.map(path =>
     importTypeScriptModule(join(ROOT, path), options)));
   const models = new ResearchModelStore(join(ROOT, '.runtime/research-models'));
-  const lease = await models.requireReady('complete'), rows = [];
+  const lease = await models.requireReady('compact'), rows = [];
   let root;
   try {
     root = directory(outputParent, 'sciegqa-pdf');
-    const parserOptions = {tier: 'complete', device: 'cpu', pageRange: ''};
+    const parserOptions = {tier: 'compact', device: 'cpu', pageRange: ''};
     const modelHashes = Object.fromEntries(Object.entries(lease.files).filter(([, path]) => path)
       .map(([key, path]) => [key, {path: relative(ROOT, path), sha256: sha256(readFileSync(path))}]));
     writeJson(join(root, 'inputs.json'), {sourceLockHash: source.cohort.sourceLockHash,

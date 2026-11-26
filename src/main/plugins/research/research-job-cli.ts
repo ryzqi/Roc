@@ -22,9 +22,7 @@ const modelFilesSchema = z.object({
   recognition: absolutePath,
   dictionary: absolutePath,
   layout: absolutePath,
-  table: absolutePath,
-  formula: absolutePath.optional(),
-  formulaTokenizer: absolutePath.optional()
+  table: absolutePath
 }).strict();
 
 const jobRequestSchema = z.discriminatedUnion('operation', [

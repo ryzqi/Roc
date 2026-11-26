@@ -3,7 +3,6 @@ import { isAbsolute, join } from 'node:path';
 import { ResearchProcessError } from './process-runner';
 import type { researchModelJobSchema, researchModelsStatusSchema } from '../../../shared/schemas/research-production';
 import type { z } from 'zod';
-import type { ResearchModelPack } from '../../../shared/schemas/research-production';
 import { getModelAsset, getModelPackAssets, modelAssetPath, modelPackBytes, modelPackManifest, researchModelAssetIds } from './model-catalog';
 import type { ResearchModelAsset, ResearchModelAssetId } from './model-catalog';
 import { downloadVerified, fileSha256 } from '../../../../scripts/research/download-asset';
@@ -11,7 +10,6 @@ import { downloadVerified, fileSha256 } from '../../../../scripts/research/downl
 export type ResearchModelsStatus = z.infer<typeof researchModelsStatusSchema>;
 type ModelJob = z.infer<typeof researchModelJobSchema>;
 type PackStatus = ResearchModelsStatus['packs'][number];
-export type ModelPreferences = { pack: ResearchModelPack };
 
 export type ResearchModelFiles = {
   detection: string;
@@ -19,12 +17,10 @@ export type ResearchModelFiles = {
   dictionary: string;
   layout: string;
   table: string;
-  formula?: string;
-  formulaTokenizer?: string;
 };
 
 export type ResearchModelLease = {
-  pack: ResearchModelPack;
+  pack: 'compact';
   root: string;
   manifest: string;
   files: ResearchModelFiles;
@@ -32,33 +28,14 @@ export type ResearchModelLease = {
 
 type InspectedAsset = { asset: ResearchModelAsset; path: string; ready: boolean; installedBytes: number; error: string | null; signature: string | null };
 
-type PersistPreferences = (next: ModelPreferences) => void;
 
 /** Pinned PaddleOCR assets, integrity checks, resumable download, and active parse leases. */
 export class ResearchModelStore {
   private job: ModelJob | null = null;
   private lastError: string | null = null;
-  private readonly leases = new Map<ResearchModelPack, number>();
+  private readonly leases = new Map<'compact', number>();
   private readonly verifiedAssets = new Map<ResearchModelAssetId, string>();
-  private preferences: ModelPreferences;
-
-  constructor(
-    private readonly rootPath: string | null,
-    preferences: Partial<ModelPreferences> = {},
-    private readonly persist: PersistPreferences | null = null
-  ) {
-    this.preferences = { pack: isModelPack(preferences.pack) ? preferences.pack : 'compact' };
-  }
-
-  get selectedPack(): ResearchModelPack {
-    return this.preferences.pack;
-  }
-
-  selectPack(pack: ResearchModelPack): void {
-    if (this.preferences.pack === pack) return;
-    this.preferences = { pack };
-    this.persist?.(this.preferences);
-  }
+  constructor(private readonly rootPath: string | null) {}
 
   async status(): Promise<ResearchModelsStatus> {
     if (this.rootPath === null || !isAbsolute(this.rootPath)) return this.unavailableStatus();
@@ -72,7 +49,7 @@ export class ResearchModelStore {
     const models = [...inspected.values()].map(({ asset, ready, installedBytes, error }) => ({
       id: asset.id, name: asset.name, kind: asset.kind, ready, bytes: installedBytes, error
     }));
-    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => {
+    const packs: PackStatus[] = (['compact'] as const).map((pack) => {
       const packAssets = getModelPackAssets(pack).map((asset) => inspected.get(asset.id));
       const ready = packAssets.every((asset) => asset?.ready === true);
       const firstError = packAssets.find((asset) => asset?.error !== null)?.error ?? null;
@@ -97,12 +74,12 @@ export class ResearchModelStore {
         models: getModelPackAssets(pack).map((asset) => asset.id)
       };
     });
-    const selected = packs.find((pack) => pack.pack === this.preferences.pack);
+    const selected = packs.find((pack) => pack.pack === 'compact');
     return {
       ready: selected?.ready === true,
       downloading: this.job !== null,
       error: this.lastError ?? selected?.error ?? null,
-      selectedPack: this.preferences.pack,
+      selectedPack: 'compact',
       job: this.job,
       packs,
       models
@@ -110,7 +87,7 @@ export class ResearchModelStore {
   }
 
   /** Hash each pinned file before a parse, caching only unchanged inode/size/mtime signatures. */
-  async requireReady(pack: ResearchModelPack = this.preferences.pack): Promise<ResearchModelLease> {
+  async requireReady(pack: 'compact' = 'compact'): Promise<ResearchModelLease> {
     const root = await this.requireRoot();
     for (const asset of getModelPackAssets(pack)) {
       const state = await inspectAsset(root, asset, false);
@@ -126,11 +103,11 @@ export class ResearchModelStore {
       }
     }
     this.leases.set(pack, (this.leases.get(pack) ?? 0) + 1);
-    return { pack, root, manifest: modelPackManifest(pack), files: this.modelFiles(root, pack) };
+    return { pack, root, manifest: modelPackManifest(pack), files: this.modelFiles(root) };
   }
 
   /** Use ready models when available; native PDF text/HTML parsing can proceed without weights. */
-  async tryRequireReady(pack: ResearchModelPack = this.preferences.pack): Promise<ResearchModelLease | null> {
+  async tryRequireReady(pack: 'compact' = 'compact'): Promise<ResearchModelLease | null> {
     const root = await this.existingRoot();
     if (root === null) return null;
     for (const asset of getModelPackAssets(pack)) {
@@ -143,16 +120,15 @@ export class ResearchModelStore {
     return await this.requireReady(pack);
   }
 
-  release(pack: ResearchModelPack): void {
+  release(pack: 'compact'): void {
     const current = this.leases.get(pack) ?? 0;
     if (current <= 1) this.leases.delete(pack);
     else this.leases.set(pack, current - 1);
   }
 
-  async download(pack: ResearchModelPack, signal?: AbortSignal): Promise<ResearchModelsStatus> {
+  async download(pack: 'compact', signal?: AbortSignal): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
     const root = await this.requireRoot();
-    this.selectPack(pack);
     this.lastError = null;
     const assets = getModelPackAssets(pack);
     const startedAt = new Date().toISOString();
@@ -225,7 +201,7 @@ export class ResearchModelStore {
   }
 
   /** Import only the selected pack's pinned relative paths. */
-  async importDirectory(directory: string, pack: ResearchModelPack): Promise<ResearchModelsStatus> {
+  async importDirectory(directory: string, pack: 'compact'): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
     if ((this.leases.get(pack) ?? 0) > 0) throw new ResearchProcessError('research_model_in_use');
     if (!isAbsolute(directory)) throw new ResearchProcessError('research_model_import_path_invalid');
@@ -233,7 +209,6 @@ export class ResearchModelStore {
     const source = await realpathDirectory(directory);
     const assets = getModelPackAssets(pack);
     const staging = await mkdtemp(join(root, '.import-'));
-    this.selectPack(pack);
     this.lastError = null;
     this.job = { pack, phase: 'importing', bytesDone: 0, bytesTotal: modelPackBytes(pack), startedAt: new Date().toISOString() };
     try {
@@ -266,15 +241,11 @@ export class ResearchModelStore {
     }
   }
 
-  async remove(pack: ResearchModelPack): Promise<ResearchModelsStatus> {
+  async remove(pack: 'compact'): Promise<ResearchModelsStatus> {
     if (this.job !== null) throw new ResearchProcessError('research_model_download_locked');
     if ((this.leases.get(pack) ?? 0) > 0) throw new ResearchProcessError('research_model_in_use');
     const root = await this.requireRoot();
-    const otherPack = pack === 'compact' ? 'complete' : 'compact';
-    const otherReady = (this.leases.get(otherPack) ?? 0) > 0 || (await this.status()).packs.find((entry) => entry.pack === otherPack)?.ready === true;
     for (const asset of getModelPackAssets(pack)) {
-      const usedElsewhere = otherReady && getModelPackAssets(otherPack).some((other) => other.id === asset.id);
-      if (usedElsewhere) continue;
       await rm(modelAssetPath(root, asset.id), { force: true });
       this.verifiedAssets.delete(asset.id);
     }
@@ -282,17 +253,13 @@ export class ResearchModelStore {
     return await this.status();
   }
 
-  private modelFiles(root: string, pack: ResearchModelPack): ResearchModelFiles {
+  private modelFiles(root: string): ResearchModelFiles {
     return {
       detection: modelAssetPath(root, 'ocr-det'),
       recognition: modelAssetPath(root, 'ocr-rec'),
       dictionary: modelAssetPath(root, 'ocr-dictionary'),
       layout: modelAssetPath(root, 'layout'),
-      table: modelAssetPath(root, 'table'),
-      ...(pack === 'complete' ? {
-        formula: modelAssetPath(root, 'formula'),
-        formulaTokenizer: modelAssetPath(root, 'formula-tokenizer')
-      } : {})
+      table: modelAssetPath(root, 'table')
     };
   }
 
@@ -313,12 +280,12 @@ export class ResearchModelStore {
   }
 
   private unavailableStatus(): ResearchModelsStatus {
-    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => ({
+    const packs: PackStatus[] = (['compact'] as const).map((pack) => ({
       pack, ready: false, bytes: modelPackBytes(pack), installedBytes: 0, state: 'missing',
       error: 'research_models_unavailable', models: getModelPackAssets(pack).map((asset) => asset.id)
     }));
     return {
-      ready: false, downloading: false, error: 'research_models_unavailable', selectedPack: this.preferences.pack,
+      ready: false, downloading: false, error: 'research_models_unavailable', selectedPack: 'compact',
       job: null, packs, models: []
     };
   }
@@ -328,12 +295,12 @@ export class ResearchModelStore {
       const asset = getModelAsset(id);
       return { id, name: asset.name, kind: asset.kind, ready: false, bytes: 0, error: 'research_model_asset_missing' };
     });
-    const packs: PackStatus[] = (['compact', 'complete'] as const).map((pack) => ({
+    const packs: PackStatus[] = (['compact'] as const).map((pack) => ({
       pack, ready: false, bytes: modelPackBytes(pack), installedBytes: 0, state: 'missing',
       error: 'research_model_asset_missing', models: getModelPackAssets(pack).map((asset) => asset.id)
     }));
     return {
-      ready: false, downloading: this.job !== null, error: this.lastError ?? 'research_model_asset_missing', selectedPack: this.preferences.pack,
+      ready: false, downloading: this.job !== null, error: this.lastError ?? 'research_model_asset_missing', selectedPack: 'compact',
       job: this.job, packs, models
     };
   }
@@ -465,8 +432,4 @@ function errorCode(error: unknown): string {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new ResearchProcessError('research_download_cancelled');
-}
-
-function isModelPack(value: unknown): value is ResearchModelPack {
-  return value === 'compact' || value === 'complete';
 }

@@ -1,12 +1,36 @@
 # OvisOCR3 8-bit adaptation evidence
 
-Status: the user explicitly adopted **8-bit directly, with no further comparison tests**, on 2026-11-26. P3 adoption is this product decision, not a claim that the historical quality gates passed. Production integration is in progress. The user subsequently required a prequantized Hugging Face download and delegated repository selection.
+Status: the user explicitly adopted **8-bit directly, with no further comparison tests**, on 2026-11-26. P3 adoption is this product decision, not a claim that the historical quality gates passed. Production routing is connected; installation and functional evidence are recorded below. The user subsequently required a prequantized Hugging Face download and delegated repository selection.
 
 The production entry is `resources/ovis-ocr/parse.py`: 8-bit only, repetition penalty 1.03 with context 20. Its bytes are copied into a new managed installation generation and included in its receipt and parser identity. `infer.py` and existing evaluation evidence remain frozen. The twenty-page run completed 20/20 valid outputs and 20/20 structural replays; the comparison scorer was stopped at the user's request. No additional inference cohort, BF16 comparison, CDM/TEDS run or backend parity check is required for adoption. Installation, functional parsing, cancellation and source integrity remain required. Unverified regions retain page-only citations.
 
-The reproducible installer is [prepare-ovis-ocr.py](../scripts/research/prepare-ovis-ocr.py); [usage and limitations](../resources/ovis-ocr/README.md) describe its explicit destination and interpreter inputs. The model is downloaded separately from the application. The source manifest pins ATH-MaaS/OvisOCR3 revision `5b252386ba615bd464a5a26597560eaba87dae5c`, individual file sizes and SHA-256 digests. Dependencies are 67 hash-locked wheels under CPython 3.14.10, MLX 0.32.5 and MLX-VLM 0.8.1.
+The production installer is `OvisInstallationManager` through Roc’s model settings. It downloads the prequantized model separately from the application and verifies the pinned files before publishing a generation. Dependencies are 67 hash-locked wheels under CPython 3.14.10, MLX 0.32.5 and MLX-VLM 0.8.1. [prepare-ovis-ocr.py](../scripts/research/prepare-ovis-ocr.py) and the ATH-MaaS/OvisOCR3 source manifest belong only to the historical conversion experiment; they are not used or bundled by production.
 
 The production model is [`fwgpiyawudk/OvisOCR3-mlx-8bit`](https://huggingface.co/fwgpiyawudk/OvisOCR3-mlx-8bit/tree/702a71f233a208be050b12779ee29fdd1eb2dab3), pinned at `702a71f233a208be050b12779ee29fdd1eb2dab3` in `resources/ovis-ocr/prequantized.lock.json`. Hugging Face metadata and the actual safetensors header confirm affine 8-bit/group64, 187 packed language modules and 153 BF16 vision tensors. The downloaded model files total 1,020,807,733 bytes; pinned wheels add 199,429,047 bytes. The weight SHA256 is `9fd155c8fbd83af37007e736099a60e927de72e52b6634758d0e4b0d97391fd8`. Remote Python files are excluded and model loading disables remote code. No original weights, conversion process or local quantization belongs to the production installation. The v2 installation receipt describes downloaded model provenance; old conversion receipts are not accepted.
+
+The production installation is now published at `~/.roc/research-models/ovisocr3`
+(generation `ovis-install-e6PFz0`). Its receipt SHA256 is
+`9fe9b4f990b0e01bd0dd56472886a1a366937cad365729f16677ba6761ee8a8d`.
+All 16,591 inventory entries were verified: model 1,020,807,733 bytes, private
+runtime 688,490,772 bytes, specification 185,886 bytes and uv 28,309,040 bytes
+(excluding receipt and shared CPython). Installer scratch and transaction download bundles
+are removed. The first installation exposed an audit race with a disappearing uv
+temporary directory; commit `29ece5b` fixes it with a deterministic regression.
+Real offline wheel installation, native imports, mid-install cancellation and
+corrupt-wheel refusal passed after the fix. Retry used hash-verified copies of
+this attempt's Hugging Face downloads, with no conversion or original weights.
+
+The real production `ResearchToolchain.parseDocument` check passed on one PDF
+page with this downloaded generation: 37 Paper IR blocks, valid source collection
+and stable parser identity. It used Metal and the pinned CPython/MLX runtime.
+The result remains `quality.status = review` with
+`research_ovis_content_unverified`; its locations do not assert verified regions.
+The harness removed its temporary project. Evidence is
+`.artifacts/research-toolchain-p4/prequantized-production-verified/report.json`.
+This is a functional check, without a reference comparison or a new quality
+cohort. It did not collect standalone parse latency or peak RSS.
+
+## Historical conversion and quality evidence
 
 The remaining historical results below concern the earlier locally converted model, not this downloaded generation. They are retained as evidence and are not carried forward as a quality claim.
 
@@ -76,7 +100,7 @@ repetition failure on `scientific-253`, and still loses two caption matches on
 known regression/backend pages and thirteen pages selected by fixed SHA256 order.
 Sample BF16 and 8-bit scores use identical gold and unchanged quality margins.
 The independent backend check reuses three of those twenty pages. No full-cohort
-or held-out qualification claim is made, and the application route stays pending.
+or held-out qualification claim was made; application registration was still pending at that stage.
 
 `scripts/research/probe-ovis-repetition.py` creates an explicitly labelled
 diagnostic copy of the frozen inference script. It changes only the repetition
@@ -101,9 +125,9 @@ under `diagnostic-scientific-253-cold`, `diagnostic-repetition-1.01`,
 `diagnostic-repetition-1.05` and `diagnostic-repetition-1.05-controls`. These selected
 probes are not full-cohort quality qualification or replacement inference pages.
 
-The production supervisor now runs actual 8-bit inference with scoped Metal compiler-cache access, filesystem/network isolation and resource admission. Model reuse, cancellation during generation, monitored memory termination and recovery all passed. Temporary jobs and compiler caches were removed. [Worker evidence](../evaluation/ovis-worker/README.md) records exact commands, native regression tests and resource-limit boundaries. This verifies lifecycle behavior without qualifying document accuracy or enabling the parser.
+The production supervisor now runs actual 8-bit inference with scoped Metal compiler-cache access, filesystem/network isolation and resource admission. Model reuse, cancellation during generation, monitored memory termination and recovery all passed. Temporary jobs and compiler caches were removed. [Worker evidence](../evaluation/ovis-worker/README.md) records exact commands, native regression tests and resource-limit boundaries. Those checks verified lifecycle behavior before production registration; they did not qualify document accuracy.
 
-The user skipped supplementary scientific-scan/cross-page gold and manual review. Those remain explicit coverage gaps. Paper IR, complete source-region verification, full-cohort quality and isolated performance acceptance remain outstanding. Only the M1 Pro / 32 GiB machine has been exercised; 8/16/24 GiB support is not claimed.
+The user skipped supplementary scientific-scan/cross-page gold and manual review. Those remain explicit coverage gaps. Paper IR was subsequently connected and verified. Complete source-region verification, full-cohort quality and isolated performance acceptance are not claimed. Only the M1 Pro / 32 GiB machine has been exercised; 8/16/24 GiB support is not claimed.
 
 Source-only checks, run from the repository root:
 
@@ -155,6 +179,6 @@ checks. The evaluator regression suite passed 26/26 from the repository root:
 ```
 
 Historical P3 quality acceptance remained incomplete before direct adoption; it required the twenty-page candidate check and
-remaining resource qualification. No application parser has been enabled by these
-results. The latest sample scope supersedes the earlier full-cohort requirement
+remaining resource qualification. Production registration follows the later direct-adoption decision, not these
+quality results. The latest sample scope supersedes the earlier full-cohort requirement
 for the new candidate; historical full-cohort failures remain recorded.

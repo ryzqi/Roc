@@ -31,9 +31,9 @@ export async function benchmarkScientificPublicParser(outputRoot, { limit = null
     importTypeScriptModule(join(ROOT, 'src/main/plugins/research/model-store.ts'), options)
   ]);
   const models = new ResearchModelStore(resolve(ROOT, '.runtime/research-models'));
-  const lease = await models.requireReady('complete');
+  const lease = await models.requireReady('compact');
   const root = directory(resolve(outputRoot), 'public-parser');
-  const rows = [], parserOptions = { tier: 'complete', device: 'cpu', pageRange: '1' };
+  const rows = [], parserOptions = { tier: 'compact', device: 'cpu', pageRange: '1' };
   const modelHashes = Object.fromEntries(Object.entries(lease.files).filter(([, path]) => path)
     .map(([key, path]) => [key, { path: relative(ROOT, path), sha256: sha256(readFileSync(path)) }]));
   writeJson(join(root, 'inputs.json'), { sourceLockHash: sources.sourceLockHash, pins, modelHashes,

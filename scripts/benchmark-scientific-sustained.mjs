@@ -25,7 +25,7 @@ if (process.argv[3]) {
   await writeFile(sourcePath, await long.save(), {flag: 'wx'});
 }
 const sourceHash = sha256(await readFile(sourcePath));
-const report = makeReport('scientific-sustained-ocr', {pages: 100, sourceHash, tier: 'complete', device: 'cpu',
+const report = makeReport('scientific-sustained-ocr', {pages: 100, sourceHash, tier: 'compact', device: 'cpu',
   tailPages: 40, rssScreenGrowthBytes: 256 * 1024 * 1024, rssScreenSlopeBytesPerPage: 1024 * 1024},
 ['src/main/plugins/research/document-parser.ts', 'src/main/plugins/research/ocr-stage-sessions.ts',
   'scripts/benchmark-scientific-sustained.mjs']);
@@ -34,11 +34,11 @@ const opts = {platform: 'node', external: ['onnxruntime-node', 'paddleocr',
 const {parseResearchDocument} = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', opts);
 const {ResearchModelStore} = await importTypeScriptModule('src/main/plugins/research/model-store.ts', opts);
 const models = new ResearchModelStore(resolve('.runtime/research-models'));
-const lease = await models.requireReady('complete');
+const lease = await models.requireReady('compact');
 const samples = [], started = performance.now();
 try {
   const parsed = await parseResearchDocument({projectRoot: resolve('.'), sourcePath, outputDir: join(root, 'output'),
-    options: {tier: 'complete', device: 'cpu', pageRange: ''}, modelFiles: lease.files, modelManifest: lease.manifest,
+    options: {tier: 'compact', device: 'cpu', pageRange: ''}, modelFiles: lease.files, modelManifest: lease.manifest,
     signal: AbortSignal.timeout(900000), onStage: event => {
       if (event.stage !== 'ocr-inference') return;
       const sample = {...event, elapsedMs: performance.now() - started, ...process.memoryUsage()};

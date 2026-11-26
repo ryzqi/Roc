@@ -3,10 +3,9 @@ import { createRequire } from 'node:module';
 import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import modelLock from '../../../../resources/research-models/models.lock.json';
-import { type ResearchModelPack } from '../../../shared/schemas/research-production';
 
 export const researchModelAssetIds = [
-  'ocr-det', 'ocr-rec', 'ocr-dictionary', 'layout', 'table', 'formula', 'formula-tokenizer'
+  'ocr-det', 'ocr-rec', 'ocr-dictionary', 'layout', 'table'
 ] as const;
 export type ResearchModelAssetId = (typeof researchModelAssetIds)[number];
 
@@ -15,7 +14,7 @@ const revisionSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const modelAssetSchema = z.object({
   id: z.enum(researchModelAssetIds),
   name: z.string().min(1),
-  kind: z.enum(['onnx', 'dictionary', 'tokenizer']),
+  kind: z.enum(['onnx', 'dictionary']),
   file: z.string().min(1),
   bytes: z.number().int().positive(),
   sha256: sha256Schema,
@@ -28,7 +27,7 @@ const packEntrySchema = z.object({ assetIds: z.array(z.enum(researchModelAssetId
 const modelLockSchema = z.object({
   schemaVersion: z.literal(2),
   engine: z.literal('paddleocr.js'),
-  packs: z.object({ compact: packEntrySchema, complete: packEntrySchema }).strict(),
+  packs: z.object({ compact: packEntrySchema }).strict(),
   assets: z.array(modelAssetSchema).min(1)
 }).strict();
 
@@ -52,7 +51,7 @@ for (const asset of researchModelLock.assets) {
   if (!asset.url.includes(immutablePath)) throw new Error('research_model_lock_revision_mismatch');
 }
 
-for (const pack of ['compact', 'complete'] as const) {
+for (const pack of ['compact'] as const) {
   const ids = researchModelLock.packs[pack].assetIds;
   if (new Set(ids).size !== ids.length || ids.some((id) => !assetsById.has(id))) {
     throw new Error('research_model_lock_pack_invalid');
@@ -67,15 +66,16 @@ export function getModelAsset(id: ResearchModelAssetId): ResearchModelAsset {
   return asset;
 }
 
-export function getModelPackAssets(pack: ResearchModelPack): readonly ResearchModelAsset[] {
+export function getModelPackAssets(pack: 'compact'): readonly ResearchModelAsset[] {
+  if (pack !== 'compact') throw new Error('research_model_pack_unsupported');
   return researchModelLock.packs[pack].assetIds.map((id) => getModelAsset(id));
 }
 
-export function modelPackBytes(pack: ResearchModelPack): number {
+export function modelPackBytes(pack: 'compact'): number {
   return researchModelLock.packs[pack].bytes;
 }
 
-export function modelPackManifest(pack: ResearchModelPack): string {
+export function modelPackManifest(pack: 'compact'): string {
   const assets = getModelPackAssets(pack).map(({ id, bytes, sha256, sourceRevision }) => ({ id, bytes, sha256, sourceRevision }));
   return createHash('sha256').update(JSON.stringify({ engine: researchModelLock.engine, runtime: researchOcrRuntime, pack, assets })).digest('hex');
 }

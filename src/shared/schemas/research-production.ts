@@ -18,9 +18,9 @@ export const researchToolchainStatusSchema = z.object({
 
 export const researchModelPacks = ['compact', 'complete'] as const;
 export type ResearchModelPack = (typeof researchModelPacks)[number];
-export const researchModelKinds = ['onnx', 'dictionary', 'tokenizer'] as const;
+export const researchModelKinds = ['onnx', 'dictionary', 'mlx'] as const;
 
-export const researchModelStates = ['missing', 'downloading', 'verifying', 'importing', 'ready', 'incompatible', 'failed'] as const;
+export const researchModelStates = ['missing', 'downloading', 'downloading_runtime', 'creating_runtime', 'installing_wheels', 'verifying', 'importing', 'ready', 'incompatible', 'failed'] as const;
 
 export const researchModelPackStatusSchema = z.object({
   pack: z.enum(researchModelPacks),
@@ -34,7 +34,7 @@ export const researchModelPackStatusSchema = z.object({
 
 export const researchModelJobSchema = z.object({
   pack: z.enum(researchModelPacks),
-  phase: z.enum(['downloading', 'verifying', 'importing']),
+  phase: z.enum(['downloading', 'downloading_runtime', 'creating_runtime', 'installing_wheels', 'verifying', 'importing']),
   bytesDone: z.number().int().nonnegative(),
   bytesTotal: z.number().int().nonnegative(),
   startedAt: z.string()
@@ -61,7 +61,7 @@ export const researchModelsSelectRequestSchema = z.object({ pack: z.enum(researc
 export const researchModelsDownloadRequestSchema = z.object({ pack: z.enum(researchModelPacks) }).strict();
 export const researchModelsImportRequestSchema = z.object({
   directory: z.string().min(1).max(4000),
-  pack: z.enum(researchModelPacks)
+  pack: z.literal('compact')
 }).strict();
 export const researchModelsRemoveRequestSchema = z.object({ pack: z.enum(researchModelPacks) }).strict();
 

@@ -13,7 +13,7 @@ function artifactHashes(root, path = '') {
       : [{ path: join(path, entry.name), sha256: sha256(readFileSync(join(root, path, entry.name))) }]);
 }
 
-/** Full original documents through the current production complete CPU parser.
+/** Full original documents through the current production compact CPU parser.
  * This records outputs and failures; it does not invent page gold or QA scores. */
 export async function benchmarkScientificPublicPdf(outputRoot) {
   const sources = verifyPublicScientificSources(), lock = readJson(publicScientificSourceLock);
@@ -34,9 +34,9 @@ export async function benchmarkScientificPublicPdf(outputRoot) {
   const [{ parseResearchDocument }, { ResearchModelStore }] = await Promise.all(entries.map(path =>
     importTypeScriptModule(join(ROOT, path), options)));
   const models = new ResearchModelStore(resolve(ROOT, '.runtime/research-models'));
-  const lease = await models.requireReady('complete');
+  const lease = await models.requireReady('compact');
   const root = directory(resolve(outputRoot), 'public-pdf'), rows = [];
-  const parserOptions = { tier: 'complete', device: 'cpu', pageRange: '' };
+  const parserOptions = { tier: 'compact', device: 'cpu', pageRange: '' };
   const modelHashes = Object.fromEntries(Object.entries(lease.files).filter(([, path]) => path)
     .map(([key, path]) => [key, { path: relative(ROOT, path), sha256: sha256(readFileSync(path)) }]));
   writeJson(join(root, 'inputs.json'), { sourceLockHash: sources.sourceLockHash, pins,

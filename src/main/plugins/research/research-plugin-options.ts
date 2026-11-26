@@ -27,6 +27,7 @@ export type ResearchPluginOptions = {
   libraryFetch?: ConstructorParameters<typeof ResearchLibraryService>[3];
   toolchainRoot?: string;
   modelsRoot?: string;
+  ovisSpecificationRoot?: string;
   /** Optional local scholarly parser; stays disabled until measured benefit supports activation. */
   scholarlyParser?: ScholarlyParserAdapter;
   roleExecutor: ResearchRoleExecutor;

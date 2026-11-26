@@ -6,9 +6,10 @@ instance for the same root shares mutation reservations, acquisition counts and
 progress. A durable operation marker also excludes other main processes and
 preserves an unresolved reservation after the owning host exits.
 
-Installation delegates to the verified preparation transaction: fixed official
-sources and wheels, offline private environment, controlled 8-bit downloaded weight verification,
-and complete inventory verification. It publishes `active.json` exclusively only
+Installation downloads the pinned Hugging Face MLX 8-bit model and wheels,
+creates an offline private environment, and verifies the complete inventory.
+It never downloads original BF16 weights or quantizes locally. The v2 receipt
+records downloaded model provenance. It publishes `active.json` exclusively only
 after the generation is complete. The selection pins parent and generation
 filesystem identities, the managed interpreter path and complete model identity.
 Existing selections are never replaced. A pre-publication cancellation removes
@@ -49,8 +50,9 @@ Explicit removal can delete a damaged generation, but refuses changed directory
 identities, aliases and symlinks. It removes only the selected generation and its
 selection, leaving the shared interpreter and other files intact. Interrupted
 removal can be retried; an absent generation clears only its matching selection.
-The lifecycle module is not yet registered in the application model catalog and
-does not adopt the separate qualification installation.
+`ResearchProductionModels` registers this lifecycle as the application's complete
+parser at `<modelsRoot>/ovisocr3`. It does not adopt the separate historical
+qualification installation. Basic parsing uses the independent compact store.
 
 The marker is an exclusively created empty file named with macOS's kernel boot
 session UUID. Concurrent holders in the owning main process share it, and the
@@ -70,7 +72,8 @@ cancellation, verified process exit and ordinary failures release it immediately
 The read-only `OvisModelStore` used by qualification scripts does not own model
 mutation; application lifecycle callers must use `OvisInstallationManager`.
 
-Validation from the repository root:
+Historical validation from the repository root (the conversion-based verification
+script has since been removed; the recorded report remains immutable):
 
 ```sh
 node --test tests/unit/research-ovis-installation-manager.test.mjs \
@@ -91,6 +94,13 @@ damaged download isolation, corrupted-installation refusal and explicit removal
 passed. All verification-owned directories were removed. Evidence is retained in
 `.artifacts/research-toolchain-p3/installation-manager/report.json`. These checks
 qualify lifecycle behavior; the full-cohort quality gate remains separate.
+
+Current functional verification uses `scripts/research/verify-ovis-production.mjs`
+with explicit `--models`, `--python`, `--source` and a new `--output` directory.
+`--install` downloads the prequantized model when absent. The harness invokes the
+production complete-parser route on one page, verifies source-content collection
+and stable model identity, and cleans its temporary parse directory. It performs
+no precision or backend comparison. Installation remains available to Roc.
 
 Durable reservation verification adds real host `SIGKILL` and cross-process
 exclusion, shared-holder release, nested failure retention, marker replacement and

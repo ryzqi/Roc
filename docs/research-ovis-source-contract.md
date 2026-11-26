@@ -1,8 +1,10 @@
 # Ovis page source boundary
 
-`src/main/plugins/research/ovis-document-adapter.ts` is an isolated adapter for the
-future complete parser. It is not registered in the production parser. P3 full
-347-page quality qualification and P4 downstream integration remain required.
+`src/main/plugins/research/ovis-document-adapter.ts` adapts the production Ovis
+complete parser. `ResearchToolchain` routes complete PDF/image requests through
+the verified Hugging Face 8-bit installation; HTML uses the basic parser.
+The user adopted 8-bit directly and stopped further comparisons. Historical
+quality failures remain recorded, and uncertain regions retain page-only citations.
 
 The isolated downstream regression now injects `parseOvisDocument` into the real
 document service. It imports a two-page PDF, captures its source rasters and
@@ -28,8 +30,8 @@ pnpm build
 
 The combined regression passes 28 tests. Evidence is retained in
 `.artifacts/research-toolchain-p3/downstream-retrieval-final.log` and
-`downstream-build.log`. Production parser registration and the full 347-page
-quality gate remain pending.
+`downstream-build.log`. The current adoption decision and production installation
+are described in [adaptation evidence](research-ovis-adaptation.md).
 
 The live library harness also runs a frozen original PDF or image through the
 actual private Metal Worker and the same document/index/context/Wiki path:

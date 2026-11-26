@@ -279,6 +279,8 @@ async function createWindow(): Promise<void> {
     isPackaged: app.isPackaged,
     researchToolchainRoot: app.isPackaged ? join(process.resourcesPath, 'research-toolchain')
       : join(mainModuleDir, `../../.runtime/research-toolchain/darwin-${process.arch}`),
+    ovisSpecificationRoot: app.isPackaged ? join(process.resourcesPath, 'ovis-ocr')
+      : join(mainModuleDir, '../../resources/ovis-ocr'),
     researchModelsRoot: app.isPackaged
       ? join(new RocPaths(process.env.ROC_DATA_ROOT).root, 'research-models')
       : join(mainModuleDir, '../../.runtime/research-models'),
