@@ -1,4 +1,22 @@
-# OvisOCR3 8-bit preparation
+# OvisOCR3 production model
+
+Production downloads prequantized `fwgpiyawudk/OvisOCR3-mlx-8bit` at revision
+`702a71f233a208be050b12779ee29fdd1eb2dab3`, using `prequantized.lock.json`.
+It does not run local conversion. Roc’s model settings own installation, progress,
+cancellation and removal; the installed model is separate from the application.
+Only `parse.py`, `prequantized.lock.json`, `requirements.in` and `requirements.lock`
+are packaged. The current pinned wheels require Apple Silicon and macOS 15+.
+See the [installation contract](../../docs/research-ovis-lifecycle.md) and
+[final validation record](../../docs/research-toolchain-validation.md) for current
+commands, actual installation evidence and the limits of quality claims.
+
+## Historical local-conversion experiment
+
+The material below documents the earlier experiment. It is retained to reproduce
+its historical evidence and is not the application installation procedure.
+The user subsequently selected a ready-quantized HF model and stopped comparisons.
+The macOS 14 floor stated in this historical section was superseded by the pinned
+wheel audit; no current macOS 14 support is claimed.
 
 This standalone preparation tool builds an isolated, reproducible MLX runtime from
 the official `ATH-MaaS/OvisOCR3` revision

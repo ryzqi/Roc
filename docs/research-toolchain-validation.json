@@ -1,0 +1,534 @@
+{
+  "schemaVersion": 1,
+  "status": "Verified passing",
+  "scope": "User-revised implementation, functional installation, regression and local packaging; no quality certificate",
+  "implementationHead": "6bd73ae850973484be73e13d7411d1f0b36a7626",
+  "userDecisions": {
+    "prequantizedHuggingFace": true,
+    "localQuantization": false,
+    "furtherPrecisionComparisons": false,
+    "maxOcrCohort": 20,
+    "supplementaryGold": "skipped",
+    "subagents": false
+  },
+  "installed": {
+    "modelRepository": "fwgpiyawudk/OvisOCR3-mlx-8bit",
+    "root": "~/.roc/research-models/ovisocr3",
+    "generation": "ovis-install-e6PFz0",
+    "identity": {
+      "engine": "ovisocr3-mlx",
+      "revision": "702a71f233a208be050b12779ee29fdd1eb2dab3",
+      "quantization": "8bit",
+      "groupSize": 64,
+      "visionPrecision": "bfloat16",
+      "device": "metal",
+      "installationReceiptSha256": "9fe9b4f990b0e01bd0dd56472886a1a366937cad365729f16677ba6761ee8a8d",
+      "inferenceSha256": "c4597bba05dca81b4fd63c9d8481eef79aba6e476aa25884c5c93ec9aab0ccac",
+      "promptSha256": "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1"
+    },
+    "verifiedEntries": 16591,
+    "modelDownloadBytes": 1020807733,
+    "wheelDownloadBytes": 199429047,
+    "payloadBytes": 1737793431,
+    "sharedPythonExcluded": true,
+    "runtime": {
+      "python": "3.14.10",
+      "mlx": "0.32.5",
+      "mlx-vlm": "0.8.1"
+    }
+  },
+  "functional": {
+    "status": "passed",
+    "pageCount": 1,
+    "blocks": 37,
+    "qualityStatus": "review",
+    "warnings": [
+      "research_ovis_content_unverified"
+    ],
+    "temporaryRemoved": true,
+    "latencyAndPeakRssMeasured": false
+  },
+  "historicalSample": {
+    "validPages": 20,
+    "structuralReplayPages": 20,
+    "modelRevision": "5b252386ba615bd464a5a26597560eaba87dae5c",
+    "newHuggingFaceQualityQualification": false
+  },
+  "checks": [
+    {
+      "evidence": ".artifacts/research-toolchain-p6/ovis-lifecycle.log",
+      "passed": 27,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/installer-race-green.log",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/installation-final.log",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/downstream-final.log",
+      "passed": 37,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/production-electron.log",
+      "passed": 20,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/python-regression.log",
+      "passed": 42,
+      "failed": 0
+    },
+    {
+      "evidence": ".artifacts/research-toolchain-p6/settings-final.log",
+      "passed": 6,
+      "failed": 0
+    }
+  ],
+  "package": {
+    "path": ".artifacts/research-toolchain-p6/package/mac-arm64/Roc.app",
+    "bytes": 866543640,
+    "baselineBytes": 866350807,
+    "asarSha256": "941e333eefc2c04834ff83052d9c64bd4414a6da21d5a76264a14765714919c0",
+    "mainBundle": {
+      "packagedMain": {
+        "entry": "dist/main/index.js",
+        "bytes": 5334500,
+        "sha256": "7b2af1f2af1a6010fecf95dfed3a1e8c1d830b8f540b6c14517c3f33e7a51178"
+      },
+      "currentMain": {
+        "bytes": 5334500,
+        "sha256": "7b2af1f2af1a6010fecf95dfed3a1e8c1d830b8f540b6c14517c3f33e7a51178"
+      },
+      "mainBundleBytesEqual": true,
+      "sourceCommitVerified": false
+    },
+    "smokePassed": true,
+    "realProfileStartupChecked": false,
+    "modelWeightsBundled": false,
+    "localConverterBundled": false
+  },
+  "startup": {
+    "baselineSamplesPerScenario": 20,
+    "samplesPerScenario": 5,
+    "concurrentTaskHeavyWorkStopped": true,
+    "otherHostLoadControlled": false,
+    "status": "complete",
+    "scenarios": [
+      {
+        "id": "events-0",
+        "rendererReadyMs": {
+          "count": 5,
+          "min": 1194.3317499999976,
+          "p50": 1217.8000829999946,
+          "p95": 1229.602458,
+          "max": 1229.602458
+        }
+      },
+      {
+        "id": "events-1000",
+        "rendererReadyMs": {
+          "count": 5,
+          "min": 1190.9644170000101,
+          "p50": 1209.0840829999943,
+          "p95": 1233.307874999984,
+          "max": 1233.307874999984
+        }
+      },
+      {
+        "id": "events-10000",
+        "rendererReadyMs": {
+          "count": 5,
+          "min": 1195.6162919999915,
+          "p50": 1216.913499999995,
+          "p95": 1233.358292000019,
+          "max": 1233.358292000019
+        }
+      }
+    ],
+    "idleRss": [
+      {
+        "visibility": "visible",
+        "minutes": 1,
+        "rss": 357285888
+      },
+      {
+        "visibility": "hidden",
+        "minutes": 1,
+        "rss": 360955904
+      }
+    ],
+    "globalNoRegressionClaim": false
+  },
+  "cleanup": {
+    "status": "passed",
+    "removed": [
+      {
+        "path": "scripts/research/.debug-ovis-packages.mjs",
+        "bytes": 7730,
+        "sha256": "72e9ee8b99fa7e1652a8bcc435749b0527d52661a118022d664422c628900bc4"
+      },
+      {
+        "path": "scripts/research/.debug-ovis-production-install.mjs",
+        "bytes": 1850,
+        "sha256": "b627be917d48a759ea2489d04ac7e00541a5ba13d9135744f6041536d4db89b4"
+      },
+      {
+        "path": ".runtime/ovis-prequantized-retry",
+        "bytes": 1220236780,
+        "reason": "task-owned verified retry download cache"
+      },
+      {
+        "path": ".runtime/research-models/formula/PP-FormulaNet-S.onnx",
+        "bytes": 308743141,
+        "sha256": "4362211b5bfdf7aa9749b28f8cd5240cb22d90eb5d79045facec8fcb317a2659",
+        "reason": "obsolete full parser asset, matches removed catalog pin"
+      },
+      {
+        "path": ".runtime/research-models/formula/tokenizer.json",
+        "bytes": 2140014,
+        "sha256": "2811d82701ec97c192fa256aa2b4516929373870ae660326cc5b1dc879b95ff2",
+        "reason": "obsolete full parser asset, matches removed catalog pin"
+      }
+    ],
+    "archived": [
+      {
+        "from": "roc-ovis-build.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-build.log",
+        "sha256": "f449ee642df75856cbbcb48bf02628b902151d079c30f726626e0f74008ff930"
+      },
+      {
+        "from": "roc-ovis-build-final.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-build-final.log",
+        "sha256": "cbf5011395240643198b1d1d4d86f28e41c17d0af027a262025f55d2759c3a37"
+      },
+      {
+        "from": "roc-ovis-functional.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-functional.log",
+        "sha256": "b4e21303aa2a45d717f3e8842de932fcc96609df8609da7da10123ff09308d28"
+      },
+      {
+        "from": "roc-ovis-adapter.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-adapter.log",
+        "sha256": "1822281696148ed5469ef18ec854eb6f700a6b9bfb9a7d3dc3ce5e6f3676feee"
+      },
+      {
+        "from": "roc-ovis-renderer.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-renderer.log",
+        "sha256": "8a2987607404b7ce1c91d217b067a44442b73ededd9b1f6db56364dbff09f5ce"
+      },
+      {
+        "from": "roc-ovis-integration.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-integration.log",
+        "sha256": "8c259a1d44990f60cc5ccd085fe5b401dc702140d2b662c2ca0898cfd89d7a54"
+      },
+      {
+        "from": "roc-ovis-settings.log",
+        "to": ".artifacts/research-toolchain-p6/earlier-settings.log",
+        "sha256": "708d96eeffe56b9c4bc303e65c38aa39cdb7ad6d6219bedc332dab8961fe504e"
+      }
+    ],
+    "preserved": [
+      "installed Hugging Face generation",
+      "historical models and failed evidence",
+      "final review application",
+      "user data and proposal"
+    ]
+  },
+  "unqualified": [
+    "HF quality CER/CDM/TEDS and precise source regions",
+    "additional scan/cross-page gold",
+    "8/16/24 GiB machines",
+    "new HF latency percentiles and peak RSS",
+    "long-duration thermal/memory pressure",
+    "global startup no-regression"
+  ],
+  "evidence": [
+    {
+      "path": ".artifacts/research-toolchain-p6/build-final.log",
+      "bytes": 29869,
+      "sha256": "b49d45d9c806671834a6e9af16c3930476f9de162ae6af34cd52d990cc6b8f6b"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/build.log",
+      "bytes": 29869,
+      "sha256": "32261963591192dc3cddbc562750747b0cb751e0fdfb56e6aa94bc1f1be8a187"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/downstream-final.log",
+      "bytes": 4236,
+      "sha256": "c9745c6204a883ecc75604f361bf4ac91d77b1aceaa50cd1cd761f755822de2c"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-adapter.log",
+      "bytes": 2928,
+      "sha256": "1822281696148ed5469ef18ec854eb6f700a6b9bfb9a7d3dc3ce5e6f3676feee"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-build-final.log",
+      "bytes": 29869,
+      "sha256": "cbf5011395240643198b1d1d4d86f28e41c17d0af027a262025f55d2759c3a37"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-build.log",
+      "bytes": 29869,
+      "sha256": "f449ee642df75856cbbcb48bf02628b902151d079c30f726626e0f74008ff930"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-functional.log",
+      "bytes": 2928,
+      "sha256": "b4e21303aa2a45d717f3e8842de932fcc96609df8609da7da10123ff09308d28"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-integration.log",
+      "bytes": 4370,
+      "sha256": "8c259a1d44990f60cc5ccd085fe5b401dc702140d2b662c2ca0898cfd89d7a54"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-renderer.log",
+      "bytes": 6993,
+      "sha256": "8a2987607404b7ce1c91d217b067a44442b73ededd9b1f6db56364dbff09f5ce"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/earlier-settings.log",
+      "bytes": 705,
+      "sha256": "708d96eeffe56b9c4bc303e65c38aa39cdb7ad6d6219bedc332dab8961fe504e"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/installation-final.log",
+      "bytes": 1324,
+      "sha256": "cf7a1aa058c5455d5b6a7b3fee23fbda4fbafeeea7311a8b288f508f161e84f3"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/installer-race-green.log",
+      "bytes": 403,
+      "sha256": "a59f89efa8f303c54472c16234fa6911d716414e1f0501a5258f13ce85f1494a"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/installer-race-red.log",
+      "bytes": 4775721,
+      "sha256": "4fb0c1a1fc03126325013e314bd86d9cb279ffc67310b623e3d25b4971cbb617"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/inventory-final.log",
+      "bytes": 156,
+      "sha256": "67165f306e3b40c2dc71fb9adec93bacef20202bfed2ee8edadcd5e8f82e8b56"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/inventory.log",
+      "bytes": 150,
+      "sha256": "ba3c48a587670c9c76145c420b36574b3abaaf8cd20ba250183607aad5da61e3"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ipc.log",
+      "bytes": 80,
+      "sha256": "a6ca3f9de6e5302f8a3d5a561534fae321438dddeceeb54ac28784f3d065acd9"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/model-redownload.log",
+      "bytes": 706,
+      "sha256": "106433c83313f67f939b080858392ee4c1b7215540988def8751a5a3aecde5d8"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ovis-lifecycle.log",
+      "bytes": 3046,
+      "sha256": "58ccb9a1de8779668722bd0e8053e841ffeb77f842b53aacaca3e98194510f99"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ovis-settings-ui.log",
+      "bytes": 59,
+      "sha256": "9c9f55cf5052d62c284687608af78461eaabac50d6353451ef9072018d6b8a16"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-final.log",
+      "bytes": 2098,
+      "sha256": "d9f3cdc4913f00f69bc46c02202e91a50290652464a50f7d76bb018cad538dab"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-install-diagnostic.log",
+      "bytes": 4884648,
+      "sha256": "4a23a41296cf92625192f09e4909ec42979b0fbb63ae8ee54c0539da4b4d37a8"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-install-fixed.log",
+      "bytes": 266,
+      "sha256": "8c863e95c8f915e1da233edef81d630c45298eca9682d0fcd5e95d65bc3c9862"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package.log",
+      "bytes": 2098,
+      "sha256": "d9f3cdc4913f00f69bc46c02202e91a50290652464a50f7d76bb018cad538dab"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/production-electron.log",
+      "bytes": 2630,
+      "sha256": "c29db406a742bedd7976778baec4a118d2dcfe3acb81e307e21351de780892c0"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/production-install-retry.log",
+      "bytes": 103,
+      "sha256": "2bf8aea589944b17e58c0837fd96addbc62bf290c796e9c983a29c801b5b3108"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/production-parse-verified.log",
+      "bytes": 130,
+      "sha256": "da6b2e45fdb91ce0ff51a137a086853284239ef97244be37269f19472466fe73"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/production-parse.log",
+      "bytes": 1021,
+      "sha256": "e08c1bd79b468acfaedec6e282ed7cabf0d79ab8254db7e369a7c3b03144c8ed"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/python-regression.log",
+      "bytes": 5358,
+      "sha256": "3c46942931c1ca5c3df09daa33d862aa21e3623714f42bf659c2b1dc94fe9073"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/settings-final.log",
+      "bytes": 706,
+      "sha256": "3daa8f9444d1c171af9548e86efb277e9b33c7c3faec8b2a8687c0599f11cc57"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/smoke-final.log",
+      "bytes": 3790,
+      "sha256": "34266b724dc460d0345d7eef4211055d3e5746ed788b52cc0802e717788ccd54"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/smoke.log",
+      "bytes": 3790,
+      "sha256": "4b7c51e8a1b56cb3350ff2e29ebb7e99a015fe57996e94e6746fe92ee8497f3d"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup-final.log",
+      "bytes": 1264,
+      "sha256": "cd078533d5a9821d296aeb372a2a3fc211cc9a543d0a58122e5e5575c2a9f6b7"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup-isolated.log",
+      "bytes": 1264,
+      "sha256": "40bce3e38fb1ad01a9b9e6b5965c0d3fdb09338bb0446c097704348638163b93"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup.log",
+      "bytes": 3497,
+      "sha256": "e64532262894e31d4ae20e44e0980f8672899f9644d7007eeaf8ef631b0e37fc"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/wheel-retry-cache.log",
+      "bytes": 56,
+      "sha256": "7eda9d5fe5dba8f825d708faedf3457c451b81b45cadf9e3d8935e1b1c74ce86"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup.json",
+      "bytes": 76065,
+      "sha256": "fa2a113f8bc15d8a2cde6a3c5d6e06fc4635cd8e1606125adc0c1aa52e7633be"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup-final.json",
+      "bytes": 82237,
+      "sha256": "6311498880ce8746569640eeb37562d4f27f0368625b62c89552ec52d2603e9c"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/startup-isolated.json",
+      "bytes": 82229,
+      "sha256": "06c3d941315a8569c73539873d02e807a9fd46c3d6e17d3f8ddde658cf77c64c"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-inventory-final.json",
+      "bytes": 30744,
+      "sha256": "933f8acc095d0579301ebcb402fbe48591d336f3c7b4328bddb98b6e790916c6"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ovis-package.json",
+      "bytes": 741,
+      "sha256": "9d8663c20826981d261bf243062c2c7e33fd865a0885ba1c4e36b2239c05f7da"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/cleanup.json",
+      "bytes": 2799,
+      "sha256": "066996b2793ba7544a9dbea33a1ad890a1ab3a39c8d49c57ddea5150eb55a136"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/smoke-final/result.json",
+      "bytes": 3790,
+      "sha256": "34266b724dc460d0345d7eef4211055d3e5746ed788b52cc0802e717788ccd54"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-install-diagnostic/report.json",
+      "bytes": 575,
+      "sha256": "19c953ee0eb9a9327b5929367b6bf187d2051fe33cd0d0dde515400eb1ae82d1"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/package-install-fixed/report.json",
+      "bytes": 7878,
+      "sha256": "9123dfe1683cb4214f7913e0e6566f7e4c7baa25f88143694ab7edb1361c07ea"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ovis-settings-light.png",
+      "bytes": 242794,
+      "sha256": "fcb4af0e444b32f272a78789386f685a9a66ec522ee36a65779da035ea54c52f"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p6/ovis-settings-dark.png",
+      "bytes": 238771,
+      "sha256": "b19d8ed82f850e2865b5f7433cd91e7900489cfb24a5ef3f5cbd692b07d0bb76"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p4/prequantized-production/report.json",
+      "bytes": 470,
+      "sha256": "bd06751680eb58c81ad408710251df181dcc273e6bddfa416a4bd00e38801fd9"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p4/prequantized-production-final/report.json",
+      "bytes": 3069,
+      "sha256": "90455f8361f356ca510649521f4ae46f133f68160937d0c5656aeb4cc01ab4fd"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p4/prequantized-production-verified/report.json",
+      "bytes": 67182,
+      "sha256": "3a10b1a5c925bc4ac75c3ca5903539b08c91da6ddbe2b435fcfa3529bc0e877f"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p3/sample-20-repetition-1.03/diagnostic.json",
+      "bytes": 2046,
+      "sha256": "0fba3edb4468987676f8997818f09387026e5bbfcdcd3a7d36cd38c3972dc1a5"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p3/sample-20-structural-replay/report.json",
+      "bytes": 21490,
+      "sha256": "11b8648c2b33011d8798f27810caa3fe7ad9e2f6704a890ae46f92c5855d4a9b"
+    },
+    {
+      "path": ".artifacts/research-toolchain-p3/sample-20-repetition-1.03-score/failure.json",
+      "bytes": 59,
+      "sha256": "45d733b5ba9de3dbf525ac1f20f4c034066c2e176b8c3212408381862614a16e"
+    },
+    {
+      "path": "resources/ovis-ocr/prequantized.lock.json",
+      "bytes": 5458,
+      "sha256": "85ca8e5a7004506ea0f933f4c54b17474f8ae87f469e9e059555a38c1a9cf846"
+    },
+    {
+      "path": "resources/ovis-ocr/requirements.lock",
+      "bytes": 162071,
+      "sha256": "df2bf1965c0a96246b3b5a412ede335e68e4fd40e11bb0cf0f8e1084409ac280"
+    },
+    {
+      "path": "resources/ovis-ocr/parse.py",
+      "bytes": 18258,
+      "sha256": "c4597bba05dca81b4fd63c9d8481eef79aba6e476aa25884c5c93ec9aab0ccac"
+    },
+    {
+      "path": "resources/research-models/models.lock.json",
+      "bytes": 2694,
+      "sha256": "fbe30e229adb0c0b1c12216915090d76808c7dc3b2e735c6f56c943754c5d32f"
+    }
+  ]
+}
