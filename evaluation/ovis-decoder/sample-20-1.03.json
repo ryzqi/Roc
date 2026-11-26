@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "id": "ovis-8bit-repetition-1.03-sample-20",
+  "scope": "User-authorized 20-page sample check, superseding the cancelled 347-page 1.03 run; not full-cohort qualification.",
+  "selection": {
+    "method": "Seven known regression/backend anchors plus first thirteen remaining IDs ordered by SHA256(seed + colon + ID); final order is original cohort order. No output-dependent reselection.",
+    "seed": "ovis-sample-20-2026-11-26",
+    "anchors": [
+      "scientific-001",
+      "scientific-005",
+      "scientific-006",
+      "scientific-043",
+      "scientific-157",
+      "scientific-240",
+      "scientific-253"
+    ],
+    "sampleSize": 20,
+    "heldOut": false,
+    "authorization": "User: 不要全量评测，跑20个样板就够了"
+  },
+  "identities": {
+    "acceptance": {
+      "path": "evaluation/ovis-evaluator/acceptance-v2.json",
+      "sha256": "0b87b9d8db6039561e59a5094d9e3437d744f6bb6d6a6be877fa5d62b8b2fa70"
+    },
+    "paired": {
+      "path": "evaluation/ovis-evaluator/paired-inference.json",
+      "sha256": "0770efdb3cdd46c152572d7ac567835c5f382fe9ba4622e2a5e3abc8c6b63f41"
+    },
+    "launcher": {
+      "path": "scripts/research/probe-ovis-repetition.py",
+      "sha256": "3e1f261c0dbcb79545706637042f737ed01ebf274a1292eb3a083298a383d068"
+    },
+    "generatedInference": {
+      "path": ".artifacts/research-toolchain-p3/diagnostic-repetition-1.03/infer-probe.py",
+      "sha256": "bcdd4ee8b7e9cdd17a3cd2f5839a1925c25bd96de16ea004289746fdd305c391"
+    },
+    "referenceInference": {
+      "path": ".artifacts/research-toolchain-p3/paired-347/original-bf16/report.json",
+      "sha256": "01eda8a41a1856becbf37e1def114342e46d16de2d2b80e89f6004e2ab688abd"
+    },
+    "original8bitInference": {
+      "path": ".artifacts/research-toolchain-p3/paired-347/8bit/report.json",
+      "sha256": "ad84fd9d4c21553641ce27adc3770cda7669593ea456e12ffda4abac2b7e2cd6"
+    },
+    "referenceScore": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/original-bf16/report.json",
+      "sha256": "37b892ce01bff51b22a322834a1f04fc8b3ec7eee9cedb538ffa7d3718c42a99"
+    },
+    "controls": {
+      "path": ".artifacts/research-toolchain-p3/diagnostic-repetition-1.03/diagnostic.json",
+      "sha256": "adcf45effcdc499242d211795f70a1593d61dcd702a9f0225b395d8d370f3d36"
+    },
+    "backendReferenceScore": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/official-mps/report.json",
+      "sha256": "f9418c8eaf92dcf539f2135f0b16074e028fcfd93cd5998ed7bb6a92f614ab27"
+    },
+    "regionContract": {
+      "path": "evaluation/ovis-decoder/acceptance-regions-v3.json",
+      "sha256": "3e50363cbd6ff1ea0df712081aad0a0062cd0fe859ea82fa9370b17da7314716"
+    },
+    "regionImplementation": {
+      "path": "scripts/research/ovis-formula-regions.py",
+      "sha256": "4c83acd8e3c8373991e7f8459b02dd484fd16837a73abe6482ea5a9836a70022"
+    },
+    "backendInputs": {
+      "path": "evaluation/ovis-evaluator/backend-inputs-v2.json",
+      "sha256": "135aa481ddd9ac80a619d99ef046ab2781b8e19d13d104c6569e13a4f8421455"
+    },
+    "priorCandidateComparison": {
+      "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-score/comparison.json",
+      "sha256": "64b53f26ca7865081d1ce0c43a57700b9261ffbc74db61e0e6aa14ec6a1ed252"
+    },
+    "priorCandidateRegionComparison": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/candidate-1.05-comparison.json",
+      "sha256": "d38118b98a71a19ee3c5de0d5daf72ea463d089c141fe11dcd81b1c9737f7a15"
+    },
+    "supersededFullCandidate": {
+      "path": "evaluation/ovis-decoder/candidate-1.03.json",
+      "sha256": "5ab88f992e324e8d236d0e639289fe33f9ca8f03dcf8f0f71902b2dc5e5f7ac5"
+    }
+  },
+  "variant": "8bit",
+  "modelRevision": "5b252386ba615bd464a5a26597560eaba87dae5c",
+  "installationReceiptSha256": "7c7a694446845d7659f6d42997190f53250061c6a9e5b4012b1332a6d63be057",
+  "settings": {
+    "temperature": 0.0,
+    "maxTokens": 16384,
+    "enableThinking": false,
+    "minPixels": 200704,
+    "maxPixels": 8294400,
+    "seed": 0,
+    "eosTokenIds": [
+      248044,
+      248046
+    ],
+    "promptSha256": "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1",
+    "formattedPromptSha256": "ce378948dcf390d26edc26d089805f48147de6044525a69e24a2d48c1229e709",
+    "network": "denied-by-seatbelt",
+    "pageOrder": "selected sample in original cohort order",
+    "repetitionPenalty": 1.03,
+    "repetitionContextSize": 20
+  },
+  "pages": [
+    {
+      "id": "scientific-001",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg",
+      "sha256": "5fe73ef247263ce0b7fe8b6905ddc72cdd1f20f8c641c06bb624243e5acdb435"
+    },
+    {
+      "id": "scientific-005",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg",
+      "sha256": "299daa711a9fa60bfb90d1f24f66c5352f5d6c1895ecc571a1e9879a105f9115"
+    },
+    {
+      "id": "scientific-006",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg",
+      "sha256": "2ae27f3a9284810bf7ce479ac8921359ccf00b7ebee1017b5e8da3e28ebe4af4"
+    },
+    {
+      "id": "scientific-043",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.02.018.pdf_6.jpg",
+      "sha256": "2ae70fa7b75e4a2ae168a3da31699334c8f037d6129c3e83ef67264a139aa4a1"
+    },
+    {
+      "id": "scientific-066",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-007-9344-y.pdf_5.jpg",
+      "sha256": "9e2cff4c53603e4c3f18af32d6e62adce498e3c59b33ac45117b816ed8ea54db"
+    },
+    {
+      "id": "scientific-111",
+      "imagePath": "images/eastmoney_944c06af0b176ef718ee34d3affee40554920f76210dfbf007972fe9c39074fc.pdf_0.jpg",
+      "sha256": "40a655df647f74842e235437b8f4523d25c10346e083af476a311b7f00ce70a6"
+    },
+    {
+      "id": "scientific-113",
+      "imagePath": "images/eastmoney_bd6c2b9aa7ca0ebf8672f8f50e3eacab7f67d0ffa15e0d94b1f3c0d1b5f179b8.pdf_19.jpg",
+      "sha256": "195ec2e77bf953108a6ae91be327d8779653b9b4db2fad71010e95111434a75b"
+    },
+    {
+      "id": "scientific-135",
+      "imagePath": "images/eastmoney_f4848e9d70d37f406f54c714024c5ef002832a1bf64290aa5c163665887a3e55.pdf_5.jpg",
+      "sha256": "63a28e35261d218ed61d58247669cb3acacab76cb42b1c1768d3bd422384b774"
+    },
+    {
+      "id": "scientific-143",
+      "imagePath": "images/page-07d333cf-4ebf-427c-b146-e419962b81fa.png",
+      "sha256": "5d72ce851f0aebd64b85aca24f9ca5b9f69f9ba3862229d3503a96a191fbb381"
+    },
+    {
+      "id": "scientific-151",
+      "imagePath": "images/page-1cecd66d-3563-422a-a204-999bba0bb528.png",
+      "sha256": "bec1fc80da185fcb8c115882f5495775658ec92bcae23c564765b4dba6abd04d"
+    },
+    {
+      "id": "scientific-155",
+      "imagePath": "images/page-232d386f-6c9d-4b50-9463-89dedce995e5.png",
+      "sha256": "2899761a969f8f1c6266e7713fc2b67a4f27d5cb3028389366b51c15bc24e093"
+    },
+    {
+      "id": "scientific-157",
+      "imagePath": "images/page-268266af-56c0-4b3b-9d07-73c6e50feb58.png",
+      "sha256": "f21ab3e8181d4773bcf5fc7a1575015b64f27cb3e2cb7487503448248bff1d06"
+    },
+    {
+      "id": "scientific-183",
+      "imagePath": "images/page-572316a1-cdf8-4c50-81d4-2e6dc13dcdce.png",
+      "sha256": "c34d9441396e97fc705bbc6839b9876f525b245cd329352de2a8014570fba006"
+    },
+    {
+      "id": "scientific-201",
+      "imagePath": "images/page-83587fc3-fe55-4e51-a3c5-f0664edba743.png",
+      "sha256": "668334fd9fbb90a9531debaa494ed0ba17a493a794e6beb183348209bac180ee"
+    },
+    {
+      "id": "scientific-209",
+      "imagePath": "images/page-91460e0a-922c-4f9b-9d11-d1a7981c3a05.png",
+      "sha256": "1c39bb6f46a32b0e990fbfcb851e688e3475571f2b53ebe4097fce51911901ed"
+    },
+    {
+      "id": "scientific-240",
+      "imagePath": "images/page-cb30bac7-d4bd-47d0-ac84-e0b46d051fe9.png",
+      "sha256": "ce3adef8dac5fe0e0fd6ed03f8127b8be3ae94c36800b07a8d1909f23b9e8b66"
+    },
+    {
+      "id": "scientific-253",
+      "imagePath": "images/page-dad0f4e5-290f-496f-bbdd-099ad75c6ff0.png",
+      "sha256": "2c13be3d5b7d4539b8f01a381d6b3ba752fa120ec35a5c17fd186bee59107e6a"
+    },
+    {
+      "id": "scientific-279",
+      "imagePath": "images/scihub_TNANO.2007.893575.pdf_0.jpg",
+      "sha256": "4517b4aa2367d570986b7e634decfc975272a96718e94f6d6f9c442e190c9055"
+    },
+    {
+      "id": "scientific-305",
+      "imagePath": "images/scihub_jps.21547.pdf_7.jpg",
+      "sha256": "0b0b14f43e21fc9b57ce7c569312a4761e03fcf47185770e8d8eb5b6915f2627"
+    },
+    {
+      "id": "scientific-346",
+      "imagePath": "images/yanbaor2_1492d25d79af850815ea449254ea62418c3c7fd582792b5191e1879671ba1219.pdf_88.jpg",
+      "sha256": "c1c5d753533e70438561f01e2f89bd5042e990f1d45fb935ee044c74e34af7b5"
+    }
+  ],
+  "exclusions": [],
+  "automaticAdoption": false,
+  "performanceQualification": false,
+  "acceptance": "Apply unchanged content margins and v3 formula-number measurement contract. Caption and reading-order gates unchanged. Full-cohort and original three-page MPS comparisons must both pass."
+}
