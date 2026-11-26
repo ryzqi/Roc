@@ -52,8 +52,10 @@ async function audit(root: string, base: string): Promise<void> {
         const target = await realpath(child);
         if (!inside(root, target) && !inside(base, target)) throw new Error('research_ovis_package_link_escape');
       } else if (info.isDirectory()) {
-        if (!inside(root, await realpath(child))) throw new Error('research_ovis_package_directory_invalid');
-        try {await visit(child);} catch (error) {
+        try {
+          if (!inside(root, await realpath(child))) throw new Error('research_ovis_package_directory_invalid');
+          await visit(child);
+        } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
           // Only a directory removed by uv is harmless; a dangling descendant
           // in a still-present directory must fail the write audit.
