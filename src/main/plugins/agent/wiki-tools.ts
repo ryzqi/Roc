@@ -77,7 +77,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
         nextOffset: result.pages.length > 10 ? offset + 10 : result.nextOffset,
         scientificReview: '章节命中只用于导航；通过 research_wiki_read_section 深入读取，再核查原始 Evidence。',
         fallback: '无命中时使用 research_search_scientific_knowledge 检索原文，依据原轮次读取上下文和验证证据。'};
-    }), {name: 'research_wiki_search', description: '搜索当前项目的持久 Wiki 草稿标题与正文，供综述导航。事实和原句问题仍先检索原文。',
+    }), {name: 'research_wiki_search', description: '当需要查找综述主题或定位已有章节时，搜索当前项目的持久 Wiki 草稿标题与正文；只作导航。Wiki 是派生内容，不是独立证据；核实事实、数值和引文请回到原始文献与科学对象。',
       schema: wikiSearchSchema.omit({projectId: true})}),
     tool(({pageId, offset}) => read(async () => projectPage(await invoke<WikiPage>('read', {pageId}), offset)), {
       name: 'research_wiki_read', description: '分页读取派生草稿、修订和依据摘要。每次 3 节，按 nextOffset 继续；检查 lint 和原始 evidenceId。相同修订/页码不可重复访问。', schema: pageSchema}),

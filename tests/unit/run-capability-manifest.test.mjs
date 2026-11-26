@@ -225,6 +225,21 @@ test('MCP selection preserves disabled and missing reasons and rejects reserved 
   assert.throws(() => api.compileRunCapabilityManifest(input({
     mcpServers: [{ ...server, allowedTools: ['read_file'] }]
   })), /run_capability_model_visible_name_reserved:read_file/);
+  // These tools were omitted from the old handwritten denylist. Reject names
+  // registered by research modules even when no project is currently selected.
+  for (const name of ['research_review_read', 'research_review_suggest_fulltext',
+    'research_review_execute_query', 'research_compare_claims']) {
+    assert.throws(() => api.compileRunCapabilityManifest(input({
+      mcpServers: [{ ...server, allowedTools: [name] }]
+    })), new RegExp(`run_capability_model_visible_name_reserved:${name}`));
+  }
+  const researchNames = api.compileRunCapabilityManifest(input({researchProjectId: 'project-a'})).manifest.tools
+    .filter(tool => tool.canonicalIdentity.startsWith('research:')).map(tool => tool.modelVisibleName);
+  for (const name of researchNames) {
+    assert.throws(() => api.compileRunCapabilityManifest(input({
+      mcpServers: [{...server, allowedTools: [name]}]
+    })), /run_capability_model_visible_name_reserved/);
+  }
 });
 
 test('explicit skills are included once, with content hashes and readiness validation', () => {

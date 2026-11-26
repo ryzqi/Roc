@@ -73,7 +73,7 @@ export function createScientificTools(input: {
           title: hit.title, preview: hit.content.slice(0, 400)})) ?? [],
         supportStatus: 'requires_validation', nextStep: names.context};
     }, {name: names.search,
-      description: '检索当前项目的论文、表格行、公式、图和引用。返回每轮本次运行的searchId及真实候选ID，来源身份可持久化但searchId不可跨会话使用；用上下文工具读取完整来源，再验证句子。预览不是已验证结论。',
+      description: '当需精确核对已入库论文的表格Cell、公式、图、原文引述或跨论文实验条件时使用；一般正文段落优先用 research_search_knowledge，外部找新论文用文献检索。返回本次运行的searchId及真实候选ID；source身份可持久化但searchId不能跨会话使用。接着读取科学上下文，再验证具体句子；预览不是已验证结论。',
       schema: scientificSearchToolRequestSchema}),
     tool(async ({searchId, candidateIds, budget}) => {
       active();

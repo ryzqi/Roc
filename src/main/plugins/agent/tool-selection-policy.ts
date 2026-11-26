@@ -6,6 +6,17 @@ import type {
 } from '../../../shared/types';
 import { isPlanModeModelVisibleToolName } from '../../services/deep-agent/model-tool-exposure';
 
+// The manifest compiler passes research tool names from their canonical descriptors.
+// Keep this module independent of the research tool factory to avoid import cycles.
+const RESERVED_MCP_TOOL_NAMES = new Set([
+  'ask_user', 'cancel_background_task', 'delete_file', 'edit_file', 'execute',
+  'glob', 'grep', 'ls', 'memory_search', 'propose_background_task',
+  'read_background_task', 'read_context_artifact', 'read_file', 'remember',
+  'resolve_background_task_time', 'roc_self_config', 'run_shell_command',
+  'run_isolated_read_command', 'run_trusted_host_command', 'schedule_background_task',
+  'session_search', 'task', 'update_background_task', 'web_read', 'write_file', 'write_todos'
+]);
+
 export type ToolSelectionContext = {
   mode: ChatRunMode;
   deleteFileApprovalMode: ApprovalMode;
@@ -14,10 +25,12 @@ export type ToolSelectionContext = {
   selfConfigAvailable: boolean;
   shellAllowedCommands: readonly string[] | undefined;
   trustedHostAvailable: boolean;
+  reservedToolNames?: readonly string[];
 };
 
 export function selectToolCards(context: ToolSelectionContext): AgentCapabilityCard[] {
   const cards: AgentCapabilityCard[] = [];
+  const reservedToolNames = new Set([...RESERVED_MCP_TOOL_NAMES, ...(context.reservedToolNames ?? [])]);
 
   if (context.mode !== 'plan' && (context.shellAllowedCommands === undefined || context.shellAllowedCommands.length > 0)) {
     cards.push(createRunShellCommandCard());
@@ -37,7 +50,7 @@ export function selectToolCards(context: ToolSelectionContext): AgentCapabilityC
 
   for (const server of context.mcpServers) {
     if (server.enabled) {
-      cards.push(...createMcpToolCards(server, context.mcpApprovalMode));
+      cards.push(...createMcpToolCards(server, context.mcpApprovalMode, reservedToolNames));
     }
   }
 
@@ -163,7 +176,7 @@ function createDeleteFileCard(approvalMode: ApprovalMode): AgentCapabilityCard {
   };
 }
 
-function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMode): AgentCapabilityCard[] {
+function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMode, reservedNames: ReadonlySet<string>): AgentCapabilityCard[] {
   const requiresApproval = approvalMode === 'default';
   const approvalHint =
     approvalMode === 'default'
@@ -194,86 +207,6 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
   if (server.allowedTools === undefined) {
     return [];
   }
-
-  const reservedNames = new Set([
-    'ask_user',
-    'cancel_background_task',
-    'delete_file',
-    'edit_file',
-    'execute',
-    'glob',
-    'grep',
-    'ls',
-    'memory_search',
-    'propose_background_task',
-    'read_background_task',
-    'read_context_artifact',
-    'read_file',
-    'remember',
-    'research_approve_gate',
-    'research_cancel_stage_run',
-    'research_capture_evidence',
-    'research_lint_manuscript',
-    'research_list_artifacts',
-    'research_list_evidence',
-    'research_overview',
-    'research_inspect_workflow',
-    'research_propose_change',
-    'research_read_proposals',
-    'research_derive_results',
-    'research_inspect_impact',
-    'research_submission_read',
-    'research_collaboration_read',
-    'research_prepare_external_figure',
-    'research_prepare_result_figure',
-    'research_read_artifact',
-    'research_run_stage',
-    'research_search_knowledge',
-    'research_search_scientific_knowledge',
-    'research_read_scientific_context',
-    'research_validate_scientific_evidence',
-    'research_request_paper_deep_knowledge',
-    'research_read_paper_deep_knowledge',
-    'research_prepare_writing_context',
-    'research_check_draft_grounding',
-    'research_review_writing_impact',
-    'research_wiki_search',
-    'research_wiki_search_entities',
-    'research_wiki_search_facts',
-    'research_wiki_search_relations',
-    'research_wiki_read',
-    'research_wiki_follow',
-    'research_wiki_lint',
-    'research_wiki_create',
-    'research_wiki_draft',
-    'research_wiki_read_section',
-    'research_wiki_resynthesize',
-    'research_wiki_retry_paper',
-    'research_wiki_update_sources',
-    'research_wiki_read_relations',
-    'research_search_literature',
-    'research_search_literature_plan',
-    'research_read_literature_search',
-    'research_add_literature',
-    'research_get_literature_import',
-    'research_cancel_literature_import',
-    'research_get_literature_processing',
-    'research_retry_literature_processing',
-    'research_cancel_literature_processing',
-    'research_stage_runs',
-    'resolve_background_task_time',
-    'roc_self_config',
-    'run_shell_command',
-    'run_isolated_read_command',
-    'run_trusted_host_command',
-    'schedule_background_task',
-    'session_search',
-    'task',
-    'update_background_task',
-    'web_read',
-    'write_file',
-    'write_todos'
-  ]);
 
   return server.allowedTools.map((toolName) => {
     if (reservedNames.has(toolName)) {

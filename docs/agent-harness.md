@@ -89,3 +89,36 @@ git diff --check
 回归覆盖部分能力、Plan Mode、稳定前缀、后台任务链、实际文件工具调用、超长结果分页恢复、错误后的 schema 修正、用量/幂等、取消和网络重试。超长结果测试使用真实中间件与恢复工具，工件存储和 token 计数为夹具；QASPER 检查经过生产 worker，但模型响应为固定传输。
 
 这些检查证明工程合同，不证明真实模型任务成功率、费用或延迟改善。下一步按[评测指南](../evaluation/README.md)固定模型和任务，对照检查三类轨迹：部分能力下的工具误选与无效重试、长文献结果后的证据恢复、导入响应丢失后的状态核对。同步记录输入 token、工具调用数、错误恢复次数、任务验收结果；有数据后再决定按任务裁剪科研工具集合或引入渐进工具发现。
+
+## 2026-11-26 工具与提示词一致性审计
+
+本轮沿 `run-capability-manifest → run-harness → context-assembler → agent-builder` 检查能力冻结、模型可见工具、系统提示词、模型工具说明和后台副作用回执。按实际代码合同修复以下问题，而不是替换 deepagents/LangGraph 或放松 Roc 的审批与效果恢复规则。
+
+| 风险 | 审计发现 | 本轮处理与验证 |
+| --- | --- | --- |
+| 高：工具名碰撞 | MCP 禁用名列表手工复制科研工具名，遗漏 `research_review_read`、`research_review_execute_query` 等。工具卡内部去重不覆盖后续追加的框架/科研工具。 | 直接从 `RESEARCH_TOOL_DESCRIPTORS` 派生科研保留名，并在完整冻结 manifest 上再次检验唯一性。单测遍历全部科研工具，验证不能用 MCP 名称覆盖。 |
+| 高：文献任务状态误报 | `research_add_literature` 的模型描述和 schema 已默认 `fulltext_auto`，系统研究提示却写着“只完成元数据”。 | 提示词区分元数据提交、后台排队、单篇 `ready` 与故障状态；把状态查询/重试/取消指引分别绑定到本轮实际工具可见性。 |
+| 中：检索路线相似 | 通用正文 chunk 检索、科学对象检索、Wiki 派生导航和外部文献搜索的使用边界不够醒目。 | 以「外部发现 → 原文段落 / 科学对象 → 证据核验 → 写作检查」区分入口；在相关模型工具描述和项目提示中写明何时使用及不能证明什么。 |
+| 中：用户引用伪装指令 | 用户指定技能名、技能路径及 `@` 文件路径被直接插入 XML 风格标签；包含闭合标签会破坏结构。能力 ID 以逗号拼接，可能混入换行。 | 对参考标签作 XML 文本转义；能力列表使用确定性的 JSON 字符串，避免换行和分隔符逃逸。参考数据仍不能扩大授权。 |
+| 低：证据/写作措辞 | 静态问答提示中的“先固定答案再找证据”容易鼓励倒推依据；写作源文件被不必要地限定为 LaTeX。 | 改为先核对来源再形成结论，以当前工作区真实源文件为准；保留精确 JSON、简短答案与直接证据要求。 |
+
+### 工具选择与返回状态
+
+| 用户意图 | 首选工具路线 | 必须保留的边界 |
+| --- | --- | --- |
+| 搜索未入库的新论文 | `research_search_literature` →（获授权后）`research_add_literature` | 搜索候选不是 paper ID；不能因搜索就默认导入 |
+| 问已入库论文正文 | `research_search_knowledge` → `research_read_knowledge_context` → `research_capture_evidence` | 命中片段不是完整实验条件；evidenceId 只来自捕获结果 |
+| 核实表格数值、公式、图、引文 | `research_search_scientific_knowledge` → `research_read_scientific_context` → `research_validate_scientific_evidence` | `searchId` 属于本次运行；需按原始对象验证具体主张 |
+| 查找综述页面 | `research_wiki_search` / `research_wiki_read` | Wiki 是派生导航，不得回灌成原始证据 |
+| 撰写或修订章节 | `research_prepare_writing_context` → 编辑工作区源文件 → `research_check_draft_grounding` | `incomplete`、自动核验与人工科学批准是三种不同状态 |
+| 查看文献导入进度 | `research_get_literature_import` → `research_get_literature_processing` | 前者 `completed` 仅指元数据，后者逐篇 `ready` 才是全文处理完成 |
+
+对于部分能力清单，只注入存在的具名工具指引；计划模式继续只读，不获得研究副作用工具。上述表格是完整能力下的参考路径，不表示每次运行都拥有所有工具。
+
+### 一手设计依据与剩余工作
+
+- [OpenAI Function Calling 最佳实践](https://developers.openai.com/api/docs/guides/function-calling)：工具名/描述和参数应明确目的、格式、输出含义；系统提示词声明使用时机。工具数增加可能降低选择准确性，建议以可测量的按需暴露优化为后续独立改造。
+- [Deep Agents 概览](https://docs.langchain.com/oss/javascript/deepagents/overview)：保留默认工具、文件上下文、子代理与权限中间件等框架约定；Roc 通过自身 manifest 将可见性与执行权限收口。
+- [MCP server instructions 设计说明](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/)：跨工具通则放在系统提示词，具体调用说明留在工具描述；提示词不能承担安全执行门禁。
+
+后续用固定模型、任务集与运行轨迹比较修改前后 **有效工具选择率、无权限/无效工具调用次数、工具输入错误率、证据核验率、文献后台状态误报率、输入 token、延迟及人工验收通过率**。当前单测只验证代码契约与工具清单不泄漏，尚无真实模型对照数据；不应据此声明任务成功率已提升。

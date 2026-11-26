@@ -13,9 +13,10 @@ export const BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW = [
 ] as const;
 
 export function createCapabilitySummary(enabledCapabilities: ChatStartRunRequest['enabledCapabilities']): string {
-  const mcpServers =
-    enabledCapabilities.mcpServers.length > 0 ? [...enabledCapabilities.mcpServers].sort().join(',') : 'none';
-  const skills = enabledCapabilities.skills.length > 0 ? [...enabledCapabilities.skills].sort().join(',') : 'none';
+  // Capability identifiers are data from settings, not additional system instructions.
+  // JSON quoting keeps delimiters, quotes and newlines inside each identifier.
+  const mcpServers = JSON.stringify([...enabledCapabilities.mcpServers].sort());
+  const skills = JSON.stringify([...enabledCapabilities.skills].sort());
   return [
     `mcp=${mcpServers}`,
     `skills=${skills}`,
