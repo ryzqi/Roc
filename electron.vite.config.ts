@@ -104,7 +104,7 @@ export default defineConfig({
           'research-job-cli': resolve(__dirname, 'src/main/plugins/research/research-job-cli.ts'),
           'research-query-worker': resolve(__dirname, 'src/main/workers/research-query-worker.ts')
         },
-        external: ['better-sqlite3', 'electron', 'node-pty', '@napi-rs/canvas', 'pdfjs-dist']
+        external: ['better-sqlite3', 'electron', 'node-pty', '@napi-rs/canvas', 'onnxruntime-node', 'pdfjs-dist']
       }
     }
   },
