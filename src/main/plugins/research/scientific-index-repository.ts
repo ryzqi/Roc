@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import {z} from 'zod';
-import {paperIrArtifactSchema, type PaperIRArtifact, type PaperIRV2} from '../../../shared/schemas/research-paper-ir-v2';
+import {paperIrArtifactSchema, paperIrV2Version, type PaperIRArtifact, type PaperIRV2} from '../../../shared/schemas/research-paper-ir-v2';
 import {paperIRArtifact, assertPaperIRArtifact} from './paper-ir-repository';
 import {buildScientificChunks, scientificChunkVersion, scientificChunkDefaults,
   type ScientificChunk, type ScientificChunkPolicy} from './scientific-chunks';
@@ -24,7 +24,14 @@ const snapshotSchema = z.object({
   chunkVersion: z.literal(scientificChunkVersion),
   policy: z.object({paragraphTokens: z.number().int(), tableTokens: z.number().int(), algorithmTokens: z.number().int()}).strict()
 }).strict();
+// Historical envelopes retain source ownership and hashes, without decoding obsolete IR content.
+const retainedSnapshotSchema = snapshotSchema.extend({
+  paperIR: paperIrArtifactSchema.extend({version: z.enum(['roc-paper-ir/2.1', paperIrV2Version])})
+});
 export type ScientificIndexSnapshot = z.infer<typeof snapshotSchema>;
+export type ScientificSourceMetadata = Pick<ScientificIndexSnapshot, 'projectId' | 'source'> & {
+  paperIR: Pick<PaperIRArtifact, 'identity' | 'sha256'>;
+};
 export type ScientificIndexCurrent = {paperIR: PaperIRArtifact; embedding: ScientificEmbeddingIdentity | null};
 export type ScientificGenerationStatus = 'building' | 'active' | 'retired' | 'failed' | 'cancelled';
 export type ScientificGeneration = {
@@ -112,20 +119,17 @@ export class ScientificIndexRepository {
   }
 
   get(id: string): ScientificGeneration {
-    const row = this.row(id), snapshot = snapshotSchema.parse(JSON.parse(row.snapshot_json)), identity = snapshot.paperIR.identity;
-    if (researchContentHash(row.snapshot_json) !== row.snapshot_hash ||
-      row.project_id !== snapshot.projectId || row.document_id !== identity.documentId ||
-      row.scope_key !== scopeKey(snapshot.projectId, identity.documentId) || row.source_hash !== identity.sourceHash ||
-      row.parse_id !== identity.parseId || row.parse_hash !== identity.parseHash ||
-      row.paper_ir_version !== snapshot.paperIR.version || row.chunk_version !== snapshot.chunkVersion ||
-      row.embedding_config_id !== (snapshot.embedding?.configId ?? null) ||
-      row.embedding_config_revision !== (snapshot.embedding?.revision ?? null) ||
-      row.embedding_model !== (snapshot.embedding?.model ?? null) || row.dimensions !== (snapshot.embedding?.dimensions ?? null)) {
-      throw new Error('research_scientific_snapshot_changed');
-    }
+    const row = this.row(id), snapshot = snapshotSchema.parse(this.retainedSnapshot(row));
     return {id: row.id, snapshot, status: row.status, error: row.error, chunkCount: row.chunk_count,
       retrievableCount: row.retrievable_count, chunksHash: row.chunks_hash, relationsHash: row.relations_hash,
       createdAt: row.created_at, publishedAt: row.published_at};
+  }
+
+  /** Source fingerprints and GC need retained ownership, never a publishable current IR receipt. */
+  sourceMetadata(id: string): ScientificSourceMetadata {
+    const snapshot = this.retainedSnapshot(this.row(id));
+    return {projectId: snapshot.projectId, source: snapshot.source,
+      paperIR: {identity: snapshot.paperIR.identity, sha256: snapshot.paperIR.sha256}};
   }
 
   active(projectId: string | null, documentId: string): ScientificGeneration | null {
@@ -353,9 +357,28 @@ export class ScientificIndexRepository {
   referencedArtifacts(): Set<string> {
     const rows = this.db.prepare('SELECT id FROM research_scientific_index_generations').all() as Array<{id: string}>;
     return new Set(rows.flatMap(row => {
-      const source = this.get(row.id).snapshot.source;
+      const source = this.sourceMetadata(row.id).source;
       return source.kind === 'project' ? [source.artifactId] : [];
     }));
+  }
+
+  private retainedSnapshot(row: GenerationRow): z.infer<typeof retainedSnapshotSchema> {
+    const snapshot = retainedSnapshotSchema.parse(JSON.parse(row.snapshot_json)), identity = snapshot.paperIR.identity;
+    if (researchContentHash(row.snapshot_json) !== row.snapshot_hash ||
+      row.project_id !== snapshot.projectId || row.document_id !== identity.documentId ||
+      row.scope_key !== scopeKey(snapshot.projectId, identity.documentId) || row.source_hash !== identity.sourceHash ||
+      row.parse_id !== identity.parseId || row.parse_hash !== identity.parseHash ||
+      row.paper_ir_version !== snapshot.paperIR.version || row.chunk_version !== snapshot.chunkVersion ||
+      row.embedding_config_id !== (snapshot.embedding?.configId ?? null) ||
+      row.embedding_config_revision !== (snapshot.embedding?.revision ?? null) ||
+      row.embedding_model !== (snapshot.embedding?.model ?? null) || row.dimensions !== (snapshot.embedding?.dimensions ?? null)) {
+      throw new Error('research_scientific_snapshot_changed');
+    }
+    if ((snapshot.projectId === null) !== (snapshot.source.kind === 'library') ||
+      (snapshot.source.kind === 'project' && snapshot.source.artifactId !== identity.parseId)) {
+      throw new Error('research_scientific_scope_invalid');
+    }
+    return snapshot;
   }
 
   private row(id: string): GenerationRow {

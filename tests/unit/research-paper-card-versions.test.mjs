@@ -1,8 +1,9 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
-import {loadScientificSearchApi, scientificSearchFixture} from './fixtures/scientific-search-fixture.mjs';
+import {hash, loadScientificSearchApi, scientificSearchFixture} from './fixtures/scientific-search-fixture.mjs';
 
 let api, cardsApi, scientificApi;
 before(async () => {
@@ -221,4 +222,41 @@ test('published original PDF IR binds by knowledge identity, ignores embedding-o
       .run(JSON.stringify({...JSON.parse(metadata),sourceHash:'f'.repeat(64)}),parsed.ir.identity.knowledgeDocumentId);
     assert.throws(() => cards.fingerprint(parsed.ir.identity.knowledgeDocumentId),/wiki_paper_ir_changed/);
   } finally {await cards.shutdown(); await wiki.shutdown(); await f.close();}
+});
+
+test('startup retains cards, source bytes and Wiki history when an active library generation uses PaperIR 2.1', async () => {
+  const f = await scientificSearchFixture(scientificApi,{embedded:false});
+  const cards = f.repository.paperCards, wiki = f.repository.wiki;
+  let recovered, calls = 0;
+  const generate = async (_title,blocks) => {calls++; return result(blocks);};
+  try {
+    cards.start(generate,{pollMs:60_000});
+    await cards.idle(); await wiki.idle();
+    await cards.shutdown();
+    const snapshot = structuredClone(f.generation.snapshot);
+    snapshot.paperIR.version = 'roc-paper-ir/2.1';
+    const json = JSON.stringify(snapshot);
+    f.db.prepare(`UPDATE research_scientific_index_generations
+      SET paper_ir_version=?,snapshot_json=?,snapshot_hash=? WHERE id=?`)
+      .run(snapshot.paperIR.version,json,hash(json),f.generation.id);
+    const retained = () => ({
+      generations:f.db.prepare('SELECT * FROM research_scientific_index_generations ORDER BY rowid').all(),
+      chunks:f.db.prepare('SELECT * FROM research_scientific_chunks ORDER BY rowid').all(),
+      documents:f.db.prepare('SELECT * FROM research_documents ORDER BY rowid').all(),
+      knowledge:f.db.prepare('SELECT * FROM research_knowledge_documents ORDER BY rowid').all(),
+      revisions:f.db.prepare('SELECT * FROM research_wiki_revisions ORDER BY rowid').all(),
+      cards:f.db.prepare('SELECT * FROM research_paper_cards ORDER BY rowid').all()
+    });
+    const original = retained();
+    assert.equal(original.cards[0].status,'ready');
+    recovered = new cardsApi.ResearchPaperCards(f.db,f.repository.knowledge,wiki);
+    assert.doesNotThrow(() => recovered.start(generate,{pollMs:60_000}));
+    await recovered.idle(); await wiki.idle();
+    assert.equal(calls,1);
+    assert.equal(recovered.fingerprint(f.ir.identity.knowledgeDocumentId).paperIrHash,snapshot.paperIR.sha256);
+    assert.deepEqual(retained(),original);
+    assert.deepEqual(await readFile(f.source),f.bytes);
+    // Metadata retention does not make obsolete scientific content a current receipt.
+    assert.throws(() => f.repository.scientificIndex.get(f.generation.id),/roc-paper-ir\/2\.2/);
+  } finally {await recovered?.shutdown(); await cards.shutdown(); await wiki.shutdown(); await f.close();}
 });

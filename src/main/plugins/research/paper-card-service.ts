@@ -152,12 +152,12 @@ export class ResearchPaperCards {
       WHERE status='active' AND project_id IS ? AND
       json_extract(snapshot_json,'$.paperIR.identity.knowledgeDocumentId')=?`).all(row.project_id, row.id) as Array<{id: string}>;
     if (rows.length > 1) throw new Error('wiki_paper_ir_ambiguous');
-    const active = rows[0] ? new ScientificIndexRepository(this.db).get(rows[0].id) : null;
-    if (active && (active.snapshot.paperIR.identity.parseId !== metadata.parseId ||
-      active.snapshot.paperIR.identity.sourceHash !== metadata.sourceHash)) throw new Error('wiki_paper_ir_changed');
+    const active = rows[0] ? new ScientificIndexRepository(this.db).sourceMetadata(rows[0].id) : null;
+    if (active && (active.paperIR.identity.parseId !== metadata.parseId ||
+      active.paperIR.identity.sourceHash !== metadata.sourceHash)) throw new Error('wiki_paper_ir_changed');
     return paperCardFingerprintSchema.parse({...this.versions(),
       sourceHash: metadata.sourceHash ?? null, parseId: metadata.parseId,
-      paperIrHash: active?.snapshot.paperIR.sha256 ?? null, chunkVersion: knowledgeChunkVersion});
+      paperIrHash: active?.paperIR.sha256 ?? null, chunkVersion: knowledgeChunkVersion});
   }
   private version(row: SourceRow): string {
     // Keep title/content/metadata sensitivity while making all derivation boundaries explicit.

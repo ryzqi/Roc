@@ -1,5 +1,6 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -179,6 +180,38 @@ test('current source binding and project/library namespaces cannot alias; histor
     assert.equal(store.get(a.id).status,'retired'); assert.equal(store.get(b.id).status,'active');
     assert.throws(()=>store.begin({ir:paper(),projectId:null,source:{kind:'project',fileId:'file',artifactId:'parse-one'},embedding:null}),/scope_invalid/);
     assert.throws(()=>store.begin({ir:paper(),projectId:project.id,source:{kind:'project',fileId:'file',artifactId:'foreign'},embedding:null}),/scope_invalid/);
+  } finally {await fixture.close();}
+});
+test('artifact GC pins legacy generation owners and fails closed on damaged or unknown metadata', async () => {
+  const fixture=await createResearchFixture(api);
+  try {
+    const {db,repository,project}=fixture, store=repository.scientificIndex;
+    const old=complete(store,begin(store,paper(),null,project.id));
+    complete(store,begin(store,paper('parse-two'),null,project.id));
+    const library=complete(store,begin(store,paper(),null));
+    const save=(id,snapshot) => {
+      const json=JSON.stringify(snapshot);
+      db.prepare(`UPDATE research_scientific_index_generations
+        SET paper_ir_version=?,snapshot_json=?,snapshot_hash=? WHERE id=?`)
+        .run(snapshot.paperIR.version,json,createHash('sha256').update(json).digest('hex'),id);
+    };
+    for (const generation of [old,library]) {
+      save(generation.id,{...generation.snapshot,paperIR:{...generation.snapshot.paperIR,version:'roc-paper-ir/2.1'}});
+    }
+    const retained=() => db.prepare('SELECT * FROM research_scientific_index_generations ORDER BY rowid').all();
+    const original=retained();
+    assert.deepEqual(repository.indexing.referencedArtifacts(),new Set(['parse-one','parse-two']));
+    assert.deepEqual(retained(),original);
+    assert.throws(()=>store.get(old.id),/roc-paper-ir\/2\.2/);
+    assert.throws(()=>store.publish(old.id,()=>({paperIR:old.snapshot.paperIR,embedding:null})),/roc-paper-ir\/2\.2/);
+    db.prepare('UPDATE research_scientific_index_generations SET snapshot_hash=? WHERE id=?')
+      .run('f'.repeat(64),old.id);
+    assert.throws(()=>repository.indexing.referencedArtifacts(),/snapshot_changed/);
+    const legacy=JSON.parse(original.find(row=>row.id===old.id).snapshot_json);
+    save(old.id,{...legacy,source:{...legacy.source,artifactId:'foreign-parse'}});
+    assert.throws(()=>repository.indexing.referencedArtifacts(),/scope_invalid/);
+    save(old.id,{...legacy,paperIR:{...legacy.paperIR,version:'roc-paper-ir/unknown'}});
+    assert.throws(()=>repository.indexing.referencedArtifacts(),/roc-paper-ir/);
   } finally {await fixture.close();}
 });
 test('real SQLite close/reopen cancels interrupted work, retains partial data and returns original owners for rebuilding', () => {
