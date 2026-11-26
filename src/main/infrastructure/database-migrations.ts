@@ -119,7 +119,8 @@ function assertKnownResearchSchema(db: DatabaseConnection, version: number, chec
     checksumSchemaObjects('plugin:@roc/plugin-research', version, readSchemaObjects(db)) !== expectedChecksum) {
     throw new Error(`database_migration_source_changed:research:${version}`);
   }
-  if (db.pragma('quick_check', { simple: true }) !== 'ok' || db.pragma('foreign_key_check').length !== 0) {
+  if (db.pragma('quick_check', { simple: true }) !== 'ok' ||
+    (db.pragma('foreign_key_check') as unknown[]).length !== 0) {
     throw new Error('database_migration_source_integrity_failed');
   }
 }
@@ -184,7 +185,8 @@ function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void
     db.prepare('UPDATE schema_metadata SET current_version=?,schema_checksum=?,updated_at=? WHERE db_name=?')
       .run(target.version, targetChecksum, new Date().toISOString(), dbName);
     initializeDatabaseSchema(db, { dbName, schema: target });
-    if (db.pragma('quick_check', { simple: true }) !== 'ok' || db.pragma('foreign_key_check').length !== 0) {
+    if (db.pragma('quick_check', { simple: true }) !== 'ok' ||
+      (db.pragma('foreign_key_check') as unknown[]).length !== 0) {
       throw new Error('database_migration_target_integrity_failed');
     }
   }).immediate();
