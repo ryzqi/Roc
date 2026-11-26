@@ -1,6 +1,6 @@
 # Research toolchain dependency cleanup
 
-Status: **Verified passing** for removal of the unused `d3-dsv` direct dependency. P5 as a whole remains incomplete; removal of the old full parser and its models depends on P3/P4 qualification.
+Status: **Verified passing** for dependency and packaged-resource cleanup under the user's direct 8-bit adoption decision. The current complete route uses prequantized OvisOCR3; historical quality failures are retained, without further comparison tests.
 
 TypeScript experiments already serialize CSV through `csv-stringify`. Their runtime identity, allowed package roots, worker request and production fixtures now contain only `csv-parse`, `csv-stringify` and `simple-statistics`. CSV expectations use literal fixtures for column order, booleans, nulls, quoted delimiters/newlines and formula strings. There is no compatibility alias or fallback. `pnpm remove d3-dsv` updated the direct declaration and lockfile; visualization dependencies still require transitive `d3-dsv`, so no package-size reduction is claimed.
 
@@ -32,10 +32,10 @@ The package target distributes `.app`, so these are logical file sizes, not
 compressed ZIP/DMG download sizes or unique APFS physical allocation. The small
 reduction includes all changes since P0 and is not attributed to `d3-dsv` alone.
 The actual archive and external resources contain no Ovis weights or MLX runtime.
-Installed source/converted weights and Python runtimes remain separate downloads;
+Production prequantized weights and Python runtimes remain separate downloads;
 the Ovis installation sizes are recorded in [adaptation evidence](research-ovis-adaptation.md).
-The basic 18,967,109-byte model pack and the old full pack remain separate and
-hash-verified; old full resources await replacement qualification.
+At this intermediate measurement, the basic 18,967,109-byte pack and old full
+pack were still present. The final cleanup below supersedes that product catalog.
 
 | Writing payload | Bytes | Actual production use |
 | --- | ---: | --- |
@@ -79,3 +79,44 @@ in the P3 artifacts (`package-intermediate*.log`, `package-intermediate-smoke/`,
 `package-inventory.json`, `writing-packaged-runtime.log`, `writing-tool-audit.json`).
 The task-owned intermediate package was removed after measurement; installed
 toolchains, model caches and user data were retained.
+
+## Final complete-parser cleanup
+
+The catalog now contains only the five compact assets (18,967,109 bytes).
+FormulaNet, its tokenizer, optional Worker fields and the old full-parser branch
+are removed. Benchmark entry points that call Paddle now request compact; frozen
+historical outputs remain evidence. Complete requests use the independent Ovis
+installation and do not fall back. `paddleocr`, `onnxruntime-node`, `pdfjs-dist`
+and `@napi-rs/canvas` remain required by basic parsing and rendering.
+
+The macOS package includes only four Ovis specification files: `parse.py`,
+`prequantized.lock.json`, `requirements.in`, `requirements.lock` (185,886 bytes).
+No model weights, MLX runtime, original BF16 source or local converter is bundled.
+The fixed HF model download is 1,020,807,733 bytes and wheel downloads add
+199,429,047 bytes; shared CPython/uv preparation is additional when absent.
+The wheel cache is deleted after its supervised installer exits, before the
+immutable installed-generation inventory is created.
+
+| Logical bytes | P0 | Final candidate | Change |
+| --- | ---: | ---: | ---: |
+| Application directory | 866,350,807 | 866,543,640 | +192,833 |
+| ASAR | 117,302,854 | 117,308,781 | +5,927 |
+| ASAR unpacked | 86,588,988 | 86,588,988 | 0 |
+| Research toolchain | 360,029,869 | 360,029,869 | 0 |
+| Native binaries/libraries | 95,009,792 | 95,009,792 | 0 |
+
+These are `.app` logical bytes, not compressed download sizes. The final package
+passed native module checks, ad-hoc signing and isolated startup smoke. Its main
+bundle matches `dist` byte for byte. Evidence is in
+`.artifacts/research-toolchain-p6/{package-inventory-final.json,ovis-package.json,smoke-final/}`.
+The package is a local review artifact; no remote release or real-profile migration
+was performed. The writing-tool audit above still applies.
+
+The obsolete local FormulaNet ONNX and tokenizer were removed only after their
+SHA256 matched the deleted catalog entries (310,883,155 bytes). The task-owned
+Hugging Face retry cache and two diagnostic scripts were also removed; seven
+temporary verification logs were archived under the P6 evidence root. The cleanup
+receipt records 1,531,129,515 removed logical bytes in `cleanup.json`. Installed
+Ovis generations, original source documents and historical failure reports remain.
+The local-conversion test was removed with its obsolete production module;
+prequantized download, package-installation and tamper tests cover the new route.

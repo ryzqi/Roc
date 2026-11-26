@@ -92,6 +92,13 @@ mac:
         - darwin-arm64/**
         - licenses/**
         - ripgrep.lock.json
+    - from: resources/ovis-ocr
+      to: ovis-ocr
+      filter:
+        - prequantized.lock.json
+        - requirements.in
+        - requirements.lock
+        - parse.py
     - from: .runtime/research-toolchain/darwin-arm64
       to: research-toolchain
       filter:
