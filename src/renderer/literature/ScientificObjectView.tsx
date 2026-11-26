@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {scientificObject, scientificEntityLabels} from './scientific-wiki';
 import {ScientificDocumentSource} from './ScientificDocumentSource';
+import {PaperDeepKnowledge} from './PaperDeepKnowledge';
 
 const ReadingFormula = retryableLazy(() => import('./ReadingFormula'));
 
@@ -34,6 +35,7 @@ export function ScientificObjectView({client, projectId, reference, card, object
   if (object === null) return <p role="alert">此版本中没有原始对象，请重新核对来源。</p>;
   return <section className="min-w-0 space-y-3" data-testid="wiki-scientific-object">
     <h4 className="font-medium">{scientificEntityLabels[object.kind]}原始记录</h4>
+    <PaperDeepKnowledge client={client} projectId={projectId} documentId={reference.documentId} objectId={objectId}/>
     {object.kind === 'Table' ? <>
       <p className="text-xs text-muted">结构状态：{object.value.data.status === 'parsed' ? '已解析' : object.value.data.status === 'missing' ? '缺失' : '无效'}</p>
       {object.value.data.caption ? <p className="whitespace-pre-wrap break-words">{object.value.data.caption}</p> : null}

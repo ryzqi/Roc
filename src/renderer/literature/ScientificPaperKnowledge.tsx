@@ -11,6 +11,7 @@ import {scientificHitLabel, scientificHitType, currentScientificHit, scientificE
 import {ScientificDocumentSource} from './ScientificDocumentSource';
 import {ScientificObjectView} from './ScientificObjectView';
 import {ScientificNeighbors} from './ScientificNeighbors';
+import {PaperDeepKnowledge} from './PaperDeepKnowledge';
 
 type Reference = {kind: 'entity' | 'fact' | 'relation'; id: string; candidateId?: string} |
   {kind: 'object'; id: string; objectType?: 'Table' | 'Figure' | 'Equation' | 'Algorithm'};
@@ -36,6 +37,7 @@ export function ScientificPaperKnowledge({client, projectId, reference, record, 
     </p> : null}
     {card?.configurationError ? <p role="alert" className="break-words text-xs">{card.configurationError}</p> : null}
     <button type="button" className={formSecondaryButtonClass} onClick={read.reload}>刷新科研来源</button>
+    <PaperDeepKnowledge client={client} projectId={projectId} documentId={reference.documentId}/>
     {current === null ? null : record?.kind === 'object' ?
       <ScientificObjectView key={record.id} client={client} projectId={projectId} reference={reference} card={current} objectId={record.id}/> :
       record && hit === null ? <p role="alert">所选记录缺失或存在多个来源候选，请重新检索。</p> :

@@ -1,3 +1,4 @@
+import {createPaperDeepTools, PAPER_DEEP_TOOL_DESCRIPTORS} from './paper-deep-tools';
 import {createWikiTools, WIKI_TOOL_DESCRIPTORS} from './wiki-tools';
 import {knowledgeSearchView} from '../research/knowledge-consumption';
 import {knowledgeContextRequestSchema} from '../../../shared/schemas/research-knowledge-context';
@@ -58,6 +59,7 @@ const readScopes: ResearchToolDescriptor['executionScopes'] = ['main', 'subagent
 /** 工具名与权限的唯一来源：manifest 和工具装配都读这张表，避免两处漂移。 */
 export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...WIKI_TOOL_DESCRIPTORS,
+  ...PAPER_DEEP_TOOL_DESCRIPTORS,
   ...REVIEW_TOOL_DESCRIPTORS,
   ...RESEARCH_WORKFLOW_TOOL_DESCRIPTORS,
   ...RESEARCH_PROPOSAL_TOOL_DESCRIPTORS,
@@ -231,6 +233,7 @@ export function createResearchTools(input: {
 
   return [
     ...createWikiTools(input),
+    ...createPaperDeepTools(input),
     ...createReviewTools(input),
     ...createResearchWorkflowTools(input),
     ...createResearchProposalTools(input),

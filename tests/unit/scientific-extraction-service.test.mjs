@@ -2,7 +2,7 @@ import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {mkdir, writeFile, rm} from 'node:fs/promises';
-import {randomUUID} from 'node:crypto';
+import {randomUUID, createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
@@ -90,7 +90,7 @@ test('production background owner publishes source-bound knowledge and deduplica
   try {
     f.service.start(); await f.service.idle();
     const result = await read(f), job = latest(f);
-    assert.equal(result.state, 'current'); assert.equal(result.configurationError, null);
+    assert.equal(result.state, 'current', JSON.stringify({job, logs: f.logs})); assert.equal(result.configurationError, null);
     assert.equal(job.status, 'published'); assert.equal(job.attempts, 1);
     assert.equal(result.knowledge.facts[0].value.raw, '90');
     assert.equal(result.knowledge.facts[0].value.normalized, '0.9');
@@ -335,5 +335,221 @@ test('real knowledge capability handlers parse scoped requests and expose the pr
     assert.equal((await invoke('scientificRead', {...documentRequest(f), generationId: null})).publishedJob.id, retry.id);
     await assert.rejects(() => invoke('extractionCancel', {...jobRequest(f, retry), projectId: 'foreign'}), /scope_invalid/u);
     await assert.rejects(() => invoke('extractionRetry', {documentId: f.document.id}));
+  } finally {await close(f);}
+});
+
+test('completed durable batches resume after shutdown without republishing partial knowledge', async () => {
+  const entered = deferred(); let blocked = true, invocations = 0;
+  const f = await setup({invoke: async (call, signal) => {
+    invocations++;
+    if (blocked && invocations === 4) {
+      entered.resolve();
+      await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), {once: true}));
+    }
+    return proposals(call);
+  }});
+  try {
+    f.service.start(); await entered.promise;
+    const running = latest(f), receipts = f.repository.scientificExtraction.receipts(running.id, f.project.id);
+    assert.equal(receipts.length, 3);
+    assert.equal((await read(f)).knowledge, null);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_paper_facts').pluck().get(), 0);
+    await f.service.shutdown();
+    blocked = false; f.service = f.create(); f.service.start(); await f.service.idle();
+    assert.equal(latest(f).status, 'published'); assert.equal(latest(f).attempts, 2);
+    const trace = f.db.prepare("SELECT candidates_json FROM research_paper_extraction_jobs WHERE id=?").get(running.id);
+    assert.equal(JSON.parse(trace.candidates_json).version, undefined, 'Publication replaces intermediate receipt envelope');
+    const completed = invocations;
+    f.revision('revision/2'); f.service.wake(); await f.service.idle();
+    assert.equal(invocations - completed, completed - 1, 'Only the interrupted call repeats on restart; new revision executes every batch');
+  } finally {await close(f);}
+});
+
+test('explicit retry reuses matching validated receipts and corrupt receipt bytes are never reused', async () => {
+  let invocations = 0, fail = true;
+  const f = await setup({invoke: async call => {
+    invocations++;
+    if (fail && invocations === 4) throw new Error('interrupted fixture');
+    return proposals(call);
+  }});
+  try {
+    f.service.start(); await f.service.idle();
+    const failed = latest(f), store = f.repository.scientificExtraction;
+    assert.equal(failed.status, 'failed'); assert.equal(store.receipts(failed.id, f.project.id).length, 3);
+    fail = false; const retry = await f.service.retry(jobRequest(f, failed));
+    assert.equal(store.receipts(retry.id, f.project.id).length, 3);
+    assert.ok(store.receipts(retry.id, f.project.id).every(receipt => receipt.reusedFromJobId === failed.id));
+    await f.service.idle(); assert.equal(latest(f).status, 'published');
+    const previous = invocations;
+    f.revision('revision/2'); fail = true; invocations = 0; f.service.wake(); await f.service.idle();
+    const corrupt = latest(f);
+    f.db.prepare("UPDATE research_paper_extraction_jobs SET candidates_hash=? WHERE id=?").run('0'.repeat(64), corrupt.id);
+    assert.deepEqual(store.receipts(corrupt.id, f.project.id), []);
+    fail = false; const again = await f.service.retry(jobRequest(f, corrupt));
+    assert.deepEqual(store.receipts(again.id, f.project.id), []);
+    await f.service.idle(); assert.equal(latest(f).status, 'published');
+    assert.equal(invocations, previous + 3, 'Corrupt envelope forces all batches; matching retry previously skipped three');
+  } finally {await close(f);}
+});
+
+const deepRequest = f => ({...documentRequest(f), purpose: 'reading', question: 'Explain the equation and its assumptions',
+  dimensions: ['mathematical_formulation'], sectionIds: [], objectIds: [f.ir.equations[0].id]});
+function deepProposals(call) {
+  if (call.name !== 'scientific_deep_reading') return proposals(call);
+  const {batch} = JSON.parse(call.messages[1].content), object = batch.objects[0];
+  return {claims: [{id: 'explanation', dimension: 'mathematical_formulation', aspect: 'summary', objectId: object.objectId,
+    provenance: 'model_inference', text: 'This is an explanatory reading, not a mathematical proof.',
+    evidence: [{kind: 'object', objectType: 'Equation', objectId: object.objectId}]}], relationships: []};
+}
+
+test('deep knowledge is explicitly requested, source bound, unreviewed and retains original formula objects', async () => {
+  const calls = [];
+  const f = await setup({invoke: async call => {calls.push(call.name); return deepProposals(call);}});
+  try {
+    f.service.start(); await f.service.idle();
+    const base = latest(f);
+    assert.equal((await read(f)).knowledge.deepReading, undefined);
+    assert.ok(!calls.includes('scientific_deep_reading'));
+    const baseCalls = calls.length;
+    const request = deepRequest(f), job = await f.service.requestDeep(request);
+    await f.service.idle(); assert.equal(latest(f).id, job.id); assert.equal(latest(f).status, 'published', latest(f).error);
+    const result = await f.service.readDeep({...documentRequest(f), generationId: null}), deep = result.knowledge.deepReading;
+    assert.equal(result.state, 'current'); assert.equal(deep.status, 'source_validated');
+    assert.equal(deep.scientificApproval, 'unreviewed'); assert.deepEqual(deep.objects.equations, f.ir.equations.slice(0, 1));
+    assert.deepEqual(deep.objects.tables, []); assert.equal(calls.filter(name => name === 'scientific_deep_reading').length, 1);
+    assert.equal(calls.length - baseCalls, 1, 'Deep request reuses matching complete base publication');
+    const explanation = deep.claims.find(claim => claim.provenance === 'model_inference');
+    assert.equal(explanation.scientificApproval, 'unreviewed');
+    assert.deepEqual(explanation.evidence[0].identity, f.ir.identity);
+    assert.equal(explanation.evidence[0].proposal.objectId, f.ir.equations[0].id);
+    assert.ok(deep.claims.some(claim => claim.aspect === 'assumptions' && claim.provenance === 'unknown' && claim.text === 'unknown'));
+    const before = calls.length; f.service.wake(); await f.service.idle(); assert.equal(calls.length, before);
+    assert.equal((await f.service.requestDeep(request)).id, job.id);
+    assert.equal((await read(f, base.id)).knowledge.deepReading, undefined);
+    await assert.rejects(() => f.service.requestDeep({...request, objectIds: ['missing-object']}), /selection_invalid/u);
+    f.revision('revision/2'); f.service.wake(); await f.service.idle();
+    assert.equal((await read(f, job.id)).knowledge.deepReading.status, 'stale');
+    assert.equal((await read(f)).knowledge.deepReading, undefined, 'Source/config refresh does not rerun explicit deep requests');
+    assert.equal(calls.filter(name => name === 'scientific_deep_reading').length, 1);
+  } finally {await close(f);}
+});
+
+test('deep failures preserve the prior publication and cannot promote invented cells or missing evidence', async () => {
+  let mode = 'missing';
+  const f = await setup({invoke: async call => {
+    if (call.name !== 'scientific_deep_reading') return proposals(call);
+    const output = deepProposals(call), claim = output.claims[0];
+    if (mode === 'missing') claim.evidence = [];
+    else if (mode === 'invented') {claim.aspect = 'raw_result'; claim.provenance = 'source_derived'; claim.text = '98.7';}
+    else if (mode === 'authority') claim.scientificApproval = 'approved';
+    return output;
+  }});
+  try {
+    f.service.start(); await f.service.idle(); const original = latest(f);
+    await f.service.requestDeep(deepRequest(f)); await f.service.idle();
+    assert.equal(latest(f).status, 'failed'); assert.equal((await read(f)).publishedJob.id, original.id);
+    for (const next of ['invented', 'authority']) {
+      mode = next; await f.service.retry(jobRequest(f, latest(f))); await f.service.idle();
+      assert.equal(latest(f).status, 'failed'); assert.equal((await read(f)).publishedJob.id, original.id);
+    }
+  } finally {await close(f);}
+});
+
+test('deep batch receipts resume only missing objects and revalidate selected sources', async () => {
+  const entered = deferred(); let blocked = true, deepCalls = 0;
+  const f = await setup({invoke: async (call, signal) => {
+    if (call.name !== 'scientific_deep_reading') return proposals(call);
+    deepCalls++;
+    if (blocked && deepCalls === 2) {
+      entered.resolve();
+      await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), {once: true}));
+    }
+    const {batch} = JSON.parse(call.messages[1].content), object = batch.objects[0];
+    return {claims: [{id: 'read-object', dimension: object.objectType === 'Equation' ? 'mathematical_formulation' : 'experiments',
+      aspect: 'summary', objectId: object.objectId, provenance: 'source_derived', text: 'Original source object',
+      evidence: [{kind: 'object', objectType: object.objectType, objectId: object.objectId}]}], relationships: []};
+  }});
+  try {
+    f.service.start(); await f.service.idle(); const base = latest(f);
+    const job = await f.service.requestDeep({...deepRequest(f), dimensions: ['mathematical_formulation', 'experiments'],
+      objectIds: [f.ir.tables[0].id, f.ir.equations[0].id]});
+    await entered.promise;
+    assert.equal((await read(f)).publishedJob.id, base.id);
+    const receipts = f.repository.scientificExtraction.receipts(job.id, f.project.id);
+    assert.equal(receipts.length, 1); assert.equal(receipts[0].stage, 'deep');
+    assert.equal(receipts[0].output.entities.length, 0, 'Receipt stores batch delta rather than repeated base knowledge');
+    assert.deepEqual(receipts[0].output.deepReading.objects, {tables: [], figures: [], equations: [], algorithms: []});
+    await f.service.shutdown(); blocked = false;
+    f.service = f.create(); f.service.start(); await f.service.idle();
+    assert.equal(latest(f).id, job.id); assert.equal(latest(f).status, 'published', latest(f).error); assert.equal(deepCalls, 3);
+    const result = (await read(f)).knowledge.deepReading;
+    assert.equal(result.claims.filter(claim => claim.provenance === 'source_derived').length, 2);
+    assert.deepEqual(result.objects.tables, [f.ir.tables[0]]); assert.deepEqual(result.objects.equations, [f.ir.equations[0]]);
+  } finally {await close(f);}
+});
+
+
+test('a checksum-consistent receipt with forged source evidence is re-executed before publication', async () => {
+  const entered = deferred(); let blocked = true, count = 0;
+  const f = await setup({invoke: async (call, signal) => {
+    count++;
+    if (blocked && count === 2) {
+      entered.resolve();
+      await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), {once: true}));
+    }
+    return proposals(call);
+  }});
+  try {
+    f.service.start(); await entered.promise; await f.service.shutdown();
+    const job = latest(f), row = f.db.prepare('SELECT candidates_json FROM research_paper_extraction_jobs WHERE id=?').get(job.id);
+    const envelope = JSON.parse(row.candidates_json), receipt = envelope.receipts[0];
+    assert.ok(receipt.output.entities.length > 0);
+    const evidence = receipt.output.entities[0].evidence[0];
+    assert.equal(evidence.kind, 'table_cell'); evidence.raw = 'forged value';
+    const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
+      Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
+    const hash = value => createHash('sha256').update(value).digest('hex');
+    receipt.outputHash = hash(JSON.stringify(canonical(receipt.output)));
+    const json = JSON.stringify(envelope);
+    f.db.prepare('UPDATE research_paper_extraction_jobs SET candidates_json=?,candidates_hash=? WHERE id=?')
+      .run(json, hash(json), job.id);
+    assert.equal(f.repository.scientificExtraction.receipts(job.id, f.project.id).length, 1, 'Checksums alone do not validate sources');
+    blocked = false; f.service = f.create(); f.service.start(); await f.service.idle();
+    assert.equal(latest(f).status, 'published', latest(f).error);
+    assert.ok((await read(f)).knowledge.entities.every(entity => entity.evidence.every(source => source.quote !== 'forged value')));
+    const completed = count; f.revision('revision/2'); f.service.wake(); await f.service.idle();
+    assert.equal(count - completed, completed - 2, 'Invalid source batch is invoked again despite valid receipt hashes');
+  } finally {await close(f);}
+});
+
+
+test('figure summaries cannot invent numeric values or units and numerical model inferences remain rejected', async () => {
+  let text = 'Figure 99 improved accuracy to 98.7%.', provenance = 'author_stated';
+  const f = await setup({invoke: async call => {
+    if (call.name !== 'scientific_deep_reading') return proposals(call);
+    const {batch} = JSON.parse(call.messages[1].content), figure = batch.objects[0];
+    const caption = batch.blocks.find(block => block.text.startsWith('Figure 2:'));
+    assert.ok(caption);
+    return {claims: [{id: 'figure-summary', dimension: 'results', aspect: 'summary', objectId: figure.objectId,
+      provenance, text, evidence: [{kind: 'text', blockId: caption.blockId, start: caption.start,
+        end: caption.end, quote: caption.text}]}], relationships: []};
+  }});
+  try {
+    f.service.start(); await f.service.idle(); const base = latest(f);
+    await f.service.requestDeep({...documentRequest(f), purpose: 'reading', question: 'Explain this figure',
+      dimensions: ['results'], sectionIds: [], objectIds: [f.ir.figures[0].id]});
+    await f.service.idle();
+    assert.equal(latest(f).status, 'failed'); assert.match(latest(f).error, /figure_quantity_unsupported/u);
+    assert.equal((await read(f)).publishedJob.id, base.id);
+    for (const [nextText, nextProvenance] of [['2 FLOPs', 'source_derived'], ['Figure 2', 'model_inference']]) {
+      text = nextText; provenance = nextProvenance;
+      await f.service.retry(jobRequest(f, latest(f))); await f.service.idle();
+      assert.equal(latest(f).status, 'failed'); assert.match(latest(f).error, /figure_quantity_unsupported/u);
+    }
+    text = 'Figure 2'; provenance = 'source_derived';
+    await f.service.retry(jobRequest(f, latest(f))); await f.service.idle();
+    assert.equal(latest(f).status, 'published', latest(f).error);
+    const claim = (await read(f)).knowledge.deepReading.claims.find(item => item.provenance === 'source_derived');
+    assert.equal(claim.text, 'Figure 2'); assert.equal(claim.scientificApproval, 'unreviewed');
   } finally {await close(f);}
 });

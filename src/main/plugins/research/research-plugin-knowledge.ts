@@ -1,3 +1,4 @@
+import {paperDeepKnowledgeRequestSchema} from '../../../shared/schemas/research-paper-deep-knowledge';
 import { knowledgeContextRequestSchema } from '../../../shared/schemas/research-knowledge-context';
 import {scientificSearchRequestSchema} from '../../../shared/schemas/research-scientific-search';
 import {scientificGenerationsRequestSchema, scientificGenerationActivateSchema} from '../../../shared/schemas/research-scientific-generations';
@@ -49,6 +50,10 @@ export function registerResearchKnowledge(
     await production.scientificRetrieval.validateEvidence(scientificEvidenceRequestSchema.parse(input), getCapabilityAbortSignal()));
   context.capabilities.register(pluginId, knowledgeCapabilities.scientificRead, async input =>
     await production.scientificExtraction.read(scientificKnowledgeReadRequestSchema.parse(input), getCapabilityAbortSignal()));
+  context.capabilities.register(pluginId, knowledgeCapabilities.deepRequest, input =>
+    production.scientificExtraction.requestDeep(paperDeepKnowledgeRequestSchema.parse(input), getCapabilityAbortSignal()));
+  context.capabilities.register(pluginId, knowledgeCapabilities.deepRead, input =>
+    production.scientificExtraction.readDeep(scientificKnowledgeReadRequestSchema.parse(input), getCapabilityAbortSignal()));
   context.capabilities.register(pluginId, knowledgeCapabilities.extractionEnqueue, async input =>
     await production.scientificExtraction.enqueue(scientificExtractionDocumentRequestSchema.parse(input), getCapabilityAbortSignal()));
   context.capabilities.register(pluginId, knowledgeCapabilities.extractionJobs, async input => {

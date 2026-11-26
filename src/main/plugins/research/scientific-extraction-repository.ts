@@ -1,3 +1,6 @@
+import {scientificBatchHash, scientificBatchReceiptSchema, scientificBatchReceiptsSchema, type ScientificBatchReceipt} from './scientific-extraction-receipts';
+import {buildScientificExtractionBatches} from './scientific-extraction-batches';
+import {scientificDeepBatches, validateScientificDeepKnowledge} from './scientific-extraction-deep';
 import type {Database} from 'better-sqlite3';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
@@ -23,7 +26,8 @@ export const scientificResolutionHash = (resolution: ScientificExtractionSnapsho
 });
 const inputHash = (snapshot: ScientificExtractionSnapshot): string => digest({
   projectId: snapshot.projectId, paperIR: snapshot.source.paperIR,
-  config: snapshot.config, aliasesHash: snapshot.aliasesHash
+  config: snapshot.config, aliasesHash: snapshot.aliasesHash,
+  ...(snapshot.deepRequest ? {deepRequest: snapshot.deepRequest} : {})
 });
 export const scientificExtractionInputHash = inputHash;
 type JobRow = {
@@ -47,7 +51,11 @@ export function validateScientificKnowledgeCandidates(input: ScientificKnowledge
     snapshot.resolution.aliases, snapshot.resolution.targets));
   const facts = candidates.facts.map(fact => validateScientificFact(fact, basis, entities));
   const relations = candidates.relations.map(relation => validateScientificRelation(relation, basis, entities, facts));
-  return scientificKnowledgeBundleSchema.parse({entities, facts, relations});
+  if (candidates.deepReading && !snapshot.deepRequest) throw new Error('research_scientific_deep_selection_invalid');
+  const deepReading = candidates.deepReading && snapshot.deepRequest ? validateScientificDeepKnowledge(
+    candidates.deepReading, ir, snapshot.deepRequest,
+    scientificDeepBatches(ir, buildScientificExtractionBatches(ir, snapshot.config), snapshot.deepRequest)) : undefined;
+  return scientificKnowledgeBundleSchema.parse({entities, facts, relations, ...(deepReading ? {deepReading} : {})});
 }
 const factEvidence = (fact: ScientificKnowledgeBundle['facts'][number]) => [
   ...fact.evidence.map(source => ({kind: 'evidence', value: source})),
@@ -92,6 +100,11 @@ export class ScientificExtractionRepository {
           snapshot.source.generationId, identity.parseId, identity.sourceHash, identity.parseHash, identity.parserFingerprint,
           snapshot.source.paperIR.sha256, snapshot.config.extractorVersion, snapshot.config.promptVersion,
           digest(snapshot.config.model), generation, hash, json, researchContentHash(json), this.now());
+      if (force && latest?.inputHash === hash && latest.status !== 'published') {
+        const receipts = this.receipts(latest.id, snapshot.projectId).map(receipt => ({...receipt,
+          jobId: id, reusedFromJobId: receipt.reusedFromJobId ?? latest.id}));
+        if (receipts.length) this.storeReceipts(id, receipts);
+      }
       this.changed(snapshot.projectId, documentId);
       return this.get(id, snapshot.projectId);
     }).immediate();
@@ -186,6 +199,57 @@ export class ScientificExtractionRepository {
       error='research_scientific_extraction_interrupted' WHERE status='running'`).run().changes;
   }
 
+  /** Explicit deep work can reuse a complete base publication under the identical source/configuration. */
+  baseCandidates(snapshot: ScientificExtractionSnapshot, ir: PaperIRV2): ScientificKnowledgeCandidates | undefined {
+    const active = this.active(snapshot.projectId, ir.identity.documentId);
+    if (!active) return undefined;
+    const {deepRequest: _previousRequest, ...previousBase} = active.snapshot;
+    const {deepRequest: _currentRequest, ...currentBase} = snapshot;
+    if (inputHash(previousBase) !== inputHash(currentBase)) return undefined;
+    this.assertSource(snapshot);
+    this.bundle(active.id, snapshot.projectId, ir);
+    const candidates = scientificKnowledgeCandidatesSchema.parse(JSON.parse(this.row(active.id).candidates_json!));
+    const base = {entities: candidates.entities, facts: candidates.facts, relations: candidates.relations};
+    validateScientificKnowledgeCandidates(base, snapshot, active.id, ir);
+    return base;
+  }
+
+  /** Unpublished envelopes are never returned through bundle/read. Invalid receipts are cache misses. */
+  receipts(id: string, projectId: string): ScientificBatchReceipt[] {
+    const job = this.get(id, projectId), row = this.row(id);
+    if (job.status === 'published' || row.candidates_json === null ||
+      researchContentHash(row.candidates_json) !== row.candidates_hash) return [];
+    try {
+      const parsed = JSON.parse(row.candidates_json) as {version?: unknown; receipts?: unknown};
+      if (parsed?.version !== 'roc-scientific-batch-receipts/1' || !Array.isArray(parsed.receipts) || parsed.receipts.length > 2048) return [];
+      return parsed.receipts.flatMap(value => {
+        const result = scientificBatchReceiptSchema.safeParse(value);
+        if (!result.success) return [];
+        const receipt = result.data;
+        return receipt.jobId === id && receipt.inputHash === job.inputHash &&
+          receipt.modelRevision === digest(job.snapshot.config.model) && receipt.outputHash === scientificBatchHash(receipt.output) ? [receipt] : [];
+      });
+    } catch {return [];}
+  }
+
+  checkpoint(id: string, projectId: string, input: ScientificBatchReceipt): void {
+    const job = this.get(id, projectId), receipt = scientificBatchReceiptSchema.parse(input);
+    this.assertSource(job.snapshot);
+    if (job.status !== 'running' || receipt.jobId !== id || receipt.inputHash !== job.inputHash ||
+      receipt.modelRevision !== digest(job.snapshot.config.model) || receipt.outputHash !== scientificBatchHash(receipt.output)) {
+      throw new Error('research_scientific_extraction_checkpoint_invalid');
+    }
+    const receipts = this.receipts(id, projectId).filter(item => item.stage !== receipt.stage || item.batchId !== receipt.batchId);
+    receipts.push(receipt);
+    this.storeReceipts(id, receipts);
+  }
+
+  private storeReceipts(id: string, receipts: ScientificBatchReceipt[]): void {
+    const json = JSON.stringify(scientificBatchReceiptsSchema.parse({version: 'roc-scientific-batch-receipts/1', receipts}));
+    this.db.prepare(`UPDATE research_paper_extraction_jobs SET candidates_json=?,candidates_hash=?
+      WHERE id=? AND status IN ('queued','running')`).run(json, researchContentHash(json), id);
+  }
+
   publish(id: string, projectId: string, input: ScientificKnowledgeCandidates, ir: PaperIRV2,
     current: () => ScientificExtractionSnapshot, consumer?: (bundle: ScientificKnowledgeBundle) => unknown): ScientificExtractionJob {
     this.db.transaction(() => {
@@ -196,6 +260,7 @@ export class ScientificExtractionRepository {
       if (inputHash(state) !== job.inputHash) throw new Error('research_scientific_extraction_input_changed');
       const candidates = scientificKnowledgeCandidatesSchema.parse(input);
       const bundle = validateScientificKnowledgeCandidates(candidates, job.snapshot, id, ir);
+      if (job.snapshot.deepRequest && !bundle.deepReading) throw new Error('research_scientific_deep_result_missing');
       for (const [key, table] of [['entities', 'research_paper_entities'], ['facts', 'research_paper_facts'],
         ['relations', 'research_paper_relations']] as const) {
         const column = key === 'entities' ? 'entity_type' : key === 'facts' ? 'fact_type' : 'relation_type';
@@ -240,7 +305,9 @@ export class ScientificExtractionRepository {
       researchContentHash(row.candidates_json) !== row.candidates_hash) {
       throw new Error('research_scientific_extraction_result_invalid');
     }
+    const candidates = scientificKnowledgeCandidatesSchema.parse(JSON.parse(row.candidates_json));
     const bundle = scientificKnowledgeBundleSchema.parse({
+      ...(candidates.deepReading ? {deepReading: candidates.deepReading} : {}),
       entities: this.values('research_paper_entities', id),
       facts: this.values('research_paper_facts', id),
       relations: this.values('research_paper_relations', id)
@@ -277,7 +344,8 @@ export class ScientificExtractionRepository {
     const knowledge = stale && original ? {...original,
       entities: original.entities.map(entity => ({...entity, status: 'stale' as const})),
       facts: original.facts.map(fact => ({...fact, status: 'stale' as const})),
-      relations: original.relations.map(relation => ({...relation, status: 'stale' as const}))} : original;
+      relations: original.relations.map(relation => ({...relation, status: 'stale' as const})),
+      ...(original.deepReading ? {deepReading: {...original.deepReading, status: 'stale' as const}} : {})} : original;
     return scientificKnowledgeReadSchema.parse({currentPaperIR, latestJob, publishedJob,
       state: publishedJob === null ? 'missing' : stale ? 'stale' : 'current', knowledge});
   }

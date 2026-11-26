@@ -1,4 +1,8 @@
 import {isDeepStrictEqual} from 'node:util';
+import {paperDeepKnowledgeRequestSchema, paperDeepSelectionSchema,
+  type PaperDeepKnowledgeRequest, type PaperDeepSelection} from '../../../shared/schemas/research-paper-deep-knowledge';
+import {buildScientificExtractionBatches} from './scientific-extraction-batches';
+import {scientificDeepBatches} from './scientific-extraction-deep';
 import type {RocPluginContext} from '../../kernel/types';
 import {mainResourceActivity, type ResourceActivity} from '../../services/resource-activity';
 import {
@@ -24,8 +28,8 @@ type DocumentRequest = {projectId: string; documentId: string};
 type Session = {stamp: string; value: ScientificExtractionSession};
 type Active = {job: ScientificExtractionJob; stamp: string; controller: AbortController; signal: AbortSignal};
 const failure = (name: string): Error => new Error(`research_scientific_extraction_${name}`);
-const stages: Record<'entities' | 'facts' | 'relations', ProcessingStage> = {
-  entities: 'entity_extraction', facts: 'fact_extraction', relations: 'relation_extraction'
+const stages: Record<'entities' | 'facts' | 'relations' | 'deep', ProcessingStage> = {
+  entities: 'entity_extraction', facts: 'fact_extraction', relations: 'relation_extraction', deep: 'fact_extraction'
 };
 
 /** A single background owner captures authorized inputs, runs proposals and atomically publishes validated generations. */
@@ -104,13 +108,33 @@ export class ScientificExtractionService {
     return job;
   }
 
+  async requestDeep(input: PaperDeepKnowledgeRequest,
+    signal = new AbortController().signal): Promise<ScientificExtractionJob> {
+    this.open();
+    const request = paperDeepKnowledgeRequestSchema.parse(input);
+    const {projectId: _projectId, documentId: _documentId, ...selection} = request;
+    const deepRequest = paperDeepSelectionSchema.parse(selection);
+    signal = AbortSignal.any([signal, this.controller.signal]);
+    const {session, paper, snapshot} = await this.input(request, signal, deepRequest);
+    scientificDeepBatches(paper.ir, buildScientificExtractionBatches(paper.ir, session.value.config), deepRequest);
+    this.assertStamp(session.stamp, signal);
+    const job = this.repository.scientificExtraction.enqueue(snapshot, paper.ir);
+    this.wake();
+    return job;
+  }
+
+  async readDeep(request: ScientificKnowledgeReadRequest,
+    signal = new AbortController().signal): Promise<PaperCardKnowledge> {
+    return this.readPaperCard(request, signal);
+  }
+
   async retry(request: ScientificExtractionJobRequest,
     signal = new AbortController().signal): Promise<ScientificExtractionJob> {
     this.open();
     signal = AbortSignal.any([signal, this.controller.signal]);
     const expected = this.expected(request);
     if (expected.status !== 'failed' && expected.status !== 'cancelled') throw failure('not_retryable');
-    const {session, paper, snapshot} = await this.input(request, signal);
+    const {session, paper, snapshot} = await this.input(request, signal, expected.snapshot.deepRequest);
     this.assertStamp(session.stamp, signal);
     this.expected(request);
     const job = this.repository.scientificExtraction.enqueue(snapshot, paper.ir, true);
@@ -140,7 +164,9 @@ export class ScientificExtractionService {
       configurationError = processingFailureCode(error);
     }
     const paper = await this.capture(request, signal, false);
-    const snapshot = paper && session ? this.snapshot(request.projectId, paper, session.value.config) : null;
+    const store = this.repository.scientificExtraction;
+    const selected = request.generationId ? store.get(request.generationId, request.projectId) : store.active(request.projectId, request.documentId);
+    const snapshot = paper && session ? this.snapshot(request.projectId, paper, session.value.config, selected?.snapshot.deepRequest) : null;
     if (session) this.assertStamp(session.stamp, signal);
     else {signal.throwIfAborted(); this.open();}
     const result = this.repository.scientificExtraction.read(request.projectId, request.documentId,
@@ -347,17 +373,18 @@ export class ScientificExtractionService {
     }
   }
 
-  private snapshot(projectId: string, paper: ScientificSearchPaper, config: ScientificExtractionConfig): ScientificExtractionSnapshot {
+  private snapshot(projectId: string, paper: ScientificSearchPaper, config: ScientificExtractionConfig,
+    deepRequest?: PaperDeepSelection): ScientificExtractionSnapshot {
     const resolution = this.repository.scientificExtraction.resolution(projectId);
     return scientificExtractionSnapshotSchema.parse({projectId, source: paper.receipt, config, resolution,
-      aliasesHash: scientificResolutionHash(resolution)});
+      aliasesHash: scientificResolutionHash(resolution), ...(deepRequest ? {deepRequest} : {})});
   }
 
-  private async input(request: DocumentRequest, signal: AbortSignal) {
+  private async input(request: DocumentRequest, signal: AbortSignal, deepRequest?: PaperDeepSelection) {
     this.repository.scientificExtraction.authorizeDocument(request.projectId, request.documentId);
     const session = await this.session(signal), paper = await this.capture(request, signal, true);
     this.assertStamp(session.stamp, signal);
-    return {session, paper, snapshot: this.snapshot(request.projectId, paper, session.value.config)};
+    return {session, paper, snapshot: this.snapshot(request.projectId, paper, session.value.config, deepRequest)};
   }
 
   private fence(active: Active): void {
@@ -376,7 +403,7 @@ export class ScientificExtractionService {
     const {job} = active, projectId = job.snapshot.projectId, documentId = job.snapshot.source.paperIR.identity.documentId;
     const paper = await this.capture({projectId, documentId}, active.signal, true);
     this.fence(active);
-    const snapshot = this.snapshot(projectId, paper, config);
+    const snapshot = this.snapshot(projectId, paper, config, job.snapshot.deepRequest);
     if (scientificExtractionInputHash(snapshot) !== job.inputHash) throw failure('input_changed');
     return {paper, snapshot};
   }
@@ -441,7 +468,11 @@ export class ScientificExtractionService {
       const original = await this.current(active, session.value.config);
       const result = await trace.run('scientific_extraction', () => runScientificExtraction({
         session: session.value, snapshot: job.snapshot, generationId: job.id, ir: original.paper.ir, signal,
+        baseCandidates: job.snapshot.deepRequest ?
+          this.repository.scientificExtraction.baseCandidates(job.snapshot, original.paper.ir) : undefined,
         assertCurrent: async () => {await this.current(active!, session.value.config);},
+        checkpoint: {read: () => this.repository.scientificExtraction.receipts(job.id, projectId),
+          write: receipt => this.repository.scientificExtraction.checkpoint(job.id, projectId, receipt)},
         observe: async (stage, _batch, operation) => {await trace.run(stages[stage], operation,
           {inputCount: 1, unit: 'model_calls'}, () => 1);}
       }), {unit: 'model_calls'}, value => value.calls);

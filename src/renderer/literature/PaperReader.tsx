@@ -19,6 +19,7 @@ import './reading.css';
 import {ResourceStatus} from './ResourceStatus';
 import {ReaderEvidencePanel} from './ReaderEvidencePanel';
 
+const PaperDeepKnowledge = retryableLazy(() => import('./PaperDeepKnowledge'));
 const ReadingDiscoveryPanel = retryableLazy(() => import('./ReadingDiscoveryPanel'));
 const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
 const ReadingTranslationPanel = retryableLazy(() => import('./ReadingTranslationPanel'));
@@ -100,7 +101,7 @@ export function PaperReader({
   const [readingMode, setReadingMode] = useState<'parsed' | 'original' | 'compare'>('parsed');
   const comparePdf = readingMode === 'compare';
   const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
-  const [inspectorTab, setInspectorTab] = useState<'notes' | 'citations' | 'evidence'>('notes');
+  const [inspectorTab, setInspectorTab] = useState<'notes' | 'citations' | 'evidence' | 'deep'>('notes');
   const revealNotes = (): void => {setInspectorTab('notes'); setNotesVisited(true); setNotesOpen(true);};
   useEffect(() => {
     if (focusRequestId > 0 || focusParseId !== null || focusLocator !== null) {
@@ -497,7 +498,7 @@ export function PaperReader({
     </div>
   </section>;
 
-  const inspectorTabs = [{id: 'notes', label: '笔记'}, {id: 'citations', label: '引用'}, {id: 'evidence', label: '证据'}] as const;
+  const inspectorTabs = [{id: 'notes', label: '笔记'}, {id: 'citations', label: '引用'}, {id: 'evidence', label: '证据'}, {id: 'deep', label: '深读'}] as const;
   const chooseInspectorTab = (tab: typeof inspectorTab): void => {
     setInspectorTab(tab);
     if (tab === 'notes') setNotesVisited(true);
@@ -506,7 +507,7 @@ export function PaperReader({
     data-testid="reader-inspector-toggle" onClick={() => {
       if (!notesOpen && inspectorTab === 'notes') setNotesVisited(true);
       setNotesOpen(!notesOpen);
-    }}>{notesOpen ? '关闭检视器' : '笔记 / 引用 / 证据'}</button>;
+    }}>{notesOpen ? '关闭检视器' : '笔记 / 引用 / 证据 / 深读'}</button>;
   const inspector = (notesOpen || notesVisited) && literature.projectId ? <aside id="reader-inspector" hidden={!notesOpen}
     className="reading-paper-notes" aria-label="文献检视器" data-testid="reader-inspector">
     <div className="reading-toolbar reading-inspector-tabs" role="tablist" aria-label="文献检视内容">
@@ -533,6 +534,13 @@ export function PaperReader({
     <div className="reading-inspector-panel" role="tabpanel" id="reader-inspector-panel-evidence" aria-labelledby="reader-inspector-tab-evidence"
       hidden={inspectorTab !== 'evidence'}>
       {inspectorTab === 'evidence' ? <ReaderEvidencePanel key={selected.id} literature={literature}/> : null}
+    </div>
+    <div className="reading-inspector-panel" role="tabpanel" id="reader-inspector-panel-deep" aria-labelledby="reader-inspector-tab-deep"
+      hidden={inspectorTab !== 'deep'}>
+      {inspectorTab === 'deep' && activeDocumentId ? <LazyBoundary fallback={<p role="status">加载深读…</p>}>
+        <PaperDeepKnowledge key={JSON.stringify([literature.projectId, activeDocumentId])} client={literature.client}
+          projectId={literature.projectId} documentId={activeDocumentId}/>
+      </LazyBoundary> : <p className="text-xs text-muted">选择文档后可深入阅读。</p>}
     </div>
   </aside> : null;
 

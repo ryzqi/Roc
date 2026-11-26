@@ -1,3 +1,5 @@
+import {paperDeepKnowledgeRequestSchema} from '../../../shared/schemas/research-paper-deep-knowledge';
+import {paperCardKnowledgeReadRequestSchema, paperCardKnowledgeSchema} from '../../../shared/schemas/research-paper-card-knowledge';
 import {scientificQueryRequestSchema, scientificQueryResultSchema} from '../../../shared/schemas/research-scientific-query';
 import {researchVisualCapabilities} from './visual-capabilities';
 import {figureUnderstandingCapability} from './figure-understanding-capabilities';
@@ -117,6 +119,8 @@ export const knowledgeCapabilities = {
   scientificContext: descriptor('research.knowledge.scientificContext', scientificContextRequestSchema, scientificContextResultSchema),
   scientificEvidence: descriptor('research.knowledge.scientificEvidence', scientificEvidenceRequestSchema, scientificEvidenceResultSchema),
   scientificRead: descriptor('research.knowledge.scientificRead', scientificKnowledgeReadRequestSchema, scientificKnowledgeReadSchema),
+  deepRequest: descriptor('research.knowledge.deepRequest', paperDeepKnowledgeRequestSchema, scientificExtractionJobSchema),
+  deepRead: descriptor('research.knowledge.deepRead', paperCardKnowledgeReadRequestSchema, paperCardKnowledgeSchema),
   extractionEnqueue: descriptor('research.knowledge.extractionEnqueue', scientificExtractionDocumentRequestSchema, scientificExtractionJobSchema),
   extractionJobs: descriptor('research.knowledge.extractionJobs', scientificExtractionJobsRequestSchema, scientificExtractionJobSchema.array()),
   extractionRetry: descriptor('research.knowledge.extractionRetry', scientificExtractionJobRequestSchema, scientificExtractionJobSchema),

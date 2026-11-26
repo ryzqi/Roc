@@ -232,6 +232,8 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
     'research_search_scientific_knowledge',
     'research_read_scientific_context',
     'research_validate_scientific_evidence',
+    'research_request_paper_deep_knowledge',
+    'research_read_paper_deep_knowledge',
     'research_wiki_search',
     'research_wiki_search_entities',
     'research_wiki_search_facts',

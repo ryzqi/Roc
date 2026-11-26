@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {paperDeepSelectionSchema, paperDeepKnowledgeSchema} from './research-paper-deep-knowledge';
 import {paperIrArtifactSchema} from './research-paper-ir-v2';
 import {scientificGenerationReceiptSchema} from './research-scientific-search';
 import {scientificIdSchema, scientificKnowledgeVersion, scientificFactExtractionSchema, scientificFactSchema} from './research-scientific-facts';
@@ -17,12 +18,14 @@ export const scientificExtractionSnapshotSchema = z.object({
   projectId: scientificIdSchema, source: scientificGenerationReceiptSchema,
   config: scientificExtractionConfigSchema, aliasesHash: hash,
   resolution: z.object({aliases: z.array(scientificEntityAliasSchema).max(500),
-    targets: z.array(scientificEntitySchema).max(500)}).strict()
+    targets: z.array(scientificEntitySchema).max(500)}).strict(),
+  deepRequest: paperDeepSelectionSchema.optional()
 }).strict();
 export const scientificKnowledgeCandidatesSchema = z.object({
   entities: scientificEntityExtractionSchema.shape.entities,
   facts: scientificFactExtractionSchema.shape.facts,
-  relations: scientificRelationExtractionSchema.shape.relations
+  relations: scientificRelationExtractionSchema.shape.relations,
+  deepReading: paperDeepKnowledgeSchema.optional()
 }).strict().superRefine((value, context) => {
   for (const key of ['entities', 'facts', 'relations'] as const) {
     if (new Set(value[key].map(item => item.id)).size !== value[key].length) {
@@ -33,7 +36,8 @@ export const scientificKnowledgeCandidatesSchema = z.object({
 export const scientificKnowledgeBundleSchema = z.object({
   entities: z.array(scientificEntitySchema).max(500),
   facts: z.array(scientificFactSchema).max(500),
-  relations: z.array(scientificRelationSchema).max(500)
+  relations: z.array(scientificRelationSchema).max(500),
+  deepReading: paperDeepKnowledgeSchema.optional()
 }).strict();
 export const scientificExtractionJobSchema = z.object({
   id: scientificIdSchema, generation: z.number().int().positive(),
