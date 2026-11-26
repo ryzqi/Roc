@@ -21,6 +21,7 @@ export function supportsNativeResponseContract(contract: ResponseContract): bool
       schema.minimum === undefined && schema.maximum === undefined;
     if (schema.type === 'boolean') return schema.enum === undefined;
     if (schema.type === 'null') return true;
+    if (schema.type !== 'object') return false;
     const keys = Object.keys(schema.properties);
     return schema.required.length === keys.length &&
       keys.every(key => schema.required.includes(key) && eligible(schema.properties[key]!));
