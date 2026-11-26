@@ -69,6 +69,7 @@ test('forged quotes, values, units, conditions, references and model-granted val
     for (const options of [
       {text: 'The result is 99'}, {text: 'The result is 90 seconds'},
       ...['FLOPs', 'flops', 'kg', 'kg/m^2', '秒', '°C', 'kWh'].map(unit => ({text: `The result is 90 ${unit}`})),
+      {text: '结果为90 FLOPs'}, {text: '耗时90秒'}, {text: '结果为99'},
       {kind: 'source_statement', text: 'This text is not an original quote.'},
       {kind: 'comparison', text: 'These experiments are directly comparable.'},
       {mutate: value => {value.sections[0].statements[0].references[0].id = 'invented';}},
@@ -102,7 +103,8 @@ test('numeric explanations bind arbitrary original units to their own values whi
       fact.evidence[0].quote = `Measured 10 ${unit}.`;
       fact.evidence[1].quote = 'A second setting was 90.';
       const validate = text => explanation.validateWikiExplanation({text, kind: 'paraphrase', references}, basis, 'supported');
-      for (const text of [`The recorded quantity was 10 ${unit}.`, `10 ${unit} was recorded.`, 'The value was 10.', '10 was recorded.']) {
+      for (const text of [`The recorded quantity was 10 ${unit}.`, `10 ${unit} was recorded.`, `测得10 ${unit}。`,
+        'The value was 10.', '10 was recorded.']) {
         const result = validate(text);
         assert.equal(result.validation, 'review_required'); assert.equal(result.scientificApproval, 'unreviewed');
       }

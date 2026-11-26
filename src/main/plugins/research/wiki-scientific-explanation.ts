@@ -53,7 +53,7 @@ function selectedEntries(draft: WikiExplanationDraft, basis: ScientificWikiBasis
   });
 }
 
-const numericPattern = /(?<![\p{L}\p{N}_])[-+]?\d+(?:[.,]\d+)*(?:[eE][-+]?\d+)?/gu;
+const numericPattern = /(?:(?<![\p{L}\p{N}_])|(?<=\p{Script=Han}))[-+]?\d+(?:[.,]\d+)*(?:[eE][-+]?\d+)?/gu;
 // These grammatical continuations are prose, not a quantity suffix. Other adjacent labels are
 // conservatively bound to their original number, including units unknown to the application.
 const numericContinuations = new Set(['and', 'or', 'is', 'are', 'was', 'were', 'with', 'without', 'of',
