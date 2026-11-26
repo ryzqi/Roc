@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 3,
+  "id": "ovis-formula-number-regions-v3",
+  "authorization": "User explicitly approved joint formula-and-number region verification after reviewing v2 region mismatch. Preserve all original raw coordinates, failures and numeric margins. Caption checks remain unchanged.",
+  "scope": "Measurement-only semantic region contract. Not a model output repair, new inference run, precise-region certification, or application enablement.",
+  "identities": {
+    "priorAcceptance": {
+      "path": "evaluation/ovis-evaluator/acceptance-v2.json",
+      "sha256": "0b87b9d8db6039561e59a5094d9e3437d744f6bb6d6a6be877fa5d62b8b2fa70"
+    },
+    "scoring": {
+      "path": "evaluation/ovis-evaluator/scoring.json",
+      "sha256": "e9d8c0413948761e907a3f51e2ae830305ad310d2b58b57290f657eb3dbad981"
+    },
+    "backendInputs": {
+      "path": "evaluation/ovis-evaluator/backend-inputs-v2.json",
+      "sha256": "135aa481ddd9ac80a619d99ef046ab2781b8e19d13d104c6569e13a4f8421455"
+    },
+    "implementation": {
+      "path": "scripts/research/ovis-formula-regions.py",
+      "sha256": "4c83acd8e3c8373991e7f8459b02dd484fd16837a73abe6482ea5a9836a70022"
+    },
+    "candidate": {
+      "path": "evaluation/ovis-decoder/candidate-1.05.json",
+      "sha256": "68ec15d87e2d0dde72460817bbfb74a4eb531350506af9d56b4d8312131022fd"
+    }
+  },
+  "association": {
+    "minimumNumberVerticalOverlap": 0.5,
+    "distanceTieTolerance": 1e-12,
+    "algorithm": "Independently within gold and predictions on each page: number center must lie vertically inside the display formula box, with at least half of number height overlapping. Number and formula must be horizontally disjoint. Prefer formulas to the left of the number; use formulas to the right only if none qualify. Select smallest horizontal gap; equal-distance ties remain unbound. If multiple numbers select the same formula, all remain unbound; no reassignment. No text or gold-guided prediction association.",
+    "goldFormula": "equation_isolated",
+    "goldNumber": "equation_caption",
+    "predictionFormula": "display_formula",
+    "predictionNumber": "formula_number",
+    "unbound": "Preserve original boxes and report every unbound number. Never drop or fabricate a region.",
+    "measurement": "For an unambiguous pair, measure the bounding union as the formula region only. Preserve separate number region, all categories, indices, counts, order and raw content. Already combined gold regions remain unchanged. Inline formulas remain unchanged."
+  },
+  "acceptance": "Every numeric v2 content/geometry/order limit remains unchanged. Recompute geometry with joint formula regions in all compared arms, including reference. Original text/CDM/TEDS and reading-order measures remain unchanged and source-bound. No caption grouping or coordinate offsets. New comparisons do not turn v2 failures into v2 passes.",
+  "arms": {
+    "original-bf16": {
+      "scope": "full",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/paired-347/original-bf16/report.json",
+        "sha256": "01eda8a41a1856becbf37e1def114342e46d16de2d2b80e89f6004e2ab688abd"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-zero-order-audit/original-bf16/report.json",
+        "sha256": "af05765ff3596661b25b3030e828fba01c86433832b79b8cd4e24f565c36044e"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-zero-order-audit/original-bf16/denominator-audit.json",
+        "sha256": "5cd8ed2311a69d3f6cd2335236dc0645c2d3e87bafa8d13a003a9d55cf6f7d17"
+      }
+    },
+    "original-8bit": {
+      "scope": "full",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/paired-347/8bit/report.json",
+        "sha256": "ad84fd9d4c21553641ce27adc3770cda7669593ea456e12ffda4abac2b7e2cd6"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-zero-order-audit/8bit/report.json",
+        "sha256": "589e6f174a831d8241b1a16f68d78affb889a0415685004ad32133663e2cffed"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-zero-order-audit/8bit/denominator-audit.json",
+        "sha256": "76286480c82ab35a7293a58c81bb693f5ae5e913eb9c3ccd1c3f4a6c671b284e"
+      }
+    },
+    "candidate-1.05": {
+      "scope": "full",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05/inference/report.json",
+        "sha256": "3043dfa1305a991c885eba48e3a494ba5f29bd526eb8f6eb0cea6d750cb6496d"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-score/report.json",
+        "sha256": "2310dd474c58cbe9adec474cd43434772a8d0e7f069030187a26f2219943d2d6"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-score/denominator-audit.json",
+        "sha256": "6bbd4d88654f9133f8833abee3c16f9a0708020d8bb4bc2ef55c7a98c4fa8981"
+      }
+    },
+    "official-mps": {
+      "scope": "backend",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/pytorch-reference-mps/report.json",
+        "sha256": "f272458b890ce1c97d717877e2c3f3577ce1f7ae7e274e0e15dce9814f444359"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/official-mps/report.json",
+        "sha256": "60ef43abe994d3af17515d9ca2a4478b3f8ab60405ad76d59f2174beebe780b8"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/official-mps/denominator-audit.json",
+        "sha256": "095d0d353cf7a8cf33c4aa5fe45a52e25f47e0eed8aba6e52ac21183e885edec"
+      }
+    },
+    "mlx-bf16": {
+      "scope": "backend",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/smoke-original-bf16/report.json",
+        "sha256": "0edcc218bc7fbecce987da6c550a943ea0145833769bcb7e05b491b2fe234b51"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/mlx-bf16/report.json",
+        "sha256": "581a7cde9363cae7e3ed1ede51e22422adca78ede9f04f68cd9a2a1aa6228a2a"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/mlx-bf16/denominator-audit.json",
+        "sha256": "095d0d353cf7a8cf33c4aa5fe45a52e25f47e0eed8aba6e52ac21183e885edec"
+      }
+    },
+    "mlx-8bit": {
+      "scope": "backend",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/smoke-8bit/report.json",
+        "sha256": "d28762547eb91dc31c9f0e0c43fecfa708e0118a5a38ef591e9591c46c63dc85"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/mlx-8bit/report.json",
+        "sha256": "ec720b318363ac986c83a2a40a6230308661982a1fecba8f78b01af3f879053a"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/quality-v2-backend-audited/mlx-8bit/denominator-audit.json",
+        "sha256": "095d0d353cf7a8cf33c4aa5fe45a52e25f47e0eed8aba6e52ac21183e885edec"
+      }
+    },
+    "candidate-1.05-backend": {
+      "scope": "backend-candidate",
+      "inference": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05/inference/report.json",
+        "sha256": "3043dfa1305a991c885eba48e3a494ba5f29bd526eb8f6eb0cea6d750cb6496d"
+      },
+      "score": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-backend/report.json",
+        "sha256": "aa41d92e03f123ad802ddbd686b3fc7c7d7fb9a79c3e902ad7fd72f7e98256f3"
+      },
+      "denominatorAudit": {
+        "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-backend/denominator-audit.json",
+        "sha256": "095d0d353cf7a8cf33c4aa5fe45a52e25f47e0eed8aba6e52ac21183e885edec"
+      }
+    }
+  },
+  "comparisons": [
+    [
+      "official-mps",
+      "mlx-bf16"
+    ],
+    [
+      "official-mps",
+      "mlx-8bit"
+    ],
+    [
+      "official-mps",
+      "candidate-1.05-backend"
+    ],
+    [
+      "original-bf16",
+      "original-8bit"
+    ],
+    [
+      "original-bf16",
+      "candidate-1.05"
+    ]
+  ],
+  "automaticAdoption": false,
+  "performanceQualification": false,
+  "exclusions": []
+}
