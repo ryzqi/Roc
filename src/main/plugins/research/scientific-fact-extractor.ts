@@ -62,9 +62,12 @@ export async function extractScientificFacts(session: ScientificExtractionSessio
     'Omit both that other key and its matching conditionEvidence; never keep an orphan evidence entry or use "unknown" for an other value. ' +
     'Preserve independently supported raw values, original evidence and null subjects. Omitting an unsupported condition ' +
     'does not establish scientific meaning or comparability of the retained value. ' +
-    'Each known dataset/version/split/metric/baseline/budget condition requires exactly one conditionEvidence entry with key null. ' +
+    'Each known dataset/version/split/metric/baseline/budget/hardware/trainingBudget/inferenceBudget/randomSeeds/repeats/uncertainty ' +
+    'condition requires exactly one conditionEvidence entry with key null. Preserve printed hardware, training and inference ' +
+    'budgets, random seeds, repeat counts and uncertainty when reported; unknown values may be omitted or use unknown. ' +
     'Each known other condition requires exactly one entry with its exact existing key. Do not duplicate field/key entries. ' +
-    'Known datasetVersion, split, budget and every other value must select {sourceId, firstToken, lastToken} ' +
+    'Known datasetVersion, split, budget, hardware, trainingBudget, inferenceBudget, randomSeeds, repeats, uncertainty ' +
+    'and every other value must select {sourceId, firstToken, lastToken} ' +
     'from conditionTokenChoices, never generated strings. sourceId identifies one complete current source. ' +
     'The same field/key conditionEvidence must include that exact source selection. firstToken and lastToken ' +
     'are zero-based indices into its tokens, with lastToken inclusive; each entry is [index, original non-whitespace token]. ' +

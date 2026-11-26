@@ -88,3 +88,14 @@ export function wikiModelFactory(invoke, {contextWindowTokens = 32000, maxOutput
     })
   };
 }
+
+/** Controlled provider responses exercise the host protocol; they are not model quality evidence. */
+export function wikiExplanationFixture(call, kind = 'paraphrase') {
+  const input = JSON.parse(call.messages[1].content);
+  if (call.options.name === 'wiki_scientific_explanation') return {sections: input.plan.sections.map(section => ({
+    id: section.id, statements: [{text: '此解释依据所选原始来源，科学结论仍需人工核验。', kind, references: section.statements}]
+  }))};
+  if (call.options.name === 'wiki_scientific_support') return {reviews: input.draft.sections.flatMap(section =>
+    section.statements.map((_, statementIndex) => ({sectionId: section.id, statementIndex, support: 'uncertain'})))};
+  return null;
+}

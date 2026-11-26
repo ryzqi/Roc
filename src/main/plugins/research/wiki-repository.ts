@@ -2,9 +2,9 @@ import {createHash, randomUUID} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {z} from 'zod';
 import {
-  wikiCreateSchema, wikiSaveSchema, wikiRollbackSchema, wikiRevisionSchema, wikiSummarySchema, wikiSectionSchema, wikiSectionReadSchema, wikiResynthesizeSchema,
+  wikiCreateSchema, wikiSaveSchema, wikiRollbackSchema, wikiRevisionSchema, wikiSummarySchema, wikiSectionSchema, wikiSectionReadSchema, wikiResynthesizeSchema, wikiUpdateSourcesSchema,
   type WikiSection, type WikiDependency, type WikiRevision, type WikiPage, type WikiSummary, type WikiSearchResult,
-  type WikiPaperKnowledgeSource
+  type WikiPaperKnowledgeSource, type WikiSearchFilters, type WikiTemplate
 } from '../../../shared/schemas/research-wiki-pages';
 import {requireResearchHuman} from '../../services/research-human-context';
 import type {ResearchEvidenceRepository} from './evidence-repository';
@@ -19,6 +19,8 @@ import {wikiPaperKnowledgeDigest, type WikiPaperKnowledgeProvider} from './wiki-
 import {paperCardKnowledgeSchema} from '../../../shared/schemas/research-paper-card-knowledge';
 import {assertScientificWikiSection, type ScientificWikiBasis} from './wiki-scientific-synthesis';
 import {scientificTopicSections, scientificComparisonSections} from './wiki-scientific-pages';
+import {wikiClassification, wikiMatchesFilters} from './wiki-templates';
+import {projectWikiRelations} from './wiki-relations';
 import {acquisitionWikiBatchSchema, acquisitionWikiPageId, acquisitionWikiSections,
   type AcquisitionWikiBatchInput, type AcquisitionWikiBatch, type AcquisitionWikiSelection,
   type AcquisitionWikiSnapshot, type AcquisitionWikiSource} from './literature-acquisition-wiki';
@@ -27,7 +29,7 @@ const hash = (value: unknown): string => createHash('sha256').update(JSON.string
 type PageRow = {id: string; project_id: string; kind: WikiSummary['kind']; title: string; source_document_id: string | null;
   selection_json: string; revision: number; updated_at: string};
 type Selection = {evidenceIds: string[]; claimIds: string[]; paperKnowledgeSources?: WikiPaperKnowledgeSource[];
-  acquisitionBatch?: AcquisitionWikiSelection};
+  acquisitionBatch?: AcquisitionWikiSelection; template?: WikiTemplate};
 type AcquisitionKnowledge = {id: string; title: string; metadata_json: string};
 
 /** Derived drafts only. No write path here can create evidence or approve scientific relations. */
@@ -239,15 +241,20 @@ export class ResearchWikiRepository {
     for (const {project_id} of projects) this.paperKnowledgeChanged(project_id, null);
   }
 
-  async search(projectId: string, query = '', offset = 0): Promise<WikiSearchResult> {
+  async search(projectId: string, query = '', offset = 0, filters: WikiSearchFilters = {}): Promise<WikiSearchResult> {
     this.requireProject(projectId);
     if (!query.trim()) {
-      const rows = this.db.prepare('SELECT * FROM research_wiki_pages WHERE project_id=? ORDER BY updated_at DESC,id LIMIT 51 OFFSET ?')
-        .all(projectId, offset) as PageRow[];
-      return {pages: rows.slice(0, 50).map(row => ({...this.summary(row), matches: []})), mode: 'list', degradation: null,
-        indexedSections: 0, totalSections: 0, nextOffset: rows.length > 50 ? offset + 50 : null};
+      const rows = (this.db.prepare('SELECT * FROM research_wiki_pages WHERE project_id=? ORDER BY updated_at DESC,id')
+        .all(projectId) as PageRow[]).map(row => this.summary(row)).filter(page => wikiMatchesFilters(page, filters));
+      return {pages: rows.slice(offset, offset + 50).map(page => ({...page, matches: []})), mode: 'list', degradation: null,
+        indexedSections: 0, totalSections: 0, nextOffset: rows.length > offset + 50 ? offset + 50 : null};
     }
-    const {hits, ...receipt} = await this.navigation.search(projectId, query, offset);
+    const verified = new Map<string, Promise<WikiPage>>();
+    const {hits, ...receipt} = await this.navigation.search(projectId, query, offset, filters, async (pageId, sectionId) => {
+      let current = verified.get(pageId);
+      if (!current) {current = this.readCurrent(projectId, pageId); verified.set(pageId, current);}
+      return (await current).current?.sections.some(section => section.id === sectionId && section.status === 'current') ?? false;
+    });
     return {...receipt, pages: hits.flatMap(hit => {
       const row = this.row(projectId, hit.pageId);
       return row.revision === hit.revision ? [{...this.summary(row), matches: hit.matches}] : [];
@@ -264,6 +271,7 @@ export class ResearchWikiRepository {
       this.db.prepare(`INSERT INTO research_wiki_pages(id,project_id,kind,title,selection_json,updated_at) VALUES (?,?,?,?,?,?)`)
         .run(id, request.projectId, request.kind, request.title, JSON.stringify({
           evidenceIds: request.evidenceIds, claimIds: request.claimIds,
+          ...(request.template ? {template: request.template} : {}),
           ...(request.paperKnowledgeSources ? {paperKnowledgeSources: request.paperKnowledgeSources} : {})}), this.now());
       this.enqueue(id);
       // Seed dependencies before the first worker runs, so edits/deletes cannot escape the outbox.
@@ -343,6 +351,62 @@ export class ResearchWikiRepository {
     await this.verifyKnowledgeSources(request.projectId, request.paperKnowledgeSources ?? [], signal, true);
     signal.throwIfAborted();
     return this.create(request);
+  }
+
+  async readRelationsCurrent(projectId: string, pageId: string, signal = new AbortController().signal) {
+    const page = await this.readCurrent(projectId, pageId, signal);
+    const sources = this.knowledgeSources(page.current?.sections.filter(section => section.status === 'current') ?? []);
+    if (!sources.length) return [];
+    const relations = projectWikiRelations(await this.readScientificBasis(projectId, sources, signal));
+    if (this.row(projectId, pageId).revision !== page.page.revision || this.read(projectId, pageId).basisDigest !== page.basisDigest) {
+      throw new Error('wiki_basis_changed');
+    }
+    return relations;
+  }
+
+  /** Explicitly enroll new papers in selected sections; unrelated prose and human ownership are immutable. */
+  async updateSourcesCurrent(input: z.infer<typeof wikiUpdateSourcesSchema>, signal = new AbortController().signal): Promise<WikiPage> {
+    const request = wikiUpdateSourcesSchema.parse(input);
+    const page = await this.readCurrent(request.projectId, request.pageId, signal);
+    if (page.page.revision !== request.expectedRevision) throw new Error('wiki_revision_conflict');
+    if (page.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
+    if (page.page.kind === 'source') throw new Error('wiki_topic_required');
+    const targets = request.sectionIds.map(id => page.current?.sections.find(section => section.id === id));
+    if (targets.some(section => !section || section.owner !== 'assistant')) throw new Error('wiki_human_section_protected');
+    await this.verifyKnowledgeSources(request.projectId, request.paperKnowledgeSources, signal, true);
+    const verified = await this.readCurrent(request.projectId, request.pageId, signal);
+    if (verified.page.revision !== request.expectedRevision || verified.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
+    signal.throwIfAborted();
+    return this.db.transaction(() => {
+      signal.throwIfAborted();
+      const row = this.row(request.projectId, request.pageId), current = this.read(request.projectId, request.pageId);
+      if (row.revision !== request.expectedRevision || current.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
+      const dependencies = this.knowledgeDependencies(request.projectId, request.paperKnowledgeSources);
+      const selection = JSON.parse(row.selection_json) as Selection;
+      const all = [...new Map([...(selection.paperKnowledgeSources ?? []), ...request.paperKnowledgeSources]
+        .map(source => [source.documentId, source])).values()];
+      if (all.length > 12) throw new Error('wiki_source_limit');
+      const sections = current.current!.sections.map(section => request.sectionIds.includes(section.id) ? {
+        ...section, status: 'stale' as const,
+        // Dependencies track the old prose. New selected inputs are pending, never retroactive validation.
+        paperKnowledgeSources: [...new Map([...(section.paperKnowledgeSources ?? []), ...request.paperKnowledgeSources]
+          .map(source => [source.documentId, source])).values()]
+      } : section);
+      for (const source of request.paperKnowledgeSources) {
+        const id = `knowledge:${source.documentId}`, existing = sections.find(section => section.id === id);
+        if (existing?.owner === 'human') continue;
+        const fresh: WikiSection = {id, title: '结构化科研知识 · 原始来源',
+          body: '新增来源已登记；选定章节待重新综合。来源校验不代表科学结论已确认。',
+          owner: 'system', status: 'current', evidenceIds: [], claimIds: [], links: [],
+          paperKnowledgeSources: [source], dependencies: dependencies.filter(dep => dep.id === source.documentId)};
+        if (existing) sections[sections.indexOf(existing)] = fresh;
+        else sections.push(fresh);
+      }
+      this.db.prepare('UPDATE research_wiki_pages SET selection_json=? WHERE id=?')
+        .run(JSON.stringify({...selection, paperKnowledgeSources: all}), row.id);
+      this.publish({...row, selection_json: JSON.stringify({...selection, paperKnowledgeSources: all})}, sections, 'compile');
+      return this.read(request.projectId, request.pageId);
+    })();
   }
 
   async saveCurrent(input: z.infer<typeof wikiSaveSchema>, owner: 'human' | 'assistant',
@@ -486,7 +550,9 @@ export class ResearchWikiRepository {
     const paperSources = [...new Map(page.current!.sections.filter(section => section.status === 'current')
       .flatMap(section => section.paperSources ?? []).map(source => [source.chunkId, source])).values()].slice(0, 12);
     const originals = paperSources.map(source => ({source, text: this.knowledge.chunkContext(request.projectId, source.chunkId, 1200).content}));
-    const knowledgeSources = this.knowledgeSources(page.current!.sections.filter(section => section.status === 'current'));
+    const requestedDocuments = new Set(sections.flatMap(section => section?.paperKnowledgeSources?.map(source => source.documentId) ?? []));
+    const knowledgeSources = this.knowledgeSources(page.current!.sections.filter(section => section.status === 'current'))
+      .filter(source => requestedDocuments.size === 0 || requestedDocuments.has(source.documentId));
     if (sections.some(section => section?.paperKnowledgeSources?.some(old =>
       !knowledgeSources.some(source => source.documentId === old.documentId)))) throw new Error('wiki_current_sources_required');
     const scientific = knowledgeSources.length ? await this.readScientificBasis(request.projectId, knowledgeSources, signal) : undefined;
@@ -586,7 +652,7 @@ export class ResearchWikiRepository {
           const sources = generated.filter(section => section.status === 'current').flatMap(section => section.paperKnowledgeSources ?? []);
           if (sources.length === selection.paperKnowledgeSources.length) {
             generated.push(...(row.kind === 'topic' ? scientificTopicSections : scientificComparisonSections)(
-              sources, this.knowledgeDependencies(row.project_id, sources)));
+              sources, this.knowledgeDependencies(row.project_id, sources), selection.template));
           }
         }
         for (const claimId of selection.claimIds) {
@@ -869,7 +935,8 @@ export class ResearchWikiRepository {
   private summary(row: PageRow): WikiSummary {
     const job = this.db.prepare('SELECT generation,status,error FROM research_wiki_jobs WHERE page_id=?').get(row.id) ?? null;
     return wikiSummarySchema.parse({id: row.id, projectId: row.project_id, title: row.title, kind: row.kind,
-      revision: row.revision, updatedAt: row.updated_at, job});
+      revision: row.revision, updatedAt: row.updated_at, job,
+      ...wikiClassification(row.kind, (JSON.parse(row.selection_json) as Selection).template)});
   }
   private sourceIds(row: PageRow): string[] {
     return (this.db.prepare(`SELECT e.id FROM research_evidence e LEFT JOIN research_evidence_source_metadata m ON m.evidence_id=e.id

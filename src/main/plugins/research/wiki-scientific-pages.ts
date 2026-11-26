@@ -1,5 +1,6 @@
-import type {WikiDependency, WikiPaperKnowledgeSource, WikiSection} from '../../../shared/schemas/research-wiki-pages';
+import type {WikiDependency, WikiPaperKnowledgeSource, WikiSection, WikiTemplate} from '../../../shared/schemas/research-wiki-pages';
 import {scientificWikiUnknownSection} from './wiki-scientific-synthesis';
+import {wikiTemplateSections} from './wiki-templates';
 
 export const scientificTopicTargets = [
   {id: 'scientific:overview', title: 'Overview · 概览'},
@@ -14,8 +15,9 @@ export const scientificTopicTargets = [
 ] as const;
 
 /** Pending sections are filled through the existing bounded, source-verified assistant synthesis. */
-export function scientificTopicSections(sources: WikiPaperKnowledgeSource[], dependencies: WikiDependency[]): WikiSection[] {
-  return scientificTopicTargets.map(target => ({
+export function scientificTopicSections(sources: WikiPaperKnowledgeSource[], dependencies: WikiDependency[], template?: WikiTemplate): WikiSection[] {
+  const selected = template ? wikiTemplateSections[template] : undefined;
+  return scientificTopicTargets.filter(target => !selected || selected.includes(target.id.replace('scientific:', ''))).map(target => ({
     ...scientificWikiUnknownSection(target, sources), owner: 'assistant', status: 'stale', dependencies
   }));
 }

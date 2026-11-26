@@ -4,7 +4,7 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi} from './fixtures/scientific-search-fixture.mjs';
-import {scientificWikiFixture, wikiModelFactory} from './fixtures/scientific-wiki-fixture.mjs';
+import {scientificWikiFixture, wikiModelFactory, wikiExplanationFixture} from './fixtures/scientific-wiki-fixture.mjs';
 
 let api, services, synthesis, structured, schemas;
 before(async () => {
@@ -31,6 +31,7 @@ test('actual Wiki synthesis uses current Facts and complete objects, preserves v
     const page = await f.stalePage(['results', 'relations', 'equations']), before = revisionBytes(f, page);
     let captured;
     f.wiki.configureSynthesis(synthesis.createWikiSynthesizer(wikiModelFactory(async call => {
+      const explanation = wikiExplanationFixture(call); if (explanation) return explanation;
       captured = call;
       const input = JSON.parse(call.messages[1].content);
       assert.doesNotMatch(call.messages[1].content, /9999|Old unreviewed interpretation|Keep the human note/);
@@ -42,7 +43,7 @@ test('actual Wiki synthesis uses current Facts and complete objects, preserves v
           target.id === 'equations' ? entry.kind === 'object' && entry.ref.objectType === 'Equation' :
           entry.kind === 'fact' && entry.value.factType === 'experimental_result');
         assert.ok(entry, `${target.id}: offered ${input.entries.map(item => `${item.kind}:${item.ref.objectType ?? item.value.factType ?? item.value.type ?? item.value.entityType}`).join(', ')}`);
-        return {id: target.id, statements: [entry.ref]};
+        return {id: target.id, goal: `Explain ${target.title}`, statements: [entry.ref]};
       })};
     })));
     const updated = await f.wiki.resynthesize(f.synthesisInput(page, ['results', 'relations', 'equations']));

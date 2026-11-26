@@ -1,5 +1,5 @@
 import type {PaperIRV2} from '../../../shared/schemas/research-paper-ir-v2';
-import {scientificSourceProposalSchema, scientificFactProposalSchema, scientificFactSchema,
+import {scientificSourceProposalSchema, scientificFactProposalSchema, scientificFactSchema, scientificStringConditionFields,
   type ScientificSourceProposal, type ScientificSource, type ScientificFactProposal, type ScientificFact} from '../../../shared/schemas/research-scientific-facts';
 import {scientificEntitySchema, type ScientificEntity} from '../../../shared/schemas/research-scientific-entities';
 import {scientificRelationProposalSchema, scientificRelationSchema,
@@ -216,7 +216,7 @@ export function validateScientificFact(input: ScientificFactProposal, basis: Sci
       if (Object.keys(proposal.conditions.other).some(key => !keys.has(`other/${key}`))) {
         throw new Error('research_scientific_fact_condition_source_required');
       }
-    } else if (value !== null && value !== 'unknown' && !keys.has(`${field}/`)) {
+    } else if (value !== undefined && value !== null && value !== 'unknown' && !keys.has(`${field}/`)) {
       throw new Error('research_scientific_fact_condition_source_required');
     }
   }
@@ -277,10 +277,19 @@ export function validateScientificRelation(input: ScientificRelationProposal, ba
   const proposal = scientificRelationProposalSchema.parse(input), sources = createScientificSourceValidator(basis.ir);
   const from = entityReference(proposal.fromEntityId, entities, basis, sources)!,
     to = entityReference(proposal.toEntityId, entities, basis, sources)!;
+  const methodTypes = ['Method', 'Model', 'Algorithm', 'Baseline'];
   const allowed = proposal.type === 'PROPOSES' ? from.entityType === 'Paper' && ['Method', 'Model', 'Algorithm'].includes(to.entityType) :
-    proposal.type === 'USES' ? ['Experiment', 'Method', 'Model'].includes(from.entityType) && to.entityType === 'Dataset' :
+    proposal.type === 'USES' ? ['Experiment', 'Method', 'Model', 'Algorithm'].includes(from.entityType) &&
+      ['Dataset', 'Method', 'Model', 'Algorithm', 'Equation', 'Metric'].includes(to.entityType) :
     proposal.type === 'EVALUATES_WITH' ? from.entityType === 'Experiment' && to.entityType === 'Metric' :
-    ['Method', 'Model'].includes(from.entityType) && ['Method', 'Model', 'Algorithm', 'Equation'].includes(to.entityType);
+    proposal.type === 'CONTAINS' ? ['Method', 'Model'].includes(from.entityType) &&
+      ['Method', 'Model', 'Algorithm', 'Equation'].includes(to.entityType) :
+    proposal.type === 'DEFINES' ? ['Paper', 'Method', 'Model'].includes(from.entityType) && to.entityType !== 'Paper' :
+    proposal.type === 'EVALUATES_ON' ? ['Experiment', 'Method', 'Model', 'Algorithm'].includes(from.entityType) && to.entityType === 'Dataset' :
+    proposal.type === 'EXTENDS' || proposal.type === 'COMPARES_WITH' ? methodTypes.includes(from.entityType) && methodTypes.includes(to.entityType) :
+    proposal.type === 'SUPPORTS' || proposal.type === 'CONTRADICTS' ?
+      ['Paper', 'Experiment', ...methodTypes].includes(from.entityType) && ['Paper', 'Experiment', ...methodTypes].includes(to.entityType) :
+    proposal.type === 'RELATED_TO';
   if (!allowed || from.id === to.id) throw new Error('research_scientific_relation_types_invalid');
   const factIds = proposal.factIds.map(id => {
     const matches = facts.filter(f => f.candidateId === id);
@@ -295,6 +304,35 @@ export function validateScientificRelation(input: ScientificRelationProposal, ba
   if (new Set(factIds).size !== factIds.length) throw new Error('research_scientific_relation_fact_invalid');
   const evidence = normalizeSources(proposal.evidence, sources);
   if (!evidence.some(e => e.locator !== null)) throw new Error('research_scientific_fact_source_required');
+  if (['DEFINES', 'EXTENDS', 'EVALUATES_ON', 'COMPARES_WITH', 'SUPPORTS', 'CONTRADICTS', 'RELATED_TO'].includes(proposal.type)) {
+    // New semantic links need an original statement naming both endpoints. This is a source check,
+    // never semantic approval; the Wiki projection keeps these links pending review.
+    if (!evidence.some(source => source.locator !== null && scientificSourceMentions(source, from.proposal.canonicalName) &&
+      scientificSourceMentions(source, to.proposal.canonicalName))) throw new Error('research_scientific_relation_statement_required');
+  }
+  const selectedFacts = factIds.map(id => facts.find(fact => fact.id === id)!);
+  if (['SUPPORTS', 'CONTRADICTS', 'COMPARES_WITH'].includes(proposal.type) && !selectedFacts.length) {
+    throw new Error('research_scientific_relation_fact_required');
+  }
+  if (proposal.type === 'CONTRADICTS' || proposal.type === 'COMPARES_WITH') {
+    const known = (value: unknown): value is string => typeof value === 'string' &&
+      !!value.trim() && !/^(unknown|unspecified|not reported|n\/a|未知|未记录)$/iu.test(value.trim());
+    const signature = (fact: ScientificFact): string | null => {
+      const conditions = fact.conditions;
+      if (fact.factType !== 'experimental_result' || !fact.value?.normalized || !known(fact.value.unit) ||
+        !conditions.datasetId || !conditions.metricId || !conditions.baselineId ||
+        scientificStringConditionFields.some(field => !known(conditions[field])) ||
+        Object.values(conditions.other).some(value => !known(value))) return null;
+      return JSON.stringify([conditions.datasetId, conditions.metricId, conditions.baselineId,
+        ...scientificStringConditionFields.map(field => conditions[field]),
+        Object.entries(conditions.other).sort(([a], [b]) => a.localeCompare(b)), fact.value.unit]);
+    };
+    const signatures = selectedFacts.map(signature);
+    if (selectedFacts.length < 2 || signatures.some(value => value === null) || new Set(signatures).size !== 1 ||
+      ![from.id, to.id].every(id => selectedFacts.some(fact => fact.subjectEntityId === id))) {
+      throw new Error('research_scientific_relation_conditions_incomparable');
+    }
+  }
   const result = {candidateId: proposal.id, projectId: basis.projectId, generationId: basis.generationId,
     paperId: basis.ir.identity.paperId, documentId: basis.ir.identity.documentId,
     type: proposal.type, fromEntityId: from.id, toEntityId: to.id, factIds, evidence,

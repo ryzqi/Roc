@@ -25,6 +25,8 @@ const capabilities = {
   follow: descriptor('follow', s.wikiFollowSchema, s.wikiPageSchema),
   section: descriptor('section', s.wikiSectionReadSchema, s.wikiSectionDetailSchema),
   resynthesize: descriptor('resynthesize', s.wikiResynthesizeSchema, s.wikiPageSchema),
+  updateSources: descriptor('updateSources', s.wikiUpdateSourcesSchema, s.wikiPageSchema),
+  relations: descriptor('relations', s.wikiPageRequestSchema, s.wikiRelationProjectionsSchema),
   retryPaper: descriptor('paper.retry', s.wikiPageRequestSchema, s.wikiPageSchema),
   paperKnowledge: descriptor('paper.knowledge', paperCardKnowledgeReadRequestSchema, paperCardKnowledgeSchema)
 };
@@ -53,7 +55,7 @@ export function registerResearchWikiCapabilities(context: RocPluginContext, wiki
       }
     });
   }
-  register(capabilities.search, q => wiki.search(q.projectId, q.query, q.offset));
+  register(capabilities.search, q => wiki.search(q.projectId, q.query, q.offset, {kinds: q.kinds, layers: q.layers, templates: q.templates}));
   register(capabilities.knowledgeSearch, q => {
     if (!scientific) throw new Error('research_scientific_search_unavailable');
     return scientific.search(q, getCapabilityAbortSignal());
@@ -72,6 +74,8 @@ export function registerResearchWikiCapabilities(context: RocPluginContext, wiki
   });
   register(capabilities.section, q => wiki.readSectionCurrent(q, getCapabilityAbortSignal()));
   register(capabilities.resynthesize, q => wiki.resynthesize(q, getCapabilityAbortSignal()));
+  register(capabilities.updateSources, q => wiki.updateSourcesCurrent(q, getCapabilityAbortSignal()));
+  register(capabilities.relations, q => wiki.readRelationsCurrent(q.projectId, q.pageId, getCapabilityAbortSignal()));
   register(capabilities.retryPaper, q => {
     papers.retry(q.projectId, q.pageId); return wiki.read(q.projectId, q.pageId);
   });

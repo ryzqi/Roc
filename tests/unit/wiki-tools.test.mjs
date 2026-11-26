@@ -20,11 +20,14 @@ function scene() {
 }
 test('real SDK Wiki tools bind project, navigate citations and publish only generated drafts',async()=>{
   const f=scene();try {
-    const created=await f.call('create',{title:'Synthetic topic',kind:'topic',evidenceIds:[f.evidence.id],claimIds:[]});
+    const created=await f.call('create',{title:'Synthetic topic',kind:'topic',template:'method',evidenceIds:[f.evidence.id],claimIds:[]});
     await f.repository.wiki.idle();
     const search=await f.call('search',{query:'Synthetic',offset:0});assert.equal(search.pages.length,2);
+    const filtered=await f.call('search',{query:'Synthetic',offset:0,layers:['L2'],templates:['method']});
+    assert.deepEqual(filtered.pages.map(page=>page.id),[created.page.id]);
+    assert.deepEqual((await f.call('read_relations',{pageId:created.page.id})).relations,[]);
     const read=await f.call('read',{pageId:created.page.id,offset:0});
-    assert.equal(read.derived,true);assert.equal(read.sources[0].evidenceId,f.evidence.id);assert.match(read.fallback,/research_search_knowledge/);
+    assert.equal(read.derived,true);assert.equal(read.sources[0].evidenceId,f.evidence.id);assert.match(read.fallback,/research_search_scientific_knowledge/);
     assert.ok(JSON.stringify(read).length<=12000);
     await assert.rejects(()=>f.call('read',{pageId:created.page.id,offset:0}),/already_read/);
     const follow=await f.call('follow',{pageId:created.page.id,expectedRevision:read.page.revision,targetPageId:read.links[0].id});
@@ -56,7 +59,7 @@ test('plan mode retains Wiki navigation but blocks both draft mutations before d
     assert.ok(visible.includes('research_wiki_read'));assert.ok(!visible.includes('research_wiki_create'));assert.ok(!visible.includes('research_wiki_draft'));
     let dispatched=0;
     const guard=api.createRocPlanRuntimeToolGuardMiddleware();
-    for(const name of ['research_wiki_create','research_wiki_draft']) {
+    for(const name of ['research_wiki_create','research_wiki_draft','research_wiki_update_sources']) {
       const result=await guard.wrapToolCall({toolCall:{id:'test-plan',name,args:{}}},async()=>{dispatched++;});
       assert.equal(result.status,'error');
     }

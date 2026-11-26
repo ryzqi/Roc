@@ -1,10 +1,11 @@
 import {createHash} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
-import type {WikiSection, WikiSearchResult} from '../../../shared/schemas/research-wiki-pages';
+import type {WikiSection, WikiSearchResult, WikiSearchFilters, WikiSummary, WikiTemplate} from '../../../shared/schemas/research-wiki-pages';
 import type {ResearchEmbeddingService} from './embedding-service';
 import {keywordQueryV1, keywordTextV1} from './knowledge-keywords';
 import {vectorToBlob} from './embedding-vectors';
 import {mainResourceActivity, type ResourceActivity} from '../../services/resource-activity';
+import {wikiMatchesFilters} from './wiki-templates';
 
 const inputVersion = 'wiki-section-v1';
 type SectionRow = {id: number; page_id: string; revision: number; section_id: string; title: string; body: string; vector_blob?: Buffer};
@@ -33,6 +34,7 @@ export class ResearchWikiSearch {
     const insert = this.db.prepare(`INSERT INTO research_wiki_sections
       (page_id,revision,section_id,title,body,input_text,input_hash) VALUES (?,?,?,?,?,?,?)`);
     for (const section of sections) {
+      if (section.status !== 'current') continue;
       const text = `${title}\n${section.title}\n${section.body}`;
       insert.run(pageId, revision, section.id, keywordTextV1(`${title}\n${section.title}`), keywordTextV1(section.body),
         text, createHash('sha256').update(text).digest('hex'));
@@ -73,7 +75,8 @@ export class ResearchWikiSearch {
     await this.running;
   }
 
-  async search(projectId: string, query: string, offset: number): Promise<Navigation> {
+  async search(projectId: string, query: string, offset: number, filters: WikiSearchFilters = {},
+    currentSection: (pageId: string, sectionId: string) => boolean | Promise<boolean> = () => true): Promise<Navigation> {
     const totalSections = this.db.prepare(`SELECT COUNT(*) FROM research_wiki_sections s
       JOIN research_wiki_pages p ON p.id=s.page_id AND p.revision=s.revision WHERE p.project_id=?`).pluck().get(projectId) as number;
     const keywords = keywordQueryV1(query);
@@ -129,12 +132,15 @@ export class ResearchWikiSearch {
     });
     const pages = new Map<string, Navigation['hits'][number]>();
     for (const {row} of [...ranked.values()].sort((a, b) => b.score - a.score || a.row.id - b.row.id)) {
-      const current = this.db.prepare('SELECT revision FROM research_wiki_pages WHERE id=? AND project_id=?').pluck().get(row.page_id, projectId);
-      if (current !== row.revision) continue;
+      const current = this.db.prepare('SELECT revision,kind,selection_json FROM research_wiki_pages WHERE id=? AND project_id=?')
+        .get(row.page_id, projectId) as {revision: number; kind: WikiSummary['kind']; selection_json: string} | undefined;
+      if (current?.revision !== row.revision || !await currentSection(row.page_id, row.section_id) ||
+        !wikiMatchesFilters({kind: current.kind, template: (JSON.parse(current.selection_json) as {template?: WikiTemplate}).template}, filters)) continue;
       const hit = pages.get(row.page_id) ?? {pageId: row.page_id, revision: row.revision, matches: []};
       if (hit.matches.length < 3) {
         const section = (JSON.parse(this.db.prepare('SELECT snapshot_json FROM research_wiki_revisions WHERE page_id=? AND revision=?')
           .pluck().get(row.page_id, row.revision) as string) as {sections: WikiSection[]}).sections.find(value => value.id === row.section_id)!;
+        if (section.status !== 'current') continue;
         hit.matches.push({sectionId: section.id, title: section.title, snippet: section.body.slice(0, 320)});
       }
       pages.set(row.page_id, hit);

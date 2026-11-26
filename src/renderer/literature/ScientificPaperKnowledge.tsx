@@ -16,7 +16,8 @@ import {PaperDeepKnowledge} from './PaperDeepKnowledge';
 type Reference = {kind: 'entity' | 'fact' | 'relation'; id: string; candidateId?: string} |
   {kind: 'object'; id: string; objectType?: 'Table' | 'Figure' | 'Equation' | 'Algorithm'};
 const conditionLabels = {datasetId: '数据集', datasetVersion: '数据集版本', split: '划分',
-  metricId: '指标', baselineId: '基线', budget: '训练 / 计算预算', other: '其他条件'} as const;
+  metricId: '指标', baselineId: '基线', budget: '训练 / 计算预算', hardware: '硬件', trainingBudget: '训练预算', inferenceBudget: '推理预算',
+  randomSeeds: '随机种子', repeats: '实验次数', uncertainty: '不确定度', other: '其他条件'} as const;
 export function ScientificPaperKnowledge({client, projectId, reference, record, onSelectEntity, onFactFilter, graph = false}: {
   client: RocClient; projectId: string; reference: WikiPaperKnowledgeSource; record?: Reference;
   onSelectEntity?: (entity: ScientificEntity, source: WikiPaperKnowledgeSource) => void;
@@ -93,6 +94,8 @@ function ScientificRecord({hit, client, projectId, onSelectEntity}: {
           ['数据集', entityName(hit.value.conditions.datasetId)], ['数据集版本', hit.value.conditions.datasetVersion],
           ['划分', hit.value.conditions.split], ['指标', entityName(hit.value.conditions.metricId)],
           ['基线', entityName(hit.value.conditions.baselineId)], ['训练 / 计算预算', hit.value.conditions.budget],
+          ...(['hardware', 'trainingBudget', 'inferenceBudget', 'randomSeeds', 'repeats', 'uncertainty'] as const)
+            .map(key => [conditionLabels[key], hit.value.conditions[key] ?? 'unknown'] as [string, string]),
           ...Object.entries(hit.value.conditions.other)] as [string, string][]).map(([name, value]) => <div key={name} className="contents">
           <dt className="text-muted">{name}</dt><dd className="whitespace-pre-wrap break-words">{value === 'unknown' ? '未知' : value}</dd>
         </div>)}

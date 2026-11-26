@@ -10,8 +10,9 @@ import {useDebouncedValue} from '../app/use-debounced-value';
 import {ActionButton, formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ActionStatus} from '../shared/action-status';
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
-import type {WikiPage, WikiSection, WikiPaperKnowledgeSource} from '../../shared/schemas/research-wiki-pages';
+import type {WikiPage, WikiSection, WikiPaperKnowledgeSource, WikiSummary, WikiTemplate} from '../../shared/schemas/research-wiki-pages';
 import {ScientificPaperKnowledge, ScientificStatementReference} from './ScientificPaperKnowledge';
+import {WikiScientificExplanation} from './WikiScientificExplanation';
 import {statementReferenceKey} from './scientific-wiki';
 import {useLiteratureEditor} from './literature-editor-guard';
 import type {PaperSource} from '../../shared/schemas/research-paper-card';
@@ -22,6 +23,14 @@ const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
 const button = formSecondaryButtonClass;
 const field = formInputClass;
 const kinds = {source: '论文与来源', topic: '主题', comparison: '比较', dispute: '争议'};
+const layers = {L1: 'L1 论文来源', L2: 'L2 领域知识', L3: 'L3 研究综合'};
+const templates: Record<WikiTemplate, string> = {paper_source: '论文来源', concept: '概念', method: '方法',
+  equation: '公式', algorithm: '算法', dataset: '数据集', metric: '指标', protocol: '实验协议', research_synthesis: '研究综合'};
+const templateEntries = Object.entries(templates) as [WikiTemplate, string][];
+function classification(page: WikiSummary): {layer: keyof typeof layers; template: WikiTemplate} {
+  const template = page.template ?? (page.kind === 'source' ? 'paper_source' : 'research_synthesis');
+  return {template, layer: page.layer ?? (template === 'paper_source' ? 'L1' : template === 'research_synthesis' ? 'L3' : 'L2')};
+}
 const jobs = {queued: '排队中', running: '编译中', ready: '已编译', failed: '编译失败'};
 const paperJobs = {queued: '排队中', running: '生成中', ready: '已生成', failed: '生成失败'};
 const jobStates = {queued: 'pending', running: 'pending', ready: 'success', failed: 'error'} as const;
@@ -33,9 +42,11 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
   const [query, setQuery] = useState(''), [offset, setOffset] = useState(0), [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false), [editing, setEditing] = useState(false);
   const [browsing, setBrowsing] = useState(true);
+  const [layer, setLayer] = useState<keyof typeof layers | ''>(''), [template, setTemplate] = useState<WikiTemplate | ''>('');
   const searchQuery = useDebouncedValue(query, 250);
-  const pages = useAsyncResource(`wiki-pages:${projectId}:${searchQuery}:${offset}`,
-    () => client.api.research.searchWiki({projectId, query: searchQuery, offset}), {label: '读取 Wiki 页面'});
+  const pages = useAsyncResource(`wiki-pages:${projectId}:${searchQuery}:${offset}:${layer}:${template}`,
+    () => client.api.research.searchWiki({projectId, query: searchQuery, offset,
+      ...(layer ? {layers: [layer]} : {}), ...(template ? {templates: [template]} : {})}), {label: '读取 Wiki 页面'});
   const locked = creating || editing;
   useEffect(() => {onLock(locked); return () => onLock(false);}, [locked, onLock]);
   const onEditing = useCallback((value: boolean) => {onLock(value); setEditing(value);}, [onLock]);
@@ -45,6 +56,18 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
       <label className="knowledge-search"><Search size={15} aria-hidden="true"/>
         <input type="search" aria-label="搜索持久页面" value={query} disabled={locked}
           onChange={event => {setQuery(event.target.value); setOffset(0); setBrowsing(true);}} placeholder="搜索知识页面"/>
+      </label>
+      <label className="flex min-w-0 items-center gap-2 whitespace-nowrap text-xs">层级
+        <select className={field} aria-label="筛选知识层级" value={layer} disabled={locked}
+          onChange={event => {setLayer(event.target.value as typeof layer); setOffset(0); setBrowsing(true);}}>
+          <option value="">全部层级</option>{Object.entries(layers).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <label className="flex min-w-0 items-center gap-2 whitespace-nowrap text-xs">模板
+        <select className={field} aria-label="筛选页面模板" value={template} disabled={locked}
+          onChange={event => {setTemplate(event.target.value as typeof template); setOffset(0); setBrowsing(true);}}>
+          <option value="">全部模板</option>{templateEntries.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
       </label>
       <button type="button" className={formPrimaryButtonClass} disabled={locked || !writable}
         onClick={() => {onLock(true); setCreating(true); setBrowsing(false);}}><Plus size={14} aria-hidden="true"/>新建主题页</button>
@@ -60,13 +83,14 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
         <div className="knowledge-directory-heading"><span>页面目录</span><span>{pages.data?.pages.length ?? 0} 页</span></div>
         <div className="knowledge-directory-scroll">
         {pages.data === null && !pages.error && <ActionStatus state="pending" icon={null} className="p-2 text-xs text-subtle">正在读取页面…</ActionStatus>}
-        {pages.data?.pages.length === 0 && <p className="p-2 text-xs text-subtle">{searchQuery ? '没有命中。可尝试原始文献检索。' : '暂无页面。先解析论文或捕获原始证据。'}</p>}
+        {pages.data?.pages.length === 0 && <p className="p-2 text-xs text-subtle">{layer || template ? '没有符合筛选条件的页面。' : searchQuery ? '没有命中。可尝试原始文献检索。' : '暂无页面。先解析论文或捕获原始证据。'}</p>}
         {pages.data?.pages.map(page => <button key={page.id} disabled={locked} aria-current={selected === page.id ? 'page' : undefined}
           data-testid="wiki-page-row" className="knowledge-page-row"
           onClick={() => {setSelected(page.id); setBrowsing(false);}}>
           <span className="block break-words">{page.title}</span>
           <span className="flex flex-wrap gap-x-2 text-xs text-subtle">
             <span>{kinds[page.kind]}</span>
+            <span>{classification(page).layer}</span><span>{templates[classification(page).template]}</span>
             <span>{page.job ? jobs[page.job.status] : '待编译'}</span>
           </span>
           {page.matches[0] && <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-subtle"><span>{page.matches[0].title}</span><span>{page.matches[0].snippet.slice(0, 100)}</span></span>}
@@ -82,7 +106,9 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
           onClick={() => setBrowsing(true)}><ArrowLeft size={14} aria-hidden="true"/>返回页面目录</button>
         <div className="knowledge-detail-scroll"><div className="knowledge-reading-column">
         {creating ? <CreatePage client={client} projectId={projectId} snapshot={snapshot} writable={writable}
-          onClose={() => {setCreating(false); setBrowsing(selected === null);}} onCreated={id => {setSelected(id); setCreating(false); pages.reload();}}/> :
+          onClose={() => {setCreating(false); setBrowsing(selected === null);}} onCreated={id => {
+            setSelected(id); setCreating(false); setLayer(''); setTemplate(''); setQuery(''); setOffset(0); pages.reload();
+          }}/> :
           selected === null ? <EmptyState icon={BookOpen} title="选择一页知识"/> :
           <PageDetail key={selected} client={client} projectId={projectId} pageId={selected} writable={writable}
             onAskAssistant={onAskAssistant} onEditing={onEditing} onNavigate={id => {setSelected(id); setBrowsing(false);}} onChanged={pages.reload}/>}
@@ -92,18 +118,20 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
   </div>;
 }
 
-type CreateDraft = {title: string; kind: 'topic' | 'comparison' | 'dispute'; evidenceIds: string[]; claimIds: string[]};
-const emptyCreateDraft = (): CreateDraft => ({title: '', kind: 'topic', evidenceIds: [], claimIds: []});
+type CreateDraft = {title: string; kind: 'topic' | 'comparison' | 'dispute';
+  template: Exclude<WikiTemplate, 'paper_source'>; evidenceIds: string[]; claimIds: string[]};
+const emptyCreateDraft = (): CreateDraft => ({title: '', kind: 'topic', template: 'research_synthesis', evidenceIds: [], claimIds: []});
 
 function CreatePage({client, projectId, snapshot, writable, onClose, onCreated}: Pick<Props, 'client' | 'projectId' | 'snapshot' | 'writable'> & {
   onClose: () => void; onCreated: (id: string) => void}): React.JSX.Element {
   const [draft, setDraft] = useState<CreateDraft>(emptyCreateDraft);
   const current = useRef(draft), submitting = useRef(false), mounted = useRef(true);
-  const {title, kind, evidenceIds, claimIds} = draft;
+  const {title, kind, template, evidenceIds, claimIds} = draft;
   const [filter, setFilter] = useState(''), [offset, setOffset] = useState(0);
   const create = useAsyncAction((value: CreateDraft) => client.api.research.createWiki({projectId, ...value}), {label: '创建 Wiki 页'});
   const editor = useLiteratureEditor({label: 'Wiki 主题草稿', dirty: () => current.current.title !== '' ||
-    current.current.kind !== 'topic' || current.current.evidenceIds.length + current.current.claimIds.length > 0,
+    current.current.kind !== 'topic' || current.current.template !== 'research_synthesis' ||
+    current.current.evidenceIds.length + current.current.claimIds.length > 0,
     busy: () => submitting.current, discard: () => {
       current.current = emptyCreateDraft(); setDraft(current.current); create.reset(); editor.notify();
     }});
@@ -133,6 +161,12 @@ function CreatePage({client, projectId, snapshot, writable, onClose, onCreated}:
     <label className="flex flex-col gap-1.5 text-xs">标题<input aria-label="页面标题" className={field} value={title} maxLength={300} required disabled={disabled} onChange={event => change({title: event.target.value})}/></label>
     <label className="flex flex-col gap-1.5 text-xs">页面类型<select aria-label="页面类型" className={field} value={kind} disabled={disabled}
       onChange={event => change({kind: event.target.value as typeof kind})}><option value="topic">主题</option><option value="comparison">比较</option><option value="dispute">争议</option></select></label>
+    <label className="flex flex-col gap-1.5 text-xs">页面模板<select aria-label="页面模板" className={field} value={template} disabled={disabled}
+      onChange={event => change({template: event.target.value as typeof template})}>
+      {templateEntries.filter(([value]) => value !== 'paper_source').map(([value, label]) => <option key={value} value={value}>
+        {value === 'research_synthesis' ? 'L3' : 'L2'} {label}
+      </option>)}
+    </select></label>
     <label className="flex flex-col gap-1.5 text-xs">选择原始证据（最多 50 条）<input aria-label="筛选原始证据" className={field} value={filter} disabled={disabled}
       onChange={event => {setFilter(event.target.value); setOffset(0);}}/></label>
     <div className="ui-scroll-region max-h-52 rounded-control border-[0.5px] border-line p-2">
@@ -212,6 +246,7 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
       {data.paperJob && data.paperJob.status !== 'ready' && <ActionStatus key={`${data.paperJob.generation}:${data.paperJob.status}`}
         state={jobStates[data.paperJob.status]} announce={false}>论文卡片：{paperJobs[data.paperJob.status]}</ActionStatus>}
       {data.current && <span>{reasons[data.current.reason]}</span>}
+      <span>{layers[classification(data.page).layer]}</span><span>{templates[classification(data.page).template]}</span>
     </div>
     <div className="knowledge-page-actions">
       <ActionButton variant="compact" aria-label="刷新页面" disabled={locked} loading={page.status === 'loading'}
@@ -258,7 +293,21 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
         </p>
         {section.owner === 'assistant' && section.status === 'stale' && <button className={button} disabled={!writable || pending}
           onClick={() => {void mutate(() => synthesize.run(data, section.id));}}>更新此助手章节</button>}
-        <div className="knowledge-section-body" data-testid="wiki-section-body"><LazyBoundary fallback={<p className="whitespace-pre-wrap">{section.body}</p>}><ScientificMarkdown text={section.body}/></LazyBoundary></div>
+        {onAskAssistant && data.page.kind !== 'source' && section.owner !== 'human' && Boolean(section.paperKnowledgeSources?.length) &&
+          <button className={button} disabled={!writable || pending} onClick={() => onAskAssistant(
+            `请为此 Wiki 章节补充新论文来源。当前操作上下文：${JSON.stringify({projectId, pageId,
+              sectionIds: [section.id], expectedRevision: data.page.revision, expectedBasisDigest: data.basisDigest,
+              existingPaperKnowledgeSources: section.paperKnowledgeSources})}。先用 research_wiki_read 核对当前修订，读取相关新论文已发布的科研知识代次；` +
+            '若来源或目标不明确，先询问我。调用 research_wiki_update_sources 仅更新此节的 paperKnowledgeSources，保留人工章节和历史修订。' +
+            '依据更新收据中的最新 revision 与 basisDigest 调用 research_wiki_resynthesize，仅重建此节。展示原始来源、未解决问题与未人工审核状态。'
+          )}>用新论文更新此节</button>}
+        {section.scientificExplanation ? <>
+          <WikiScientificExplanation client={client} projectId={projectId} explanation={section.scientificExplanation}
+            current={section.status === 'current'} sourceReady={page.status === 'ready'}/>
+          <details className="knowledge-auxiliary"><summary>完整章节记录与原始条件</summary>
+            <div className="knowledge-section-body" data-testid="wiki-section-body"><LazyBoundary fallback={<p className="whitespace-pre-wrap">{section.body}</p>}><ScientificMarkdown text={section.body}/></LazyBoundary></div>
+          </details>
+        </> : <div className="knowledge-section-body" data-testid="wiki-section-body"><LazyBoundary fallback={<p className="whitespace-pre-wrap">{section.body}</p>}><ScientificMarkdown text={section.body}/></LazyBoundary></div>}
         {page.status !== 'ready' ? null : <>
           {section.scientificStatements?.map((statement, index) => <ScientificStatementReference
             key={`${statementReferenceKey(statement)}:${index}`} client={client} projectId={projectId} statement={statement}/>)}
@@ -295,6 +344,7 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
     expectedBasisDigest: data.basisDigest, section: {id: section.id, ...value, evidenceIds: section.evidenceIds,
       claimIds: section.claimIds, links: section.links, paperSources: section.paperSources,
       paperKnowledgeSources: section.paperKnowledgeSources,
+      ...(value.body === section.body && section.scientificExplanation ? {scientificExplanation: section.scientificExplanation} : {}),
       ...(value.body === section.body && section.scientificStatements ? {scientificStatements: section.scientificStatements} : {})
     }}), {label: '保存人工章节'});
   const editor = useLiteratureEditor({label: 'Wiki 人工章节', dirty: () => current.current.title !== baseline.current.title ||

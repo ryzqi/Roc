@@ -4,7 +4,7 @@ import {writeFile} from 'node:fs/promises';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi} from './fixtures/scientific-search-fixture.mjs';
 import {scientificComparisonFixture} from './fixtures/scientific-comparison-fixture.mjs';
-import {wikiModelFactory} from './fixtures/scientific-wiki-fixture.mjs';
+import {wikiModelFactory, wikiExplanationFixture} from './fixtures/scientific-wiki-fixture.mjs';
 
 let api, services, structured, synthesis, comparison;
 before(async () => {
@@ -41,6 +41,7 @@ test('three actual PDF publications produce an identity-aligned matrix with exac
     assert.match(section.body, /此比较不生成方法排名/);
     let offered;
     f.wiki.configureSynthesis(synthesis.createWikiSynthesizer(wikiModelFactory(async call => {
+      const explanation = wikiExplanationFixture(call, 'comparison'); if (explanation) return explanation;
       offered = JSON.parse(call.messages[1].content);
       const facts = offered.entries.filter(entry => entry.kind === 'fact' && entry.value.factType === 'experimental_result');
       assert.equal(new Set(facts.map(entry => entry.ref.source.documentId)).size, 3, 'every complete source group fits');
@@ -72,11 +73,12 @@ test('three actual PDF publications produce an identity-aligned matrix with exac
           assert.ok(condition.evidence.every(index => offered.sources[index].source.documentId === paper.document.id));
         }
       }
-      assert.ok(structured.wikiSynthesisInputTokens(call.messages, call.schema, call.options.name) <= 12000);
-      return {sections: [{id: target.id, statements: facts.map(entry => entry.ref)}]};
+      assert.ok(structured.wikiSynthesisInputTokens(call.messages, call.schema, call.options.name) <= 16000);
+      return {sections: [{id: target.id, goal: 'Compare complete recorded experimental conditions.', statements: facts.map(entry => entry.ref)}]};
     })));
     const updated = await f.wiki.resynthesize(f.synthesisInput(f.page, [target.id]));
-    assert.equal(updated.current.sections.find(item => item.id === target.id).body, section.body);
+    assert.ok(updated.current.sections.find(item => item.id === target.id).body.includes(section.body));
+    assert.equal(updated.current.sections.find(item => item.id === target.id).scientificExplanation.statements[0].kind, 'comparison');
     assert.deepEqual(f.wiki.revision(f.project.id, f.page.page.id, original.revision), original);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_evidence').pluck().get(), 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_claims').pluck().get(), 0);
@@ -100,6 +102,7 @@ test('every missing or different experimental dimension and incomplete paper sel
     const knowledge = await f.readAll(), original = columns(knowledge);
     for (const [field, mutate] of [
       ['dataset', column => {column.fact.conditions.datasetId = null;}],
+      ['dataset', column => {column.entities.find(entity => entity.entityType === 'Dataset').proposal.attributes.version = 'v2';}],
       ['dataset_version', column => {column.fact.conditions.datasetVersion = 'v2';}],
       ['split', column => {column.fact.conditions.split = 'validation';}],
       ['metric', column => {column.fact.conditions.metricId = null;}],
@@ -108,6 +111,12 @@ test('every missing or different experimental dimension and incomplete paper sel
       ['baseline', column => {column.fact.conditions.baselineId = null;}],
       ['baseline_version', column => {column.entities.find(entity => entity.entityType === 'Baseline').proposal.attributes.version = 'v2';}],
       ['budget', column => {column.fact.conditions.budget = 'unknown';}],
+      ['hardware', column => {delete column.fact.conditions.hardware;}],
+      ['trainingBudget', column => {column.fact.conditions.trainingBudget = 'unknown';}],
+      ['inferenceBudget', column => {column.fact.conditions.inferenceBudget = '3 ms';}],
+      ['randomSeeds', column => {column.fact.conditions.randomSeeds = '2';}],
+      ['repeats', column => {column.fact.conditions.repeats = '1';}],
+      ['uncertainty', column => {column.fact.conditions.uncertainty = 'unknown';}],
       ['other_conditions', column => {column.fact.conditions.other.seed = '2';}],
       ['other_conditions', column => {column.fact.conditions.other = {};}],
       ['numeric_value', column => {column.fact.value.normalized = null;}]

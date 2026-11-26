@@ -1,5 +1,5 @@
 import type {ScientificEntity} from '../../../shared/schemas/research-scientific-entities';
-import type {ScientificFact} from '../../../shared/schemas/research-scientific-facts';
+import {scientificExtendedConditionFields, type ScientificFact} from '../../../shared/schemas/research-scientific-facts';
 import type {WikiPaperKnowledgeSource, WikiSection} from '../../../shared/schemas/research-wiki-pages';
 
 export type ScientificComparisonColumn = {
@@ -31,7 +31,8 @@ export function checkScientificComparison(columns: ScientificComparisonColumn[],
   if (columns.length === 0) return {status: 'not_directly_comparable', checks};
   const values = (field: string, input: Array<string | null | undefined>): void => {checks.push({field, status: same(input)});};
   const identities = (field: string, input: Array<ScientificEntity | undefined>): void => {
-    const status = input.some(item => !item) ? 'unknown' : new Set(input.map(item => item!.id)).size === 1 ? 'match' :
+    const status = input.some(item => !item) ? 'unknown' : new Set(input.map(item => item!.id)).size === 1 ?
+      new Set(input.map(item => JSON.stringify(item!.proposal.attributes))).size === 1 ? 'match' : 'unknown' :
       new Set(input.map(item => item!.proposal.canonicalName)).size === 1 ? 'unknown' : 'different';
     checks.push({field, status});
   };
@@ -46,6 +47,7 @@ export function checkScientificComparison(columns: ScientificComparisonColumn[],
   identities('baseline', baselines);
   values('baseline_version', baselines.map(item => item?.proposal.entityType === 'Baseline' ? item.proposal.attributes.version : null));
   values('budget', columns.map(column => column.fact.conditions.budget));
+  for (const field of scientificExtendedConditionFields) values(field, columns.map(column => column.fact.conditions[field]));
   values('other_conditions', columns.map(column => {
     const pairs = Object.entries(column.fact.conditions.other).sort(([a], [b]) => a.localeCompare(b));
     return pairs.length && pairs.every(([, value]) => known(value)) ? JSON.stringify(pairs) : null;

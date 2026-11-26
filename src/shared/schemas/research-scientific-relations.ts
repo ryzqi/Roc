@@ -1,7 +1,8 @@
 import {z} from 'zod';
 import {scientificIdSchema, scientificSourcesProposalSchema, scientificSourceSchema} from './research-scientific-facts';
 
-export const scientificRelationTypeSchema = z.enum(['PROPOSES', 'USES', 'EVALUATES_WITH', 'CONTAINS']);
+export const scientificRelationTypeSchema = z.enum(['PROPOSES', 'USES', 'EVALUATES_WITH', 'CONTAINS',
+  'DEFINES', 'EXTENDS', 'EVALUATES_ON', 'COMPARES_WITH', 'SUPPORTS', 'CONTRADICTS', 'RELATED_TO']);
 export const scientificRelationProposalSchema = z.object({
   id: scientificIdSchema, type: scientificRelationTypeSchema,
   fromEntityId: scientificIdSchema, toEntityId: scientificIdSchema,

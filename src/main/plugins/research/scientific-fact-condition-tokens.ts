@@ -1,17 +1,22 @@
 import {z} from 'zod';
 import {scientificConditionsSchema, scientificFactExtractionSchema, scientificFactProposalSchema,
-  scientificIdSchema, type ScientificFactProposal, type ScientificSource, type ScientificSourceProposal
+  scientificIdSchema, scientificExtendedConditionFields, scientificStringConditionFields,
+  type ScientificFactProposal, type ScientificSource, type ScientificSourceProposal
 } from '../../../shared/schemas/research-scientific-facts';
 import {scientificNameTokens, type scientificExtractionInput} from './scientific-extraction-input';
 import type {ScientificExtractionBatch} from './scientific-extraction-batches';
 import type {ScientificResultEvidenceScope} from './scientific-fact-validator';
 
-const stringFields = ['datasetVersion', 'split', 'budget'] as const;
+const stringFields = scientificStringConditionFields;
 const rangeSchema = z.object({sourceId: scientificIdSchema, firstToken: z.number().int().nonnegative(),
   lastToken: z.number().int().nonnegative()}).strict();
+const optionalRange = z.union([z.literal('unknown'), rangeSchema]).optional();
+const optionalRanges = Object.fromEntries(scientificExtendedConditionFields.map(field => [field, optionalRange])) as
+  Record<typeof scientificExtendedConditionFields[number], typeof optionalRange>;
 const tokenConditions = z.object({...scientificConditionsSchema.shape,
   datasetVersion: z.union([z.literal('unknown'), rangeSchema]),
   split: z.union([z.literal('unknown'), rangeSchema]), budget: z.union([z.literal('unknown'), rangeSchema]),
+  ...optionalRanges,
   other: z.record(z.string().min(1).max(200), rangeSchema)
 }).strict();
 const tokenProposal = z.object({...scientificFactProposalSchema.shape, conditions: tokenConditions}).strict()
@@ -60,6 +65,7 @@ export function scientificFactConditionTokenContract(batch: ScientificExtraction
       firstToken: rangeSchema.shape.firstToken.max(maximum), lastToken: rangeSchema.shape.lastToken.max(maximum)});
     const fixed = ids.length ? z.union([z.literal('unknown'), selection]) : z.literal('unknown');
     return z.object({...base.shape, datasetVersion: fixed, split: fixed, budget: fixed,
+      ...Object.fromEntries(scientificExtendedConditionFields.map(field => [field, fixed.optional()])),
       other: z.record(z.string().min(1).max(200), selection)}).strict();
   };
   const evidence = (codec: Codec, ids: readonly string[]): z.ZodType => {
@@ -95,7 +101,7 @@ export function scientificFactConditionTokenContract(batch: ScientificExtraction
       }
       for (const [field, value] of Object.entries(fact.conditions)) {
         if (field === 'other') continue;
-        if (value !== null && value !== 'unknown' && !seen.has(JSON.stringify([field, null]))) {
+        if (value !== undefined && value !== null && value !== 'unknown' && !seen.has(JSON.stringify([field, null]))) {
           issue([...at, 'conditions', field], 'known_condition_evidence_required');
         }
       }
@@ -120,13 +126,19 @@ export function scientificFactConditionTokenContract(batch: ScientificExtraction
         }
         return text;
       };
-      const fixed = (field: typeof stringFields[number]): string => fact.conditions[field] === 'unknown' ? 'unknown' :
-        read(fact.conditions[field], field, null, 16000);
-      const conditions: ScientificFactProposal['conditions'] = {...fact.conditions,
-        datasetVersion: fixed('datasetVersion'), split: fixed('split'), budget: fixed('budget'),
+      const fixed = (field: typeof stringFields[number]): string | undefined => {
+        const selection = fact.conditions[field];
+        return selection === undefined || selection === 'unknown' ? selection : read(selection, field, null, 16000);
+      };
+      const conditions: ScientificFactProposal['conditions'] = {
+        datasetId: fact.conditions.datasetId, metricId: fact.conditions.metricId, baselineId: fact.conditions.baselineId,
+        datasetVersion: fixed('datasetVersion')!, split: fixed('split')!, budget: fixed('budget')!,
         other: Object.fromEntries(Object.entries(fact.conditions.other).map(([key, selection]) =>
           [key, read(selection, 'other', key, 2000)]))
       };
+      for (const field of scientificExtendedConditionFields) {
+        if (fact.conditions[field] !== undefined) conditions[field] = fixed(field);
+      }
       return {...fact, conditions};
     });
     return failed ? null : {facts};

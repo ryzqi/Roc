@@ -14,7 +14,9 @@ export const scientificFactLabels = {
   dataset_usage: '数据集使用', metric_definition: '指标定义', experimental_result: '实验结果', limitation: '局限'
 } as const;
 export const scientificRelationLabels = {
-  PROPOSES: '提出', USES: '使用', EVALUATES_WITH: '采用指标评估', CONTAINS: '包含'
+  PROPOSES: '提出', USES: '使用', EVALUATES_WITH: '采用指标评估', CONTAINS: '包含',
+  DEFINES: '定义', EXTENDS: '扩展', EVALUATES_ON: '在数据集上评估', COMPARES_WITH: '比较',
+  SUPPORTS: '支持', CONTRADICTS: '矛盾', RELATED_TO: '相关'
 } as const;
 
 export function scientificHitKey(hit: ScientificKnowledgeSearchHit): string {

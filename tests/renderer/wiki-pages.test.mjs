@@ -120,9 +120,10 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   const search = page.getByLabel('搜索持久页面');
   await search.fill('跨文献比较');
   await page.waitForFunction(()=>window.wikiCalls.some(call=>call.method==='searchWiki'&&call.input.query==='跨文献比较'));
-  await page.getByTestId('wiki-page-row').filter({hasText:'跨文献比较草稿'}).waitFor();
-  assert.equal(await page.getByTestId('wiki-page-row').count(),1);
+  await page.getByText('没有命中。可尝试原始文献检索。',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('wiki-page-row').count(),0,'Rolling back cannot make stale source prose searchable');
   await search.fill('');
+  await page.getByTestId('wiki-page-row').filter({hasText:'跨文献比较草稿'}).waitFor();
   const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Conditions',path:null});
   const experiment={...unknownExperiment,method:'Method A',dataset:'Dataset X',metric:'F1',value:91.2,unit:'percent',
     baseline:'Baseline A',conditions:'Full training set',finding:'improves'};
@@ -182,6 +183,55 @@ test('routine audit notes stay out of reading while source problems remain acces
   await detail.getByRole('button',{name:'刷新页面',exact:true}).click();
   await detail.getByRole('button',{name:'刷新页面',exact:true}).waitFor();
   assert.equal(await checks.evaluate(element=>element.open),false);
+});
+test('layer and template filters query real persisted pages and template creation retains draft protection',async()=>{
+  const f=await scene();
+  await page.getByLabel('筛选知识层级',{exact:true}).selectOption('L1');
+  await page.waitForFunction(()=>window.wikiCalls.some(call=>call.method==='searchWiki'&&call.input.layers?.[0]==='L1'));
+  await page.getByTestId('wiki-page-row').getByText('L1',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'新建主题页',exact:true}).click();
+  const template=page.getByLabel('页面模板',{exact:true});
+  assert.equal(await template.inputValue(),'research_synthesis');
+  assert.deepEqual(await template.locator('option').evaluateAll(options=>options.map(option=>option.value)),
+    ['concept','method','equation','algorithm','dataset','metric','protocol','research_synthesis']);
+  await template.selectOption('method');
+  assert.equal(await unloadPrevented(),true,'A template-only draft must be protected');
+  assert.equal(await page.getByLabel('筛选知识层级',{exact:true}).isDisabled(),true);
+  assert.equal(await page.getByLabel('筛选页面模板',{exact:true}).isDisabled(),true);
+  await page.getByLabel('页面标题',{exact:true}).fill('方法模板回归');
+  await page.getByTestId('wiki-create').getByRole('checkbox').first().check();
+  await page.getByRole('button',{name:'创建草稿',exact:true}).click();
+  await page.getByTestId('wiki-page-detail').getByRole('heading',{name:'方法模板回归',exact:true}).waitFor();
+  const created=(await f.repository.wiki.search(f.project.id,'',0,{templates:['method']})).pages[0];
+  assert.equal(created.layer,'L2');assert.equal(created.template,'method');
+  assert.equal(await page.getByLabel('筛选知识层级',{exact:true}).inputValue(),'','Creation reveals the new page outside an old filter');
+  const calls=await page.evaluate(()=>window.wikiCalls);
+  assert.equal(calls.find(call=>call.method==='createWiki').input.template,'method');
+  await page.getByLabel('筛选知识层级',{exact:true}).selectOption('L2');
+  await page.getByLabel('筛选页面模板',{exact:true}).selectOption('method');
+  await page.getByLabel('搜索持久页面',{exact:true}).fill('方法模板');
+  await page.waitForFunction(()=>window.wikiCalls.some(call=>call.method==='searchWiki'&&call.input.query==='方法模板'&&
+    call.input.layers?.[0]==='L2'&&call.input.templates?.[0]==='method'&&call.input.offset===0));
+  await page.getByTestId('wiki-page-row').filter({hasText:'方法模板回归'}).waitFor();
+  assert.equal(await page.getByTestId('wiki-page-row').count(),1);
+  await page.getByLabel('筛选知识层级',{exact:true}).selectOption('L3');
+  await page.getByText('没有符合筛选条件的页面。',{exact:true}).waitFor();
+  await page.getByLabel('筛选知识层级',{exact:true}).selectOption('L2');
+  await page.getByTestId('wiki-page-row').filter({hasText:'方法模板回归'}).waitFor();
+  const auditSource=readFileSync('scripts/ui-audit/clip-audit.js','utf8');
+  for(const theme of ['light','dark']){
+    await page.setViewportSize({width:380,height:800});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.waitForFunction(()=>[...document.querySelectorAll('select[aria-label^="筛选"]')].every(node=>
+      getComputedStyle(node).backgroundColor===getComputedStyle(document.body).backgroundColor));
+    const audit=await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);
+    assert.equal(audit.cut,0);assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+    await page.getByLabel('筛选知识层级',{exact:true}).focus();
+    assert.equal(await page.getByLabel('筛选知识层级',{exact:true}).evaluate(node=>getComputedStyle(node).outlineStyle),'solid');
+    await page.screenshot({path:join(captures,`templates-${theme}-380.png`)});
+  }
+  await page.setViewportSize({width:1100,height:800});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
 });
 test('stale edits retain typed text and expose conflict; read-only and no-project views cannot mutate',async()=>{
   const f=await scene();await page.getByTestId('wiki-page-row').click();const detail=page.getByTestId('wiki-page-detail');

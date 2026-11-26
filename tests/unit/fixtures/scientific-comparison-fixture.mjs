@@ -11,7 +11,7 @@ export async function scientificComparisonFixture(api, services, {aligned = true
   try {
     for (let index = 0; index < 3; index++) {
       const method = `Method ${String.fromCharCode(65 + index)}`, value = String(89 + index),
-        label = `${method} Dataset C v1 test Baseline A v1 4 epochs seed 1`;
+        label = `${method} Dataset C v1 test Baseline A v1 4 epochs seed 1 CPU inference 2 ms repeats 3 uncertainty 0.1`;
       const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica), page = pdf.addPage([600, 800]);
       for (const [row, text] of ['2 Method', `${method} uses Dataset C.`, 'Table 3: Dataset C results.',
         `${label} F1 (%) ${value}`, 'Figure 2: Original architecture.', 'x = y',
@@ -64,7 +64,8 @@ export async function scientificComparisonFixture(api, services, {aligned = true
       };
       const row = cell(paper.label), metric = cell('F1 (%)');
       const conditions = {datasetId: 'dataset', datasetVersion: 'v1', split: 'test', metricId: 'metric',
-        baselineId: 'baseline', budget: '4 epochs', other: {seed: '1'}};
+        baselineId: 'baseline', budget: '4 epochs', hardware: 'CPU', trainingBudget: '4 epochs',
+        inferenceBudget: '2 ms', randomSeeds: '1', repeats: '3', uncertainty: '0.1', other: {seed: '1'}};
       return {
         entities: [
           {id: 'model', entityType: 'Model', canonicalName: paper.method, aliases: [],

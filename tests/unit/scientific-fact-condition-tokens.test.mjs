@@ -171,6 +171,29 @@ test('source identity, field/key membership and range corruption fail without re
   });
 });
 
+test('extended experimental conditions decode exact source tokens and require matching evidence', async () => {
+  const values = {hardware: 'CPU', trainingBudget: '4 epochs', inferenceBudget: '2 ms',
+    randomSeeds: '1', repeats: '3', uncertainty: '0.1'};
+  const f = fixture(Object.values(values));
+  const facts = await extract(f, async call => {
+    const input = JSON.parse(call.messages[1].content), fact = base();
+    for (const [index, [field, value]] of Object.entries(values).entries()) {
+      fact.conditions[field] = select(input, source(index), 0, value.split(' ').length - 1);
+      fact.conditionEvidence.push({field, key: null, evidence: [source(index)]});
+    }
+    assert.ok(call.schema.safeParse({facts: [fact]}).success);
+    for (const field of Object.keys(values)) {
+      const missing = structuredClone(fact);
+      missing.conditionEvidence = missing.conditionEvidence.filter(item => item.field !== field);
+      assert.equal(call.schema.safeParse({facts: [missing]}).success, false, field);
+      const generated = structuredClone(fact); generated.conditions[field] = values[field];
+      assert.equal(call.schema.safeParse({facts: [generated]}).success, false, field);
+    }
+    return {facts: [fact]};
+  });
+  for (const [field, value] of Object.entries(values)) assert.equal(facts[0].conditions[field], value);
+});
+
 test('the entire call including token inventory remains subject to the existing pre-dispatch budget', async () => {
   const f = fixture();
   let calls = 0;
@@ -237,13 +260,14 @@ test('numeric string domains intersect own-row/merged cells and full linked inte
   const choices = contract.inputChoices.sources;
   assert.deepEqual(contract.inputChoices.numericScopes[0].allowedSourceIds,
     [choices[0].sourceId, choices[1].sourceId, choices[5].sourceId]);
+  for (const field of ['split', 'hardware', 'trainingBudget', 'inferenceBudget', 'randomSeeds', 'repeats', 'uncertainty']) {
   for (const [index, evidence] of proposals.entries()) {
     const fact = base();
     fact.factType = 'experimental_result'; fact.table = {tableId: 'table', row: 2, cellId: 'value'};
     fact.value = {raw: '91', unit: null, unitEvidence: []}; fact.evidence = [proposals[0]];
-    fact.conditions.split = {sourceId: choices[index].sourceId, firstToken: index === 6 ? 1 : 0,
+    fact.conditions[field] = {sourceId: choices[index].sourceId, firstToken: index === 6 ? 1 : 0,
       lastToken: index === 6 ? 1 : 0};
-    fact.conditionEvidence = [{field: 'split', key: null, evidence: [evidence]}];
+    fact.conditionEvidence = [{field, key: null, evidence: [evidence]}];
     const expected = [0, 1, 5].includes(index);
     assert.equal(contract.proposalSchema.safeParse({facts: [fact]}).success, expected, JSON.stringify(evidence));
     if (expected) {
@@ -251,6 +275,7 @@ test('numeric string domains intersect own-row/merged cells and full linked inte
       assert.equal(contract.proposalSchema.safeParse({facts: [fact]}).success, false,
         'An in-scope selected range does not authorize extra header evidence');
     }
+  }
   }
 });
 

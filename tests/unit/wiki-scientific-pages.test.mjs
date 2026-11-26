@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi} from './fixtures/scientific-search-fixture.mjs';
-import {scientificWikiFixture, wikiModelFactory} from './fixtures/scientific-wiki-fixture.mjs';
+import {scientificWikiFixture, wikiModelFactory, wikiExplanationFixture} from './fixtures/scientific-wiki-fixture.mjs';
 
 let api, services, pages, synthesis, structured, schemas;
 before(async () => {
@@ -37,8 +37,9 @@ test('a real scientific Topic seeds all nine source-bound sections and fills thr
     }
     const original = f.wiki.revision(f.project.id, page.page.id, page.page.revision);
     f.wiki.configureSynthesis(synthesis.createWikiSynthesizer(wikiModelFactory(async call => {
+      const explanation = wikiExplanationFixture(call); if (explanation) return explanation;
       const input = JSON.parse(call.messages[1].content);
-      return {sections: input.targets.map(target => ({id: target.id, statements: [input.entries.find(entry =>
+      return {sections: input.targets.map(target => ({id: target.id, goal: `Explain ${target.title}`, statements: [input.entries.find(entry =>
         target.id === 'scientific:mathematical' ? entry.kind === 'object' && entry.ref.objectType === 'Equation' :
         target.id === 'scientific:methods' ? entry.kind === 'entity' && entry.value.entityType === 'Method' :
         entry.kind === 'fact' && entry.value.factType === 'experimental_result').ref]}))};

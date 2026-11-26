@@ -10,8 +10,9 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi} from '../unit/fixtures/scientific-search-fixture.mjs';
 import {scientificWikiFixture, scientificWikiCandidates} from '../unit/fixtures/scientific-wiki-fixture.mjs';
+import {scientificComparisonFixture} from '../unit/fixtures/scientific-comparison-fixture.mjs';
 
-let api, services, structured, directory, app, page, windowId, active;
+let api, services, structured, explanation, directory, app, page, windowId, active;
 const fixtures = [], errors = [], calls = [], holds = [];
 let artifacts;
 const rows = () => page.getByTestId('wiki-scientific-row');
@@ -24,8 +25,8 @@ function deferred() {
 }
 
 before(async () => {
-  [api, services, structured] = await Promise.all([loadScientificSearchApi(),
-    ...['scientific-extraction-service', 'wiki-scientific-synthesis'].map(name =>
+  [api, services, structured, explanation] = await Promise.all([loadScientificSearchApi(),
+    ...['scientific-extraction-service', 'wiki-scientific-synthesis', 'wiki-scientific-explanation'].map(name =>
       importTypeScriptModule(`src/main/plugins/research/${name}.ts`,
         {platform: 'node', external: ['@napi-rs/canvas'], tempDir: '.runtime/tmp'}))]);
   directory = await mkdtemp(join(tmpdir(), 'roc-scientific-wiki-ui-'));
@@ -52,7 +53,7 @@ before(async () => {
         reference={value.reference} record={value.record}/>;
       if(surface==='workspace')return <WikiWorkspace client={client} projectId={value.projectId} snapshot={value.snapshot}
         writable claims={value.snapshot.claims} evidence={value.snapshot.sources.map(s=>s.evidence)} libraryItems={[]}
-        onOpenClaim={()=>{}}/>;
+        onOpenClaim={()=>{}} onAskAssistant={prompt=>window.promptForAssistant=prompt}/>;
       if(surface==='graph')return <KnowledgeGraphView client={client} projectId={value.projectId}
         claims={[]} evidence={[]} libraryItems={[]}/>;
       if(surface==='claims')return <WikiView client={client} projectId={value.projectId} snapshot={value.snapshot}
@@ -148,8 +149,8 @@ after(async () => {
   }
   assert.deepEqual(errors, []);
 });
-async function scene(surface = 'panel', fields = {}) {
-  const f = await scientificWikiFixture(api, services); fixtures.push(f); active = f;
+async function scene(surface = 'panel', fields = {}, fixture = scientificWikiFixture) {
+  const f = await fixture(api, services); fixtures.push(f); active = f;
   f.job = await f.publishKnowledge();
   f.reference = {documentId: f.document.id, generationId: f.job.id};
   f.registry = new api.CapabilityRegistry();
@@ -374,6 +375,80 @@ test('persisted scientific sections expose references; human rewrites retain dep
   assert.equal(stored.scientificStatements, undefined); assert.deepEqual(stored.paperKnowledgeSources, [f.reference]);
   assert.equal(f.db.prepare('SELECT snapshot_json FROM research_wiki_revisions WHERE page_id=? AND revision=?')
     .pluck().get(value.page.id, value.page.revision), before);
+});
+
+test('persisted explanations distinguish provenance, model advice and human review and hand off exact source-update context', async () => {
+  const f = await scene('workspace', {}, scientificComparisonFixture);
+  const knowledge = (await f.readAll()).slice(0, 2), basis = {knowledge};
+  const references = knowledge.map((read, index) => ({kind: 'fact', source: f.sources[index], id: read.knowledge.facts[0].id}));
+  let value = await f.wiki.readCurrent(f.project.id, f.page.page.id);
+  const statements = [
+    {kind: 'source_statement', text: '89', references: references.slice(0, 1), semanticSupport: 'not_checked'},
+    {kind: 'paraphrase', text: 'The recorded methods share the reported protocol.', references, semanticSupport: 'supported'},
+    {kind: 'comparison', text: 'Reported values share the recorded experimental conditions.', references, semanticSupport: 'uncertain'},
+    {kind: 'inference', text: 'These observations may motivate further study.', references: references.slice(0, 1), semanticSupport: 'unsupported'}
+  ].map(({semanticSupport, ...draft}) => explanation.validateWikiExplanation(draft, basis, semanticSupport));
+  value = await f.wiki.saveCurrent(f.saveInput(value, explanation.explainedWikiSection(
+    {id: 'scientific:comparison', title: 'UI explanation'}, {version: 1, goal: 'Interpret the recorded comparison.',
+      unresolvedQuestions: ['Can the protocol generalize to other datasets?'], statements}, basis)), 'assistant');
+  await mount(f, 'workspace');
+  await page.getByTestId('wiki-page-row').filter({hasText: 'Compare three methods'}).click();
+  const section = page.getByTestId('wiki-page-detail').locator('section').filter({has: page.getByRole('heading', {name: 'UI explanation', exact: true})});
+  const pane = section.getByTestId('wiki-explanation');
+  await pane.getByText('原文陈述', {exact: true}).waitFor();
+  for (const label of ['综合解释', '条件对齐比较', '模型推断']) await pane.getByText(label, {exact: true}).waitFor();
+  assert.equal(await pane.getByText('未人工审核', {exact: true}).count(), 4);
+  for (const label of ['未检查', '支持', '不确定', '不支持']) await pane.getByText(`模型审核建议：${label}`, {exact: true}).waitFor();
+  assert.doesNotMatch(await pane.innerText(), /已人工审核|科学审核通过|已批准/);
+  const first = pane.getByTestId('wiki-explanation-statement').first();
+  await first.getByText('科研事实与原始来源', {exact: true}).click();
+  await first.getByTestId('wiki-scientific-value').getByText('89', {exact: true}).waitFor();
+  assert.ok(calls.some(call => call.method === 'readWikiPaperKnowledge' && call.input.documentId === references[0].source.documentId &&
+    call.input.generationId === references[0].source.generationId));
+  await pane.locator('summary').filter({hasText: '未解决问题'}).click();
+  await pane.getByText('Can the protocol generalize to other datasets?', {exact: true}).waitFor();
+  const fullRecord = section.locator('details').filter({has: page.locator('summary').filter({hasText: '完整章节记录与原始条件'})});
+  assert.equal(await fullRecord.evaluate(node => node.open), false);
+  await fullRecord.locator('summary').focus(); await page.keyboard.press('Enter');
+  await fullRecord.getByTestId('wiki-section-body').waitFor({state: 'visible'});
+  assert.match(await fullRecord.innerText(), /trainingBudget|randomSeeds|uncertainty/);
+  await section.getByRole('button', {name: '用新论文更新此节', exact: true}).focus(); await page.keyboard.press('Enter');
+  const prompt = await page.evaluate(() => window.promptForAssistant);
+  assert.match(prompt, /research_wiki_update_sources/); assert.match(prompt, /research_wiki_resynthesize/);
+  assert.ok(prompt.includes(JSON.stringify({projectId: f.project.id, pageId: value.page.id,
+    sectionIds: ['scientific:comparison'], expectedRevision: value.page.revision, expectedBasisDigest: value.basisDigest,
+    existingPaperKnowledgeSources: value.current.sections.find(item => item.id === 'scientific:comparison').paperKnowledgeSources})));
+  assert.equal((await f.wiki.readCurrent(f.project.id, value.page.id)).page.revision, value.page.revision, 'Assistant handoff must not itself mutate sources');
+  await fullRecord.locator('summary').click();
+  await first.getByText('科研事实与原始来源', {exact: true}).click();
+  const auditSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({width: 380, height: 850});
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    await page.waitForFunction(() => [...document.querySelectorAll('select[aria-label^="筛选"]')].every(node =>
+      getComputedStyle(node).backgroundColor === getComputedStyle(document.body).backgroundColor));
+    const audit = await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);
+    assert.equal(audit.cut, 0); assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false);
+    if (process.env.ROC_UI_CAPTURE_DIR) {
+      await mkdir(process.env.ROC_UI_CAPTURE_DIR, {recursive: true});
+      await pane.scrollIntoViewIfNeeded();
+      await page.screenshot({path: join(process.env.ROC_UI_CAPTURE_DIR, `wiki-explanation-${theme}-380.png`)});
+    }
+  }
+  await page.setViewportSize({width: 1100, height: 850});
+  await page.evaluate(() => document.documentElement.dataset.theme = 'light');
+  await section.getByRole('button', {name: '编辑章节', exact: true}).click();
+  await page.getByRole('button', {name: '保存人工章节', exact: true}).click();
+  await section.getByText('人工维护', {exact: true}).waitFor();
+  assert.equal(await section.getByRole('button', {name: '用新论文更新此节', exact: true}).count(), 0);
+  await pane.getByText('模型推断', {exact: true}).waitFor();
+  await section.getByRole('button', {name: '编辑章节', exact: true}).click();
+  await page.getByLabel('章节正文', {exact: true}).fill('A separately maintained human interpretation.');
+  await page.getByRole('button', {name: '保存人工章节', exact: true}).click();
+  await pane.waitFor({state: 'detached'});
+  const stored = (await f.wiki.readCurrent(f.project.id, value.page.id)).current.sections.find(item => item.id === 'scientific:comparison');
+  assert.equal(stored.scientificExplanation, undefined);
+  assert.deepEqual(stored.paperKnowledgeSources, references.map(reference => reference.source));
 });
 
 test('existing claim Wiki opens an actual immutable Evidence source and rejects changed parse content', async () => {

@@ -4,16 +4,16 @@ import {z} from 'zod';
 import type {StructuredToolInterface} from '@langchain/core/tools';
 import type {RocCapabilityRegistry} from '../../kernel/types';
 import type {ResearchToolDescriptor} from './research-tools';
-import {wikiCreateSchema, wikiSaveSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSearchResult} from '../../../shared/schemas/research-wiki-pages';
+import {wikiCreateSchema, wikiSaveSchema, wikiSearchSchema, wikiUpdateSourcesSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSearchResult} from '../../../shared/schemas/research-wiki-pages';
 import {scientificEntitySearchSchema, scientificFactSearchSchema, scientificRelationSearchSchema,
   scientificKnowledgeSearchResultSchema} from '../../../shared/schemas/research-scientific-knowledge-search';
 
 const readNames = ['research_wiki_search', 'research_wiki_search_entities', 'research_wiki_search_facts', 'research_wiki_search_relations',
-  'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section', 'research_compare_claims'];
+  'research_wiki_read', 'research_wiki_read_relations', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section', 'research_compare_claims'];
 export const WIKI_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...readNames.map(name => ({name, scope: 'app' as const, effectClass: 'none' as const, riskLevel: 'low' as const,
     executionScopes: ['main', 'subagent'] as ResearchToolDescriptor['executionScopes']})),
-  ...['research_wiki_create', 'research_wiki_draft', 'research_wiki_resynthesize', 'research_wiki_retry_paper'].map(name => ({name, scope: 'app' as const,
+  ...['research_wiki_create', 'research_wiki_draft', 'research_wiki_resynthesize', 'research_wiki_update_sources', 'research_wiki_retry_paper'].map(name => ({name, scope: 'app' as const,
     effectClass: 'external_call' as const, riskLevel: 'low' as const, executionScopes: ['main'] as ResearchToolDescriptor['executionScopes']}))
 ];
 const id = z.string().trim().min(1).max(300);
@@ -48,7 +48,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
         .map(source => ({...source, excerpt: clip(source.excerpt, 400)})),
       sourcesTruncated: [...evidenceIds].length > 8,
       lint: page.lint.slice(0, 8), lintTruncated: page.lint.length > 8, links: page.links.slice(0, 8),
-      fallback: '证据不足、来源失效或原句问题：使用 research_search_knowledge，再通过 research_capture_evidence 捕获准确原文；不要把 Wiki 文字当成新证据。'};
+      fallback: '证据不足、来源失效或原句问题：使用 research_search_scientific_knowledge 与 research_validate_scientific_evidence 核验，只有原始 knowledge chunkId 才能交给 research_capture_evidence；不要把 Wiki 文字当成新证据。'};
   };
   return [
     ...([
@@ -57,7 +57,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       {kind: 'fact', name: 'facts', schema: scientificFactSearchSchema.omit({projectId: true, kind: true}),
         description: '按Method/Model、Dataset、Metric及实验条件分页查找来源有效的科研事实。保留原值、单位、unknown条件和原始PDF定位；科学支持仍未审核。'},
       {kind: 'relation', name: 'relations', schema: scientificRelationSearchSchema.omit({projectId: true, kind: true}),
-        description: '按实体端点和PROPOSES/USES/EVALUATES_WITH/CONTAINS类型分页查找科研关系与有意义邻居。返回原始证据，不把相似名称当成关系。'}
+        description: '按实体端点和有来源的关系类型分页查找科研关系与有意义邻居。返回原始证据，不把相似名称当成关系。'}
     ] as const).map(({kind, name, schema, description}) => tool(async request => {
       const result = scientificKnowledgeSearchResultSchema.parse(await invoke('knowledge.search', {...request, kind}));
       if (result.projectId !== input.projectId || result.kind !== kind) throw new Error('research_scientific_tool_project_mismatch');
@@ -70,14 +70,15 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       return input.capabilities.invoke('research.claims.compare', {...request, projectId: input.projectId});
     }, {name: 'research_compare_claims', description: '比较两个准确主张版本的实验条件。条件差异不能认定矛盾，unknown 返回不可判定；可比的相反结论只产生未审核冲突候选，不确认任何科学关系。引用原始 evidenceIds。',
       schema: claimComparisonToolSchema}),
-    tool(({query, offset}) => read(async () => {
-      const result = await invoke<WikiSearchResult>('search', {query, offset});
+    tool(request => read(async () => {
+      const result = await invoke<WikiSearchResult>('search', request);
+      const {offset} = request;
       return {...result, derived: true, pages: result.pages.slice(0, 10),
         nextOffset: result.pages.length > 10 ? offset + 10 : result.nextOffset,
         scientificReview: '章节命中只用于导航；通过 research_wiki_read_section 深入读取，再核查原始 Evidence。',
-        fallback: '无命中时使用 research_search_knowledge 检索原文。'};
+        fallback: '无命中时使用 research_search_scientific_knowledge 检索原文，依据原轮次读取上下文和验证证据。'};
     }), {name: 'research_wiki_search', description: '搜索当前项目的持久 Wiki 草稿标题与正文，供综述导航。事实和原句问题仍先检索原文。',
-      schema: z.object({query: z.string().trim().max(300), offset: z.number().int().min(0).default(0)}).strict()}),
+      schema: wikiSearchSchema.omit({projectId: true})}),
     tool(({pageId, offset}) => read(async () => projectPage(await invoke<WikiPage>('read', {pageId}), offset)), {
       name: 'research_wiki_read', description: '分页读取派生草稿、修订和依据摘要。每次 3 节，按 nextOffset 继续；检查 lint 和原始 evidenceId。相同修订/页码不可重复访问。', schema: pageSchema}),
     tool(request => invoke('section', request), {name: 'research_wiki_read_section',
@@ -88,6 +89,14 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       return {page: result.page, basisDigest: result.basisDigest, lint: result.lint.slice(0, 10)};
     }, {name: 'research_wiki_resynthesize', description: '对最多 3 节 stale 助手正文执行增量重新综合。先读最新修订和 basisDigest；只用当前原始依据，保留人工内容，结果仍未审核。',
       schema: wikiResynthesizeSchema.omit({projectId: true})}),
+    tool(async request => {
+      const result = await invoke<WikiPage>('updateSources', request);
+      return {page: result.page, basisDigest: result.basisDigest, lint: result.lint};
+    }, {name: 'research_wiki_update_sources', description: '把新增或更新论文代次加入指定助手章节，只重新综合这些章节。先读当前 revision/basisDigest 和准确 generationId；保留人工章节及旧修订，结果仍未人工审核。',
+      schema: wikiUpdateSourcesSchema.omit({projectId: true})}),
+    tool(async request => ({relations: await invoke('relations', request), scientificApproval: 'unreviewed'}), {name: 'research_wiki_read_relations',
+      description: '读取当前 Wiki 的有来源关系及跨论文条件比较。关系是未审核候选；条件不完整时不得宣称相互矛盾或合并实体。',
+      schema: z.object({pageId: id}).strict()}),
     tool(async request => {
       const result = await invoke<WikiPage>('paper.retry', request);
       return {page: result.page, paperJob: result.paperJob};

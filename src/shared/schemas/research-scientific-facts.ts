@@ -24,13 +24,21 @@ export const scientificSourceSchema = z.object({
   tableId: scientificIdSchema.nullable(), rowId: scientificIdSchema.nullable(),
   row: row.nullable(), column: row.nullable(), cellId: scientificIdSchema.nullable()
 }).strict();
+export const scientificExtendedConditionFields = [
+  'hardware', 'trainingBudget', 'inferenceBudget', 'randomSeeds', 'repeats', 'uncertainty'
+] as const;
+export const scientificStringConditionFields = ['datasetVersion', 'split', 'budget',
+  ...scientificExtendedConditionFields] as const;
+const extendedConditions = Object.fromEntries(scientificExtendedConditionFields.map(field => [field, text.optional()])) as
+  Record<typeof scientificExtendedConditionFields[number], z.ZodOptional<typeof text>>;
 export const scientificConditionsSchema = z.object({
   datasetId: scientificIdSchema.nullable(), datasetVersion: text, split: text,
   metricId: scientificIdSchema.nullable(), baselineId: scientificIdSchema.nullable(), budget: text,
+  ...extendedConditions,
   other: z.record(z.string().min(1).max(200), z.string().min(1).max(2000))
 }).strict();
 export const scientificConditionEvidenceProposalSchema = z.object({
-  field: z.enum(['datasetId', 'datasetVersion', 'split', 'metricId', 'baselineId', 'budget', 'other']),
+  field: z.enum(['datasetId', 'metricId', 'baselineId', ...scientificStringConditionFields, 'other']),
   key: z.string().min(1).max(200).nullable(), evidence: scientificSourcesProposalSchema
 }).strict();
 const types = ['research_problem', 'contribution', 'method_component', 'dataset_usage',

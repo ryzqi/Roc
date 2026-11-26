@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import type {PaperIRV2} from '../../../shared/schemas/research-paper-ir-v2';
-import {scientificFactExtractionSchema, scientificFactProposalSchema,
+import {scientificFactExtractionSchema, scientificFactProposalSchema, scientificStringConditionFields,
   scientificSourceProposalSchema, type ScientificFactProposal, type ScientificSource,
   type ScientificSourceProposal} from '../../../shared/schemas/research-scientific-facts';
 import type {ScientificEntityProposal} from '../../../shared/schemas/research-scientific-entities';
@@ -24,7 +24,7 @@ type ConditionContext = {
   sources: readonly Pick<ScientificSource, 'proposal' | 'quote'>[];
 };
 const conditionIdFields = ['datasetId', 'metricId', 'baselineId'] as const;
-const conditionStringFields = ['datasetVersion', 'split', 'budget'] as const;
+const conditionStringFields = scientificStringConditionFields;
 const fixedConditionFields = [...conditionIdFields, ...conditionStringFields];
 const conditionTypes = {datasetId: 'Dataset', metricId: 'Metric', baselineId: 'Baseline'} as const;
 
@@ -245,7 +245,7 @@ export function scientificFactWireSchema(ir: PaperIRV2, batch: ScientificExtract
           }
         } else {
           if (item.key !== null) issue([...path, 'key'], 'fixed_condition_key_must_be_null');
-          if (fact.conditions[item.field] === null ||
+          if (fact.conditions[item.field] === undefined || fact.conditions[item.field] === null ||
             (conditionStringFields.some(field => field === item.field) && fact.conditions[item.field] === 'unknown')) {
             issue(path, 'unknown_condition_has_evidence');
           }
@@ -261,7 +261,7 @@ export function scientificFactWireSchema(ir: PaperIRV2, batch: ScientificExtract
       }
       for (const field of fixedConditionFields) {
         // Keep the original coverage loop's raw "unknown" ID exemption.
-        if (fact.conditions[field] !== null && fact.conditions[field] !== 'unknown' &&
+        if (fact.conditions[field] !== undefined && fact.conditions[field] !== null && fact.conditions[field] !== 'unknown' &&
           !seen.has(JSON.stringify([field, null]))) {
           issue(['conditions', field], 'known_condition_evidence_required');
         }

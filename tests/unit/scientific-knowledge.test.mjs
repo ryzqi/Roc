@@ -72,6 +72,8 @@ test('separate extraction schemas reject injected authority, unknown ontology an
   const f = await scientificSearchFixture(api);
   try {
     const context = basis(f), sample = result(context);
+    assert.equal(JSON.stringify(knowledge.scientificConditionsSchema.parse(unknown())), JSON.stringify(unknown()),
+      'Absent extended conditions must not change the serialized historical condition contract');
     const entity = sample.entities[0].proposal;
     for (const extra of [{projectId: 'other'}, {status: 'source_validated'}, {scientificApproval: 'approved'}]) {
       assert.equal(knowledge.scientificEntityProposalSchema.safeParse({...entity, ...extra}).success, false);
@@ -295,5 +297,30 @@ test('relations validate typed endpoints and current entity/fact evidence withou
     assert.throws(() => knowledge.validateScientificRelation(input, context, entities, [tampered]), /source_version_invalid/);
     assert.throws(() => knowledge.validateScientificFact(sample.proposal, context,
       sample.entities.map(entity => ({...entity, generationId: 'old'}))), /entity_invalid/);
+  } finally {await f.close();}
+});
+
+test('new relation types require explicit endpoint statements and reject unsupported strong comparisons', async () => {
+  const f = await scientificSearchFixture(api);
+  try {
+    const textValue = 'Method A extends Method B and evaluates on Dataset C.';
+    const ir = buildIR(f, {blocks: [...f.data.content.blocks, block('relation-statement', 'paragraph', textValue, 740)]});
+    const context = basis(f, ir), statement = text(ir, 'relation-statement');
+    const from = resolve('a', 'Method', 'Method A', [statement], {description: null}, context);
+    const to = resolve('b', 'Method', 'Method B', [statement], {description: null}, context);
+    const dataset = resolve('dataset', 'Dataset', 'Dataset C', [statement], {version: null, task: null}, context);
+    const entities = [from, to, dataset];
+    const input = {id: 'extends', type: 'EXTENDS', fromEntityId: 'a', toEntityId: 'b', factIds: [], evidence: [statement]};
+    assert.equal(knowledge.validateScientificRelation(input, context, entities, []).scientificApproval, 'unreviewed');
+    assert.equal(knowledge.validateScientificRelation({...input, type: 'EVALUATES_ON', toEntityId: 'dataset'},
+      context, entities, []).type, 'EVALUATES_ON');
+    assert.throws(() => knowledge.validateScientificRelation({...input, evidence: [text(ir, 'relation-statement', 'Method A')]},
+      context, entities, []), /relation_statement_required/);
+    for (const type of ['SUPPORTS', 'CONTRADICTS', 'COMPARES_WITH']) {
+      assert.throws(() => knowledge.validateScientificRelation({...input, type}, context, entities, []), /relation_fact_required/);
+    }
+    const sample = result(context), fact = knowledge.validateScientificFact(sample.proposal, context, sample.entities);
+    assert.throws(() => knowledge.validateScientificRelation({...input, type: 'CONTRADICTS', factIds: [fact.candidateId]},
+      context, entities, [fact]), /conditions_incomparable/);
   } finally {await f.close();}
 });

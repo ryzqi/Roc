@@ -29,7 +29,7 @@
 | Paper IR | schema 2 / `roc-paper-ir/2.2` | `src/shared/schemas/research-paper-ir-v2.ts` |
 | Scientific chunks | `roc-scientific-chunks/1` | `src/main/plugins/research/scientific-chunks.ts` |
 | Scientific context | `roc-scientific-context/1` | `src/shared/schemas/research-scientific-context.ts` |
-| 抽取 Prompt | `roc-scientific-extraction-prompts/25` | `src/main/plugins/research/scientific-extraction-model.ts` |
+| 抽取 Prompt | `roc-scientific-extraction-prompts/26` | `src/main/plugins/research/scientific-extraction-model.ts` |
 
 IR、chunk、索引、抽取、卡片与 Wiki 的代次有各自身份，不能用一个 parser 版本替代全部失效判断。数据库启动拒绝不兼容旧库；v71/v72/v73→74 使用独立离线迁移，详见[数据库存储](../database-storage.md)。
 

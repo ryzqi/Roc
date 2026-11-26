@@ -9,7 +9,7 @@ import {researchContentHash} from './research-files';
 import type {ScientificExtractionBatch} from './scientific-extraction-batches';
 import {scientificExtractionInput} from './scientific-extraction-input';
 
-export const scientificExtractionPromptVersion = 'roc-scientific-extraction-prompts/25';
+export const scientificExtractionPromptVersion = 'roc-scientific-extraction-prompts/26';
 export type ScientificExtractionCall = {
   name: string; schema: z.ZodType; messages: [{role: 'system'; content: string}, {role: 'user'; content: string}];
 };
