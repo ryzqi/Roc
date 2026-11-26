@@ -41,8 +41,8 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check release behavior
-        run: node --test tests/unit/github-release.test.mjs
+      - name: Check release and TeX archive behavior
+        run: node --test tests/unit/github-release.test.mjs tests/unit/research-tex-bundle-cache.test.mjs
 
       - name: Cache verified research downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

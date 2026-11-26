@@ -1,0 +1,53 @@
+name: Verify macOS arm64 package
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-package-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          cache: true
+          run_install: false
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check release and TeX archive behavior
+        run: node --test tests/unit/github-release.test.mjs tests/unit/research-tex-bundle-cache.test.mjs
+
+      - name: Cache verified research downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .runtime/research-downloads
+          key: ${{ runner.os }}-${{ runner.arch }}-research-downloads-${{ hashFiles('resources/research-runtime/tools.lock.json', 'resources/research-runtime/tex-bundle-files.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-research-downloads-
+
+      - name: Prepare locked research toolchain
+        run: |
+          node scripts/research/prepare.ts --arch arm64 --output .runtime/research-toolchain/darwin-arm64
+          node scripts/research/manifest.ts --root .runtime/research-toolchain/darwin-arm64
+
+      - name: Package and smoke-test Roc.app (no Release writes)
+        run: pnpm package:mac
