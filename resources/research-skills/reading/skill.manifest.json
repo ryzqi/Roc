@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-paper-reading",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "stage": "reading",
   "description": "阅读论文并生成带页码或段落定位的证据笔记。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "cda6114bf6f686162b8b4fc19f4c812600ac8f53e00c4fffa524c83bf31bf9a1"
+    "hash": "2212f1f71344df393d6a3de5d6e70d2787a87129d90bb0ef58c2b93f2d6eb1a5"
   },
   "references": [],
   "license": {
@@ -19,8 +19,8 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/reading",
-    "revision": "s05-1.2.0",
-    "hash": "cda6114bf6f686162b8b4fc19f4c812600ac8f53e00c4fffa524c83bf31bf9a1"
+    "revision": "scientific-rag-p4-1.7.0",
+    "hash": "2212f1f71344df393d6a3de5d6e70d2787a87129d90bb0ef58c2b93f2d6eb1a5"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -35,7 +35,12 @@
     "research.knowledge.search",
     "research.evidence.list",
     "research.evidence.inspect",
-    "research.artifacts.get"
+    "research.artifacts.get",
+    "research.knowledge.scientificQuery",
+    "research.knowledge.scientificContext",
+    "research.knowledge.scientificEvidence",
+    "research.knowledge.deepRead",
+    "research.knowledge.deepRequest"
   ],
   "forbiddenEffects": [
     "human_approval",
@@ -53,7 +58,7 @@
   "evalCases": [
     {
       "path": "eval-cases.json",
-      "hash": "3297326101feaf5dc44fd7336043837f21c986ffce3f1aee2a8301c551a1c7fd"
+      "hash": "819c2770bce03e39801aa7367f365c4a57e45286c41a90546b3aea7770ad009a"
     }
   ],
   "runtimeContract": "roc-research-stage/v2",

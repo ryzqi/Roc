@@ -1,3 +1,4 @@
+import {researchWritingContextCapabilities} from './writing-context-capabilities';
 import {paperDeepKnowledgeRequestSchema} from '../../../shared/schemas/research-paper-deep-knowledge';
 import {paperCardKnowledgeReadRequestSchema, paperCardKnowledgeSchema} from '../../../shared/schemas/research-paper-card-knowledge';
 import {scientificQueryRequestSchema, scientificQueryResultSchema} from '../../../shared/schemas/research-scientific-query';
@@ -132,6 +133,7 @@ export const provenanceCapabilities = {
   list: descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array())
 };
 const researchCapabilityDescriptors = [
+  ...researchWritingContextCapabilities,
   ...researchProposalCapabilities,
   ...researchManuscriptSyncCapabilities,
   ...researchResultDerivationCapabilities,

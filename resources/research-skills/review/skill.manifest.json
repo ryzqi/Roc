@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-peer-review",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "stage": "review",
   "description": "独立评估论文的方法、证据与表达并给出可执行修订意见。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "5fe5b105b1ad5b4f24bc3ba51692b0b7f217b1f265889aceb8a3c3e07095f9ff"
+    "hash": "a3d58e785c1e11c44dfc6e048fbf499c3302296fa34a65363de66aeec7367bbe"
   },
   "references": [],
   "license": {
@@ -19,8 +19,8 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/review",
-    "revision": "s05-1.2.0",
-    "hash": "5fe5b105b1ad5b4f24bc3ba51692b0b7f217b1f265889aceb8a3c3e07095f9ff"
+    "revision": "scientific-rag-p4-1.7.0",
+    "hash": "a3d58e785c1e11c44dfc6e048fbf499c3302296fa34a65363de66aeec7367bbe"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -54,7 +54,7 @@
   "evalCases": [
     {
       "path": "eval-cases.json",
-      "hash": "98e06f874fdef5f8787ba8cca03b33fa2e1757af5ed0be69e2750738068c09b9"
+      "hash": "fc537f67a636fcf5146b853969f2df7cbe3d80021a31af8526b80c265e8a9f57"
     }
   ],
   "runtimeContract": "roc-research-stage/v2",

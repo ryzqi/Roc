@@ -1,4 +1,5 @@
 import {createHash, randomUUID} from 'node:crypto';
+import {indexedPaperBlocks} from './paper-ir';
 import type {Database} from 'better-sqlite3';
 import {
   researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationTargetSchema,
@@ -94,7 +95,7 @@ export class ResearchDocumentAnnotationRepository {
       const document = this.repository.documents.get(target.documentId);
       if (document.currentParseId !== target.parseId) throw new Error('research_annotation_parse_stale');
       const content = this.repository.documents.parsed(target.documentId, target.parseId).data.content;
-      const blockIndex = content.blocks.filter(value => value.text.trim()).findIndex(value => value.id === block.id);
+      const blockIndex = indexedPaperBlocks(content.blocks).findIndex(value => value.id === block.id);
       // Read an actual indexed chunk; historical parsed text alone cannot mint Evidence.
       const chunk = this.db.prepare(`SELECT id,content,locator,content_hash FROM research_knowledge_chunks
         WHERE document_id=? AND chunk_index=?`).get(`document:${target.parseId}`, blockIndex) as {

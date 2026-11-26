@@ -1,3 +1,5 @@
+import {WritingContextService} from './writing-context-service';
+import {registerResearchWritingContextCapabilities} from './writing-context-capabilities';
 import { ResearchDiagramService } from './diagram-service';
 import { researchDiagramCapability, registerResearchDiagramCapability } from './diagram-capabilities';
 import type { RocPluginContext } from '../../kernel/types';
@@ -20,6 +22,14 @@ export function registerResearchWriting(
   lifecycle: ResearchPluginLifecycle, production: ResearchProductionServices
 ): void {
   const { researchRepository, researchFigures, researchResults, toolchain } = production;
+  registerResearchWritingContextCapabilities(context, new WritingContextService(researchRepository, {
+    query: (request, signal) => production.scientificQuery.search(request, signal),
+    assertCurrent: (search, signal) => production.scientificRetrieval.assertCurrent(search, signal),
+    readKnowledge: (request, signal) => production.scientificExtraction.read(request, signal),
+    configIdentity: () => ({retrieval: {embedding: production.researchEmbeddings.selectedIdentity(null),
+      reranker: context.config.get<unknown>('research.reranker'), planner: options.modelFactory.defaultChatModelStamp()},
+      knowledge: options.modelFactory.defaultChatModelStamp()})
+  }, production.db));
   let diagrams: ResearchDiagramService | null = null;
   let prose: ResearchProseLintService | null = null;
   lifecycle.provide(context, 'diagram', [researchDiagramCapability], child => {

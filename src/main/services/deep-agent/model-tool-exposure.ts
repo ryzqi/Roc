@@ -13,6 +13,7 @@ export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'research_wiki_update_sources',
   'research_wiki_retry_paper',
   'research_request_paper_deep_knowledge',
+  'research_prepare_writing_context',
   'run_shell_command',
   'execute',
   'propose_background_task',

@@ -9,6 +9,14 @@
     {
       "id": "writing-authority",
       "requirement": "Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery."
+    },
+    {
+      "id": "writing-first-draft-context",
+      "requirement": "Prepare from a current approved upstream input before first writing; preserve incomplete gaps, and never claim a new unsaved manuscript passed grounding."
+    },
+    {
+      "id": "writing-deep-on-demand",
+      "requirement": "Reuse existing published knowledge first; request deep knowledge only for selected questions and dimensions, return the queued job without blocking, preserve unknown and unreviewed status, and reject out-of-project documents."
     }
   ]
 }

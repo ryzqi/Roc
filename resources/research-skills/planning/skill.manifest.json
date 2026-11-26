@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-planning",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "stage": "planning",
   "description": "将研究假设转成方案、数据需求和验收标准。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "cb48af58bfcdc90d29c6e61a33ecd8bf231255361e5d808174e0aedc33cc905e"
+    "hash": "0f2c1f2ebd96703344728c97737b8a1952c4c6eb5dd1b2d5ba32832eb9239d2f"
   },
   "references": [],
   "license": {
@@ -19,8 +19,8 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/planning",
-    "revision": "s05-1.2.0",
-    "hash": "cb48af58bfcdc90d29c6e61a33ecd8bf231255361e5d808174e0aedc33cc905e"
+    "revision": "scientific-rag-p4-1.7.0",
+    "hash": "0f2c1f2ebd96703344728c97737b8a1952c4c6eb5dd1b2d5ba32832eb9239d2f"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -35,7 +35,12 @@
     "research.knowledge.search",
     "research.evidence.list",
     "research.evidence.inspect",
-    "research.artifacts.get"
+    "research.artifacts.get",
+    "research.knowledge.scientificQuery",
+    "research.knowledge.scientificContext",
+    "research.knowledge.scientificEvidence",
+    "research.knowledge.deepRead",
+    "research.knowledge.deepRequest"
   ],
   "forbiddenEffects": [
     "human_approval",
@@ -53,7 +58,7 @@
   "evalCases": [
     {
       "path": "eval-cases.json",
-      "hash": "d3738d5deb194d680c68992e40749f9f979186159b025a3adcef47f8ba60b792"
+      "hash": "572b1d1aadce975d0c17b6d161f8f1976bd2f782881b9e96efd3b9548f35d9e2"
     }
   ],
   "runtimeContract": "roc-research-stage/v2",

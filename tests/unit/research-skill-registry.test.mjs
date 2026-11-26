@@ -84,6 +84,16 @@ test('hash-approved body cannot import unapproved references or request new capa
   assert.throws(() => registry.assertCapabilities(manifest, [...manifest.requiredCapabilities, 'research.workspace.saveFile']), /capability_denied/);
 });
 
+test('writing preparation is an evidence write and unified scientific tools bind their actual capability', () => {
+  const registry = new registryApi.ResearchSkillRegistry(bundle);
+  const writing = registry.load('writing').manifest;
+  assert.throws(()=>registry.assertCapabilities({...writing,forbiddenEffects:[...writing.forbiddenEffects,'evidence_write']},
+    writing.requiredCapabilities),/forbidden_effect/);
+  assert.ok(api.getResearchStageRoleProfile('reading').allowedCapabilities.includes('research.knowledge.scientificQuery'));
+  assert.ok(!api.getResearchStageRoleProfile('reading').allowedCapabilities.includes('research.knowledge.scientificSearch'));
+  assert.ok(!api.getResearchStageRoleProfile('review').allowedCapabilities.includes('research.writing.prepareContext'));
+});
+
 test('an existing pin cannot silently load a changed version, license, or body with new hashes', () => {
   const registry = new registryApi.ResearchSkillRegistry(bundle);
   const stage = bundle.manifests[0].stage;

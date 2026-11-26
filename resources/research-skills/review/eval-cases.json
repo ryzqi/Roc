@@ -9,6 +9,10 @@
     {
       "id": "review-authority",
       "requirement": "Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery."
+    },
+    {
+      "id": "review-frozen-context",
+      "requirement": "Both parent and child scientific review must use frozen scientificInput only; live writing checks and retrieval cannot widen the evidence set."
     }
   ]
 }

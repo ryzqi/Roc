@@ -1,4 +1,5 @@
 import {spanLocator} from './knowledge-chunks';
+import {indexedPaperBlocks} from './paper-ir';
 import {createHash} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {ResearchEvidence} from '../../../shared/types';
@@ -30,7 +31,7 @@ export function readCurrentEvidenceSourceLocator(db: Database, evidence: Researc
     WHERE s.chunk_id=? AND p.document_id=?`).get(evidence.chunkId, evidence.documentId) as {
       start_utf16: number; end_utf16: number; chunk_index: number; content: string; locator: string
     } | undefined : undefined;
-  const block = parsed.content.blocks.filter(block => block.text.trim())[child?.chunk_index ?? row.chunk_index];
+  const block = indexedPaperBlocks(parsed.content.blocks)[child?.chunk_index ?? row.chunk_index];
   const textSpan = child ? {start: child.start_utf16, end: child.end_utf16} : undefined;
   if (block === undefined || (child && (child.content !== block.text || child.locator !== block.locator ||
       child.start_utf16 < 0 || child.end_utf16 > block.text.length || child.end_utf16 <= child.start_utf16)) ||

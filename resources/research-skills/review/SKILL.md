@@ -12,6 +12,8 @@ verdict 为 ready、revise 或 uncertain。无法验证时明确 uncertain，不
 
 独立子角色只读取冻结稿件、原始证据、反证和已批准实验；不读取作者工作记录或其他角色报告，不修改正文、证据关系或审批。材料按工具分页读取，先核对 inputHash、claimHash、sourceDigest；引用采用 excerpt 的准确 UTF-16 start/end/quote。
 
+带 scientificInput 的审阅全过程只使用冻结材料，主汇总与子角色都不能调用实时科学检索、prepare_writing_context、check_draft_grounding 或 review_writing_impact 补充依据。缺少当前来源、条件、单位或反证时标记 uncertain 并指出需要重新冻结的材料；不能用 Wiki 段落或自动检查结果替代科学判断。
+
 证据角色输出 scientificReview.kind=verifier，逐条覆盖冻结 claim ID/version。分类是待人工审核的建议：factual 检查 direct_source；comparative 检查 comparable_conditions/baseline；numerical 检查 metric/unit/population/uncertainty；causal 检查 causal_design/confounders/identification；experimental 检查 run/controls/metric/reproducibility；novelty 检查 search_coverage/comparable_conditions/baseline；hypothesis 检查 falsification，不能当作已支持的事实。条件缺失时输出 insufficient 或有明确限定的 qualifies，不提供科学概率或 verified 状态。
 
 支持、反证、负结果、替代解释和限定条件必须并列审查。已登记的反证不能省略。examinedEvidenceIds 记录检查范围，未检查完整时说明 unexaminedReason；“未发现反例”不等于不存在。

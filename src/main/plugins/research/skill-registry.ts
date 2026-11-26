@@ -91,7 +91,8 @@ export class ResearchSkillRegistry {
     }
     const forbidden = new Set(manifest.forbiddenEffects);
     for (const capability of capabilities) {
-      if ((forbidden.has('evidence_write') && capability === 'research.evidence.capture') ||
+      if ((forbidden.has('evidence_write') && ['research.evidence.capture', 'research.writing.prepareContext',
+          'research.knowledge.deepRequest'].includes(capability)) ||
           (forbidden.has('workspace_write') && ['research.workspace.saveFile', 'research.template.saveOwned'].includes(capability)) ||
           (forbidden.has('production_execute') && /\.(startOwned|compileOwned|prepareOwned)$/u.test(capability))) {
         throw new Error('research_skill_forbidden_effect');

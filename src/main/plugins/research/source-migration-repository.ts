@@ -1,4 +1,5 @@
 import {spanLocator} from './knowledge-chunks';
+import {indexedPaperBlocks} from './paper-ir';
 import {createHash, randomUUID} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
@@ -46,7 +47,8 @@ export class ResearchSourceMigrationRepository {
         AND e.invalidated_at IS NOT NULL ORDER BY e.rowid`).all(documentId, parseId) as Array<{id: string; project_id: string}>;
     if (sources.length === 0) return;
     const exact = new Map<string, Target[]>(), normalized = new Map<string, Target[]>();
-    for (const [index, block] of content.blocks.filter(block => block.text.trim()).entries()) {
+    for (const [index, block] of indexedPaperBlocks(content.blocks).entries()) {
+      if (!block.text.trim()) continue;
       const target = {chunkId: `document:${parseId}:chunk:${index}`, block};
       const chunk = this.db.prepare('SELECT content,locator FROM research_knowledge_chunks WHERE id=?')
         .get(target.chunkId) as {content: string; locator: string} | undefined;

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-revision-coach",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "stage": "revision",
   "description": "按审稿意见修订正文并记录逐项回复与证据变化。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "9cc1e53c043b736383849fca688e391751da2770f9c8a4d7138150c258bbf8c0"
+    "hash": "a687e0702d3530f42ace5efd5fc0491be87311dc033f1e6a94d2d5b2a439ead7"
   },
   "references": [],
   "license": {
@@ -19,8 +19,8 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/revision",
-    "revision": "s05-1.2.0",
-    "hash": "9cc1e53c043b736383849fca688e391751da2770f9c8a4d7138150c258bbf8c0"
+    "revision": "scientific-rag-p4-1.7.0",
+    "hash": "a687e0702d3530f42ace5efd5fc0491be87311dc033f1e6a94d2d5b2a439ead7"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -35,7 +35,15 @@
     "research.knowledge.search",
     "research.evidence.list",
     "research.evidence.inspect",
-    "research.artifacts.get"
+    "research.artifacts.get",
+    "research.knowledge.scientificQuery",
+    "research.knowledge.scientificContext",
+    "research.knowledge.scientificEvidence",
+    "research.writing.prepareContext",
+    "research.writing.checkGrounding",
+    "research.writing.reviewImpact",
+    "research.knowledge.deepRead",
+    "research.knowledge.deepRequest"
   ],
   "forbiddenEffects": [
     "human_approval",
@@ -53,7 +61,7 @@
   "evalCases": [
     {
       "path": "eval-cases.json",
-      "hash": "b782dbec59ee13a34c1bbb3b96d0c9fd7d996a22af23c33810bd0f08e85324e6"
+      "hash": "ae3103f8c50fdd9eb403e5c87739037e3802a02cabe03d920d1f07f6eb3d9e61"
     }
   ],
   "runtimeContract": "roc-research-stage/v2",

@@ -9,6 +9,14 @@
     {
       "id": "revision-authority",
       "requirement": "Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery."
+    },
+    {
+      "id": "revision-current-context",
+      "requirement": "Inspect source impact and grounding of approved input, preserve old body and review decisions, and check new revision only after it is saved."
+    },
+    {
+      "id": "revision-deep-on-demand",
+      "requirement": "Reuse existing published knowledge first; request deep knowledge only for selected questions and dimensions, return the queued job without blocking, preserve unknown and unreviewed status, and reject out-of-project documents."
     }
   ]
 }

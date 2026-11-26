@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-academic-writing",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "stage": "writing",
   "description": "基于审核过的证据撰写可追溯论文正文。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "47aa90c9a398e7312efd304593726de33e232499865868c861a68e9da66b01d8"
+    "hash": "dd62495ff7905eaa6be4134be79d0e311bfb50c771bda5ae40ed6fa7e4ef07dd"
   },
   "references": [],
   "license": {
@@ -19,8 +19,8 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/writing",
-    "revision": "s05-1.2.0",
-    "hash": "47aa90c9a398e7312efd304593726de33e232499865868c861a68e9da66b01d8"
+    "revision": "scientific-rag-p4-1.7.0",
+    "hash": "dd62495ff7905eaa6be4134be79d0e311bfb50c771bda5ae40ed6fa7e4ef07dd"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -35,7 +35,15 @@
     "research.knowledge.search",
     "research.evidence.list",
     "research.evidence.inspect",
-    "research.artifacts.get"
+    "research.artifacts.get",
+    "research.knowledge.scientificQuery",
+    "research.knowledge.scientificContext",
+    "research.knowledge.scientificEvidence",
+    "research.writing.prepareContext",
+    "research.writing.checkGrounding",
+    "research.writing.reviewImpact",
+    "research.knowledge.deepRead",
+    "research.knowledge.deepRequest"
   ],
   "forbiddenEffects": [
     "human_approval",
@@ -53,7 +61,7 @@
   "evalCases": [
     {
       "path": "eval-cases.json",
-      "hash": "10b25d5a055cf7b2508eb06cf2adc3ac494673b60294e3d3bc344fea1b0b5ddd"
+      "hash": "4786f5200096ae7a50dd5f727ec5ccc06880a7fe7694708dcbb1e843fd94720a"
     }
   ],
   "runtimeContract": "roc-research-stage/v2",

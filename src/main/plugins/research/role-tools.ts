@@ -20,7 +20,12 @@ import { requireConfirmedSearchStrategy } from './search-strategy';
 import {relationClaimHash, relationSourceDigest} from './evidence-relation-repository';
 import {knowledgeSearchView} from './knowledge-consumption';
 import {createScientificTools} from '../agent/scientific-tools';
+import {createRoleDeepKnowledgeTools} from './role-deep-knowledge-tools';
 import { researchPythonEnvironmentReceiptSchema, researchPythonEnvironmentStatusSchema } from '../../../shared/schemas/research-python-environments';
+import {prepareWritingContextRequestSchema, writingContextRequestSchema, writingContextResultSchema,
+  writingGroundingResultSchema, writingImpactResultSchema} from '../../../shared/schemas/research-writing-context';
+import {paperDeepKnowledgeRequestSchema} from '../../../shared/schemas/research-paper-deep-knowledge';
+import {scientificExtractionJobSchema} from '../../../shared/schemas/research-scientific-extraction';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -62,8 +67,7 @@ export function createResearchRoleTools(input: {
     return input.effects;
   };
   const after = <T>(value: T): T => { assertActive(); return value; };
-  const scientificInput = input.run.stage === 'review' && input.run.parentRunId !== null
-    ? input.context.scientificInput : undefined;
+  const scientificInput = input.context.scientificInput;
   const reportReadRanges = new Map<string, Array<{start: number; end: number}>>();
   const frozenEvidence = (evidenceId: string) => {
     const source = scientificInput?.evidence.find(source => source.evidence.id === evidenceId);
@@ -76,16 +80,50 @@ export function createResearchRoleTools(input: {
     capabilities: input.capabilities, projectId: input.run.projectId, signal: input.signal,
     assertActive: () => {
       assertActive();
-      if (scientificInput !== undefined) throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
+      if (input.context.scientificInput !== undefined) throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
     }
   }, {search: 'search_scientific_knowledge', context: 'read_scientific_context', validate: 'validate_scientific_evidence'})
     .map(entry => [entry.name, entry]));
+  const writingInput = (artifactId: string, manuscript: boolean): void => {
+    const entry = requireInput(artifactId);
+    if (input.context.scientificInput !== undefined) {
+      throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
+    }
+    if (manuscript && entry.artifact.kind !== 'manuscript') {
+      throw new ToolInputParsingException('research_manuscript_artifact_required: choose an approved manuscript from this run\'s inputs.');
+    }
+  };
+  const invokeWriting = async (name: string, request: {artifactId: string}, manuscript: boolean): Promise<unknown> => {
+    writingInput(request.artifactId, manuscript);
+    try {
+      return after(await input.capabilities.invoke(`research.writing.${name}`, {...request, projectId: input.run.projectId}, input.signal));
+    } catch (error) {assertActive(); throw error;}
+  };
+  const writingBound = <T extends {projectId: string; artifactId: string; contextId: string}>(result: T,
+    request: {artifactId: string; contextId?: string}): T => {
+    if (result.projectId !== input.run.projectId || result.artifactId !== request.artifactId ||
+      request.contextId !== undefined && request.contextId !== result.contextId) throw new Error('research_writing_tool_binding_invalid');
+    return after(result);
+  };
   const factories: Record<string, () => StructuredToolInterface> = {
+    prepare_writing_context: () => tool(async request => writingBound(
+      writingContextResultSchema.parse(await invokeWriting('prepareContext', request, false)), request), {
+      name: 'prepare_writing_context', description: '为章节准备原文、结构化事实、Evidence、人工审核主张、反面证据与缺口。artifactId必须是本次已批准输入；首稿可用上游阅读或计划材料作锚点。保留contextId；incomplete不能作为科学确认。',
+      schema: prepareWritingContextRequestSchema.omit({projectId: true})}),
+    check_draft_grounding: () => tool(async request => writingBound(
+      writingGroundingResultSchema.parse(await invokeWriting('checkGrounding', request, true)), request), {
+      name: 'check_draft_grounding', description: '检查本次已批准输入稿件的实际段落、数字、单位、条件与来源。需要先前prepare_writing_context的contextId；未保存的新正文不能被检查。冻结科学审阅禁用此工具。',
+      schema: writingContextRequestSchema.omit({projectId: true})}),
+    review_writing_impact: () => tool(async request => writingBound(
+      writingImpactResultSchema.parse(await invokeWriting('reviewImpact', request, true)), request), {
+      name: 'review_writing_impact', description: '只读检查原文、Wiki、证据、主张和正文变化影响。artifactId必须是本次已批准输入稿件；不自动改正文或确认科学支持。冻结科学审阅禁用此工具。',
+      schema: writingContextRequestSchema.omit({projectId: true})}),
     search_scientific_knowledge: () => scientificTools.get('search_scientific_knowledge')!,
     read_scientific_context: () => scientificTools.get('read_scientific_context')!,
     validate_scientific_evidence: () => scientificTools.get('validate_scientific_evidence')!,
     read_source_migrations: () => tool(async ({evidenceId, offset, limit}) => {
       assertActive();
+      if (scientificInput !== undefined) throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
       const records = input.repository.evidence.sourceMigrations.list({projectId: input.run.projectId, evidenceId});
       return {evidenceId, ...page(JSON.stringify(records), offset, limit)};
     }, {name: 'read_source_migrations', description: '分页读取本项目同文档重解析的固定定位候选、用户捕获或拒绝决定及当前目标状态。候选与新位置均不表示科学支持已确认。',
@@ -93,6 +131,7 @@ export function createResearchRoleTools(input: {
         limit: z.number().int().min(1).max(8000)}).strict()}),
     read_source_replacements: () => tool(async ({evidenceId, offset, limit}) => {
       assertActive();
+      if (scientificInput !== undefined) throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
       const records = input.repository.evidence.sourceReplacements.list({projectId: input.run.projectId, evidenceId});
       return {evidenceId, ...page(JSON.stringify(records), offset, limit)};
     }, {name: 'read_source_replacements', description: '分页读取本项目用户明确选定的文档替代或实验重跑前后关联、两端固定来源及完整输入/环境/输出快照。包含该证据作为前序或新来源的记录；选择时needs_review与当前来源状态分开，不表示科学等价或当前人工批准。',
@@ -401,6 +440,9 @@ export function createResearchRoleTools(input: {
     }, { name: 'publish_export', description: '把本次运行准备好的导出关联到审核闸门。不能交付最终文件或宣称已批准。',
       schema: z.object({ exportId: z.string().min(1), replacesExportId: z.string().min(1).nullable() }).strict() })
   };
+  for (const entry of createRoleDeepKnowledgeTools({projectId: input.run.projectId,
+    frozen: input.context.scientificInput !== undefined, signal: input.signal, repository: input.repository,
+    capabilities: input.capabilities, assertActive})) factories[entry.name] = () => entry;
   // Retry attempts share candidate/import ownership just as they share the frozen node's effect receipts.
   let literatureOwner = input.repository.runs.get(input.run.id, input.run.projectId);
   while (literatureOwner.retryOfRunId !== null) {
@@ -419,6 +461,21 @@ export function createResearchRoleTools(input: {
     if (effectClass === undefined) return original;
     return tool(async args => {
       assertActive();
+      const guardKnowledgeEffect = (): void => {
+        if (name === 'prepare_writing_context') {
+          const request = prepareWritingContextRequestSchema.omit({projectId: true}).parse(args);
+          writingInput(request.artifactId, false);
+          for (const documentId of request.documentIds) input.repository.scientificExtraction.authorizeDocument(input.run.projectId, documentId);
+        }
+        if (name === 'request_paper_deep_knowledge') {
+          assertActive();
+          if (scientificInput !== undefined) throw new ToolInputParsingException('research_scientific_frozen_review_scope: use the frozen review evidence only.');
+          const request = paperDeepKnowledgeRequestSchema.omit({projectId: true}).parse(args);
+          input.repository.scientificExtraction.authorizeDocument(input.run.projectId, request.documentId);
+        }
+      };
+      // Worker effects can replay without invoking the tool body; authorization must also fence that path.
+      guardKnowledgeEffect();
       let identityArgs: unknown = args;
       if (name === 'publish_figure') {
         const request = z.object({runId: z.string().min(1), replacesFigureId: z.string().min(1).nullable()}).strict().parse(args);
@@ -451,13 +508,30 @@ export function createResearchRoleTools(input: {
         assertActive();
         identityArgs = {...request, inputFiles};
       }
-      return input.repository.tasks.workerEffects.execute(name, identityArgs, effectClass, () => original.invoke(args));
+      const result = await input.repository.tasks.workerEffects.execute(name, identityArgs, effectClass, () => original.invoke(args));
+      guardKnowledgeEffect();
+      if (name === 'prepare_writing_context') {
+        const request = prepareWritingContextRequestSchema.omit({projectId: true}).parse(args);
+        const prepared = writingBound(writingContextResultSchema.parse(result), request);
+        for (const documentId of new Set(prepared.sourcePapers.map(source => source.documentId))) {
+          input.repository.scientificExtraction.authorizeDocument(input.run.projectId, documentId);
+        }
+      }
+      if (name === 'request_paper_deep_knowledge') {
+        const request = paperDeepKnowledgeRequestSchema.omit({projectId: true}).parse(args);
+        const job = scientificExtractionJobSchema.parse(result);
+        if (job.snapshot.projectId !== input.run.projectId || job.snapshot.source.paperIR.identity.documentId !== request.documentId) {
+          throw new Error('research_deep_tool_binding_invalid');
+        }
+      }
+      return result;
     }, {name, description: original.description, schema: original.schema});
   });
 }
 
 const workerEffectClasses: Partial<Record<string, import('../../services/deep-agent/tool-effect-store').ToolEffectOperationInput['effectClass']>> = {
-  capture_evidence: 'workspace_mutation', save_workspace_file: 'workspace_mutation',
+  capture_evidence: 'workspace_mutation', prepare_writing_context: 'workspace_mutation',
+  request_paper_deep_knowledge: 'workspace_mutation', save_workspace_file: 'workspace_mutation',
   save_template_file: 'workspace_mutation', compile_template: 'host_execution',
   start_experiment: 'host_execution', start_figure: 'host_execution', prepare_export: 'host_execution',
   publish_experiment: 'workspace_mutation', publish_figure: 'workspace_mutation', publish_export: 'workspace_mutation',

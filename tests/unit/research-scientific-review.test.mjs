@@ -94,6 +94,25 @@ test('review tools expose only frozen material and deny cross-claim, cross-repor
   } finally {f.close();}
 });
 
+test('parent scientific review cannot widen frozen inputs through live writing checks or scientific retrieval', async () => {
+  const f = scene();
+  try {
+    for (const child of f.children) f.worker(child.id,id=>f.repository.runs.complete(id,f.project.id,{...plain,scientificReview:f.output(child)}));
+    const tools = f.worker(f.parent.id,()=>api.createResearchRoleTools({run:f.repository.runs.get(f.parent.id,f.project.id),
+      context:f.repository.runs.getContext(f.parent.id),repository:f.repository,
+      capabilities:{invoke:async()=>assert.fail('Frozen review must not call live capabilities')},signal:new AbortController().signal}));
+    for(const name of ['check_draft_grounding','review_writing_impact']) {
+      await assert.rejects(f.worker(f.parent.id,()=>tools.find(tool=>tool.name===name).invoke({artifactId:f.artifactId,contextId:'context'})),/frozen_review_scope/);
+    }
+    assert.ok(!tools.some(tool=>tool.name==='prepare_writing_context'));
+    assert.ok(!tools.some(tool=>['request_paper_deep_knowledge','read_paper_deep_knowledge'].includes(tool.name)));
+    const search=await f.worker(f.parent.id,()=>tools.find(tool=>tool.name==='search_knowledge').invoke({query:'negative',limit:10}));
+    assert.equal(search.scope,'frozen_review_evidence');
+    await assert.rejects(f.worker(f.parent.id,()=>tools.find(tool=>tool.name==='inspect_evidence_source').invoke({evidenceId:'outside-frozen-input',offset:0,limit:100})),/not_in_run_inputs/);
+    await assert.rejects(f.worker(f.parent.id,()=>tools.find(tool=>tool.name==='search_scientific_knowledge').invoke({query:'new evidence'})),/frozen_review_scope/);
+  } finally {await f.close();}
+});
+
 test('human dispositions bind immutable findings, exact text and current reverification before acceptance', () => {
   const f = scene();
   try {

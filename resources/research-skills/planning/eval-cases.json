@@ -9,6 +9,14 @@
     {
       "id": "planning-authority",
       "requirement": "Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery."
+    },
+    {
+      "id": "planning-comparison-boundary",
+      "requirement": "Search counterevidence and retain dataset version, split, units, budget and hardware before comparing results; planned experiments remain unperformed."
+    },
+    {
+      "id": "planning-deep-on-demand",
+      "requirement": "Reuse existing published knowledge first; request deep knowledge only for selected questions and dimensions, return the queued job without blocking, preserve unknown and unreviewed status, and reject out-of-project documents."
     }
   ]
 }

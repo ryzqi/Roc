@@ -1,5 +1,6 @@
 import {researchNodeOutputSchema} from '../../../shared/schemas/research-task-graph';
 import {researchWorkerLease} from './execution/worker-context';
+import {readWritingContextReceipt, type WritingContextRecord} from './writing-context-receipt';
 import {researchNodeLeaseSchema, researchTaskNodeSchema} from '../../../shared/schemas/research-task-graph';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
@@ -634,11 +635,21 @@ export class ResearchRunRepository {
       const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
       const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan, externalFeedback,
         ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance, scientificReview, manuscript} = snapshot;
+      // Preparing writing appends a checked receipt to an approved input without changing its material.
+      // Keep every other provenance record frozen so the worker cannot widen its source contract.
+      const preparationReceipts = new Set((this.db.prepare(`SELECT p.id,p.project_id,p.artifact_id,p.locator,p.excerpt,e.payload_json FROM research_provenance p
+        JOIN research_workflow_events e ON e.id=p.source_id AND e.project_id=p.project_id
+        WHERE p.project_id=? AND p.artifact_id=? AND p.subject_type='artifact' AND p.subject_id=p.artifact_id
+        AND p.source_type='workflow_event' AND p.locator LIKE 'writing-context:%' AND e.type='writing_context_prepared'`)
+        .all(projectId, artifactId) as Array<WritingContextRecord & {id: string}>).flatMap(row => {
+          try {readWritingContextReceipt(row); return [row.id];} catch {return [];}
+        }));
       // UI state (current stage, available actions) changes as this run starts. Only freeze input material.
       versions.set(`artifact:${artifactId}`, {kind: 'artifact', id: artifactId,
         hash: hashStageValue({artifact, content, origin, claims, evidence, relations, production, ideaCanvas,
           ...(externalFeedback===undefined?{}:{externalFeedback}),
-          ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance,
+          ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance,
+          provenance: provenance.filter(entry => !preparationReceipts.has(entry.id)),
           ...(scientificReview === undefined ? {} : {scientificReview}), ...(manuscript === undefined ? {} : {manuscript})})});
       for (const source of evidence) versions.set(`source:${source.evidence.id}`,
         {kind: 'source', id: source.evidence.id, hash: hashStageValue(source)});

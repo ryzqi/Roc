@@ -13,6 +13,11 @@ export type PaperBlock = {id: string; text: string; locator: string; kind: Paper
   reading?: ResearchBlockReading; table?: NormalizedPaperTable; equation?: PaperEquation; visual?: PaperVisual;
   locations?: Omit<NormalizedPaperTable['source'], 'locator'>[]};
 
+/** Every positional binding must retain textless scientific objects in the original index order. */
+export function indexedPaperBlocks<T extends PaperBlock>(blocks: readonly T[]): T[] {
+  return blocks.filter(block => block.text.trim() || block.table || block.equation || block.visual);
+}
+
 export function scientificRole(section: string | null): PaperChunk['semanticRole'] {
   const text = section ?? '';
   if (/ablation|消融/iu.test(text)) return 'ablation';
@@ -48,7 +53,7 @@ export function paperBlocks(blocks: readonly PaperBlock[], identity: PaperIdenti
   const annotations = new Map(structure.blocks.map(block => [block.blockId, block]));
   const sections = new Map(structure.sections.map(section => [section.id, section]));
   const blockIds = new Set(blocks.map(block => block.id));
-  return blocks.filter(block => block.text.trim() || block.table || block.equation || block.visual).map((block, index, source) => {
+  return indexedPaperBlocks(blocks).map((block, index, source) => {
     const marginal = isPageMargin(block.reading?.role);
     const annotation = annotations.get(block.id)!;
     const sectionPath = marginal ? [] : annotation.sectionIds.map(id => sections.get(id)!.title.trim().slice(0, 2000));

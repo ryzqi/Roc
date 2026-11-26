@@ -2,9 +2,11 @@ import type { ResearchStageRoleProfile } from '../../../shared/types';
 
 export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.knowledge.search': 'search_knowledge',
-  'research.knowledge.scientificSearch': 'search_scientific_knowledge',
+  'research.knowledge.scientificQuery': 'search_scientific_knowledge',
   'research.knowledge.scientificContext': 'read_scientific_context',
   'research.knowledge.scientificEvidence': 'validate_scientific_evidence',
+  'research.knowledge.deepRequest': 'request_paper_deep_knowledge',
+  'research.knowledge.deepRead': 'read_paper_deep_knowledge',
   'research.literature.search': 'search_literature',
   'research.literature.getSearch': 'read_literature_search',
   'research.library.addLiterature': 'add_literature',
@@ -21,6 +23,9 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.artifacts.inspectProduction': 'inspect_production_input',
   'research.artifacts.readProductionFile': 'read_production_input_file',
   'research.review.readReport': 'read_review_report',
+  'research.writing.prepareContext': 'prepare_writing_context',
+  'research.writing.checkGrounding': 'check_draft_grounding',
+  'research.writing.reviewImpact': 'review_writing_impact',
   'research.workspace.readFile': 'read_workspace_file',
   'research.workspace.saveFile': 'save_workspace_file',
   'research.pythonEnvironments.prepareOwned': 'prepare_python_environment',
@@ -43,11 +48,14 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.export.publishOwned': 'publish_export'
 };
 
-const readCapabilities = ['research.knowledge.search', 'research.knowledge.scientificSearch',
+const readCapabilities = ['research.knowledge.search', 'research.knowledge.scientificQuery',
   'research.knowledge.scientificContext', 'research.knowledge.scientificEvidence', 'research.evidence.list', 'research.evidence.inspect',
   'research.relations.list', 'research.claims.compare', 'research.sourceMigrations.list', 'research.sourceReplacements.list', 'research.artifacts.get'];
 const evidenceCapabilities = [...readCapabilities, 'research.evidence.capture'];
+const deepKnowledgeCapabilities = ['research.knowledge.deepRequest', 'research.knowledge.deepRead'];
 const productionInputs = ['research.artifacts.inspectProduction', 'research.artifacts.readProductionFile'];
+const writingChecks = ['research.writing.checkGrounding', 'research.writing.reviewImpact'];
+const writingCapabilities = ['research.writing.prepareContext', ...writingChecks];
 const workspaceFiles = ['research.workspace.readFile', 'research.workspace.saveFile'];
 const experimentEffects = [...workspaceFiles, 'research.pythonEnvironments.prepareOwned', 'research.pythonEnvironments.status',
   'research.pythonEnvironments.cancelOwned', 'research.pythonEnvironments.list', 'research.experiment.environment',
@@ -59,14 +67,14 @@ const exportEffects = ['research.template.readOwned', 'research.template.saveOwn
 const profiles: Record<ResearchStageRoleProfile['stage'], ResearchStageRoleProfile> = {
   discovery: { stage: 'discovery', role: 'research-discovery-agent', skillIds: ['roc-research-discovery'], allowedCapabilities: readCapabilities, outputKind: 'search_strategy' },
   retrieval: { stage: 'retrieval', role: 'literature-retrieval-agent', skillIds: ['roc-literature-retrieval'], allowedCapabilities: [...evidenceCapabilities, 'research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature', 'research.library.getImportOperation', 'research.library.cancelImportOperation'], outputKind: 'source_corpus' },
-  reading: { stage: 'reading', role: 'paper-reading-agent', skillIds: ['roc-paper-reading'], allowedCapabilities: evidenceCapabilities, outputKind: 'reading_notes' },
+  reading: { stage: 'reading', role: 'paper-reading-agent', skillIds: ['roc-paper-reading'], allowedCapabilities: [...evidenceCapabilities, ...deepKnowledgeCapabilities], outputKind: 'reading_notes' },
   ideation: { stage: 'ideation', role: 'research-ideation-agent', skillIds: ['roc-research-ideation'], allowedCapabilities: evidenceCapabilities, outputKind: 'idea_canvas' },
-  planning: { stage: 'planning', role: 'research-planning-agent', skillIds: ['roc-research-planning'], allowedCapabilities: evidenceCapabilities, outputKind: 'research_plan' },
+  planning: { stage: 'planning', role: 'research-planning-agent', skillIds: ['roc-research-planning'], allowedCapabilities: [...evidenceCapabilities, ...deepKnowledgeCapabilities], outputKind: 'research_plan' },
   experiment: { stage: 'experiment', role: 'experiment-agent', skillIds: ['roc-experiment-provenance'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs, ...experimentEffects], outputKind: 'experiment_run' },
   figure: { stage: 'figure', role: 'scientific-figure-agent', skillIds: ['roc-scientific-figure'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs, ...figureEffects], outputKind: 'figure' },
-  writing: { stage: 'writing', role: 'academic-writing-agent', skillIds: ['roc-academic-writing'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'manuscript' },
-  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: [...readCapabilities, ...productionInputs, 'research.review.readReport'], outputKind: 'review_report' },
-  revision: { stage: 'revision', role: 'revision-agent', skillIds: ['roc-revision-coach'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs], outputKind: 'manuscript' },
+  writing: { stage: 'writing', role: 'academic-writing-agent', skillIds: ['roc-academic-writing'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs, ...writingCapabilities, ...deepKnowledgeCapabilities], outputKind: 'manuscript' },
+  review: { stage: 'review', role: 'peer-review-panel', skillIds: ['roc-peer-review'], allowedCapabilities: [...readCapabilities, ...productionInputs, 'research.review.readReport', ...writingChecks], outputKind: 'review_report' },
+  revision: { stage: 'revision', role: 'revision-agent', skillIds: ['roc-revision-coach'], allowedCapabilities: [...evidenceCapabilities, ...productionInputs, ...writingCapabilities, ...deepKnowledgeCapabilities], outputKind: 'manuscript' },
   export: { stage: 'export', role: 'manuscript-export-agent', skillIds: ['roc-manuscript-export'], allowedCapabilities: [...readCapabilities, ...productionInputs, ...exportEffects], outputKind: 'export_package' }
 };
 

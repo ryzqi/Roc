@@ -1,3 +1,4 @@
+import {createWritingTools, WRITING_TOOL_DESCRIPTORS} from './writing-tools';
 import {createPaperDeepTools, PAPER_DEEP_TOOL_DESCRIPTORS} from './paper-deep-tools';
 import {createWikiTools, WIKI_TOOL_DESCRIPTORS} from './wiki-tools';
 import {knowledgeSearchView} from '../research/knowledge-consumption';
@@ -60,6 +61,7 @@ const readScopes: ResearchToolDescriptor['executionScopes'] = ['main', 'subagent
 export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...WIKI_TOOL_DESCRIPTORS,
   ...PAPER_DEEP_TOOL_DESCRIPTORS,
+  ...WRITING_TOOL_DESCRIPTORS,
   ...REVIEW_TOOL_DESCRIPTORS,
   ...RESEARCH_WORKFLOW_TOOL_DESCRIPTORS,
   ...RESEARCH_PROPOSAL_TOOL_DESCRIPTORS,
@@ -234,6 +236,7 @@ export function createResearchTools(input: {
   return [
     ...createWikiTools(input),
     ...createPaperDeepTools(input),
+    ...createWritingTools(input),
     ...createReviewTools(input),
     ...createResearchWorkflowTools(input),
     ...createResearchProposalTools(input),
