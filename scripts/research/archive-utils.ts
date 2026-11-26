@@ -491,6 +491,53 @@ function digestHex(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
+function selectedTexBundleNames(fileList: readonly string[]): Set<string> {
+  if (fileList.length === 0) fail('research_tex_bundle_file_list_empty');
+  const keep = new Set<string>();
+  for (const name of fileList) {
+    assertBundleName(name, keep);
+    keep.add(name);
+  }
+  if (keep.has('SHA256SUM')) fail('research_tex_bundle_file_list_invalid');
+  if (!keep.has('tectonic-format-latex.tex')) fail('research_tex_bundle_metadata_missing');
+  return keep;
+}
+
+async function readSelectedTexBundleFiles(
+  source: string,
+  keep: ReadonlySet<string>,
+  onFile: (member: TarMember) => Promise<void>
+): Promise<void> {
+  const names = new Set<string>();
+  let total = 0;
+  await readTarMembers(source, async (member) => {
+    if (member.type !== 'file') fail('research_tex_bundle_entry_invalid');
+    if (member.name === 'SHA256SUM' || !keep.has(member.name)) return;
+    assertBundleName(member.name, names);
+    names.add(member.name);
+    total += member.size;
+    if (total > MAX_BUNDLE_BYTES || member.size > MAX_BUNDLE_FILE || names.size >= MAX_BUNDLE_MEMBERS) {
+      fail('research_tex_bundle_too_large');
+    }
+    await onFile(member);
+  }, { maxMembers: MAX_BUNDLE_MEMBERS, maxBytes: MAX_BUNDLE_BYTES, sanitize: false, tooLarge: 'research_tex_bundle_too_large' });
+  if ([...keep].some((name) => !names.has(name))) fail('research_tex_bundle_file_list_missing');
+}
+
+export type TexBundleFileDigest = { size: number; sha256: string };
+
+/** Read selected payload identities directly from an already SHA-256-verified tarball. */
+export async function readTexBundleFileDigests(
+  source: string,
+  fileList: readonly string[]
+): Promise<ReadonlyMap<string, TexBundleFileDigest>> {
+  const digests = new Map<string, TexBundleFileDigest>();
+  await readSelectedTexBundleFiles(source, selectedTexBundleNames(fileList), async (member) => {
+    digests.set(member.name, { size: member.data.length, sha256: digestHex(member.data) });
+  });
+  return digests;
+}
+
 function appendZipMember(members: ZipMember[], names: Set<string>, offset: number, name: string, data: Buffer): { record: ZipMember; header: Buffer; compressed: Buffer; nextOffset: number } {
   assertBundleName(name, names);
   names.add(name);
@@ -517,14 +564,7 @@ export async function convertTexBundle(
   fileList: readonly string[]
 ): Promise<void> {
   if (await pathInfo(destination) !== null) fail('research_tex_bundle_destination_exists');
-  if (fileList.length === 0) fail('research_tex_bundle_file_list_empty');
-  const keep = new Set<string>();
-  for (const name of fileList) {
-    assertBundleName(name, keep);
-    keep.add(name);
-  }
-  if (keep.has('SHA256SUM')) fail('research_tex_bundle_file_list_invalid');
-  if (!keep.has('tectonic-format-latex.tex')) fail('research_tex_bundle_metadata_missing');
+  const keep = selectedTexBundleNames(fileList);
   await mkdir(dirname(destination), { recursive: true });
   const staging = await mkdtemp(join(dirname(destination), '.tex-bundle-'));
   try {
@@ -534,24 +574,12 @@ export async function convertTexBundle(
     const names = new Set<string>();
     const selected = new Map<string, Buffer>();
     let offset = 0;
-    let total = 0;
     try {
-      await readTarMembers(source, async (member) => {
-        if (member.type !== 'file') fail('research_tex_bundle_entry_invalid');
-        if (member.name === 'SHA256SUM' || !keep.has(member.name)) return;
-        assertBundleName(member.name, names);
-        names.add(member.name);
-        total += member.size;
-        if (total > MAX_BUNDLE_BYTES || member.size > MAX_BUNDLE_FILE || selected.size + 1 >= MAX_BUNDLE_MEMBERS) {
-          fail('research_tex_bundle_too_large');
-        }
+      await readSelectedTexBundleFiles(source, keep, async (member) => {
         selected.set(member.name, member.data);
-      }, { maxMembers: MAX_BUNDLE_MEMBERS, maxBytes: MAX_BUNDLE_BYTES, sanitize: false, tooLarge: 'research_tex_bundle_too_large' });
-      const missing = [...keep].filter((name) => !selected.has(name));
-      if (missing.length > 0) fail('research_tex_bundle_file_list_missing');
+      });
       const digestLines = [...keep].sort().map((name) => `${name} ${digestHex(selected.get(name)!)}`);
       const digest = `${createHash('sha256').update(digestLines.join('\n')).digest('hex')}\n`;
-      names.clear();
       for (const name of [...keep].sort()) {
         const next = appendZipMember(members, names, offset, name, selected.get(name)!);
         await writeAll(handle, next.header);

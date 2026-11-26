@@ -167,6 +167,8 @@ test('publishes a verified ZIP and preserves application executable mode and sym
   assert.equal(state.release.draft, false);
   assert.equal(state.release.prerelease, true);
   assert.equal(state.release.latest, false);
+  assert.match(state.release.body, /development \(ad-hoc\)/u);
+  assert.match(state.release.body, /not Apple notarized/u);
   assert.equal(state.tagCommit, f.commit);
   assert.equal(state.release.assets.length, 3);
   const zipAsset = state.release.assets.find((asset) => asset.name.endsWith('.zip'));

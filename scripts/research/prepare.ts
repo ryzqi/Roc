@@ -4,9 +4,10 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
+import { extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
 import { downloadVerified, fileSha256 } from './download-asset.ts';
 import { verifyManifest, writeManifest } from './manifest.ts';
+import { ensureTexBundleZip } from './tex-bundle-cache.ts';
 
 const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
@@ -22,6 +23,7 @@ const SCRIPTED_SRC_FILES = ['src/main/plugins/research/pdfjs-assets.ts'] as cons
 const SCRIPT_FILES = [
   'prepare.ts',
   'archive-utils.ts',
+  'tex-bundle-cache.ts',
   'download-asset.ts',
   'manifest.ts',
   'smoke.ts'
@@ -46,7 +48,7 @@ type ToolsLock = {
    */
   typstVersion: string;
   pandocVersion: string;
-  texBundle: { url: string; sha256: string; size: number; zipSha256: string };
+  texBundle: { url: string; sha256: string; size: number };
   architectures: Record<string, Record<string, { url: string; sha256: string }>>;
 };
 
@@ -259,15 +261,13 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       const bundle = tools.texBundle;
       const fileList = parseTexBundleFileList(await readFile(join(SOURCES, 'tex-bundle-files.txt'), 'utf8'));
       const cachedZip = join(cache, 'tex-bundle.zip');
-      const zipInfo = await pathInfo(cachedZip);
-      if (zipInfo === null || !zipInfo.isFile() || await fileSha256(cachedZip) !== bundle.zipSha256) {
-        if (zipInfo !== null) await rm(cachedZip);
-        const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
-          expectedSize: bundle.size
-        });
-        await convertTexBundle(archive, cachedZip, fileList);
-        if (await fileSha256(cachedZip) !== bundle.zipSha256) fail('research_tex_zip_hash_mismatch');
-      }
+      // A source SHA-256 is a portable integrity anchor; a ZIP's compressed-byte
+      // SHA-256 is not portable across zlib implementations. Validate the source
+      // even when the ZIP cache exists, then verify its extracted file contents.
+      const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
+        expectedSize: bundle.size
+      });
+      await ensureTexBundleZip(archive, cachedZip, fileList);
       await mkdir(join(root, 'tex'));
       await copyPreservingMode(cachedZip, join(root, 'tex/bundle.zip'));
       for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.mts'))) {
