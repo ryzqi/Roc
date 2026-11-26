@@ -68,7 +68,7 @@ pnpm release:mac --tag v0.1.0
 
 `tools.lock.json` 固定上游 TeX tar 归档的 URL、大小和 SHA-256；`downloadVerified()` 在使用缓存时仍核实该来源，来源变化直接失败。`tex-bundle-files.txt` 固定选取的文件集合。
 
-从已验证的 tar 构建 ZIP 后，`ensureTexBundleZip()` 逐项解压校验 ZIP：成员名称与数量、各成员大小、可解压性，以及 `SHA256SUM` 所记的排序文件内容摘要。有效 ZIP 可以复用，损坏或文件清单改变则由已验证的源归档重建；重建后的 ZIP 仍不能通过校验则失败，不会发布。
+`ensureTexBundleZip()` 从已验证的 tar 读取所选文件的大小与 SHA-256，再逐项解压核对 ZIP 的名称、数量、大小和内容摘要，并校验本地／中央目录 CRC 与实际解压内容一致。ZIP 内的 `SHA256SUM` 只验证内部一致性，不能单独证明来源。与当前源归档相符的 ZIP 可以复用；来源内容或文件清单改变、缓存损坏时，由已验证的 tar 重建。重建后的 ZIP 仍不能通过校验则失败，不会发布；仅有 ZIP 而缺少可验证的 tar 时，也不能跳过来源下载或校验。
 
 ZIP 的压缩后字节可能随 zlib 版本或实现改变，因此不再使用 `zipSha256` 作为跨环境的固定值；这**没有取消上游归档的固定 SHA-256 检验**。最终发布的 App ZIP 仍单独计算 SHA-256，并在上传前后与 GitHub Release 附件回执核对。
 

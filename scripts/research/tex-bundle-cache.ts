@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { lstat, rm } from 'node:fs/promises';
-import { Readable } from 'node:stream';
+import { crc32 } from 'node:zlib';
 import yauzl from 'yauzl';
-import { convertTexBundle } from './archive-utils.ts';
+import { convertTexBundle, readTexBundleFileDigests, type TexBundleFileDigest } from './archive-utils.ts';
 
 const MAX_BUNDLE_FILE = 512 * 1024 ** 2;
 const MAX_BUNDLE_BYTES = 4 * 1024 ** 3;
@@ -13,15 +13,20 @@ function invalidBundle(cause?: unknown): Error {
 
 /**
  * The upstream tarball is pinned by SHA-256 before this is called. ZIP deflate
- * bytes may change between zlib versions, so verify the uncompressed payload
- * instead of comparing the whole generated ZIP to a machine-specific digest.
- * The SHA256SUM member is a digest of sorted "filename sha256" lines.
+ * bytes may change between zlib versions, so compare each uncompressed payload
+ * with that source. The ZIP's SHA256SUM is checked for internal consistency,
+ * but is never trusted as its own source identity.
  */
-export async function verifyTexBundleZip(path: string, fileList: readonly string[]): Promise<void> {
-  const expected = new Set([...fileList, 'SHA256SUM']);
-  if (expected.size !== fileList.length + 1 || !expected.has('tectonic-format-latex.tex')) {
-    throw invalidBundle();
+export async function verifyTexBundleZip(path: string, fileList: readonly string[], source: string): Promise<void> {
+  try {
+    await verifyZipContents(path, await readTexBundleFileDigests(source, fileList));
+  } catch (error) {
+    throw invalidBundle(error);
   }
+}
+
+async function verifyZipContents(path: string, sourceFiles: ReadonlyMap<string, TexBundleFileDigest>): Promise<void> {
+  const expected = new Set([...sourceFiles.keys(), 'SHA256SUM']);
   let zip: yauzl.ZipFile | undefined;
   try {
     zip = await yauzl.openPromise(path, { lazyEntries: true, autoClose: false, validateEntrySizes: true });
@@ -32,31 +37,40 @@ export async function verifyTexBundleZip(path: string, fileList: readonly string
     let totalBytes = 0;
     for await (const entry of zip.eachEntry()) {
       const name = entry.fileName;
+      const sourceFile = sourceFiles.get(name);
       if (!expected.has(name) || seen.has(name) || entry.compressionMethod !== 8
           || !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0
           || entry.uncompressedSize > MAX_BUNDLE_FILE
-          || (name === 'SHA256SUM' && entry.uncompressedSize !== 65)) {
+          || (name === 'SHA256SUM' ? entry.uncompressedSize !== 65 : entry.uncompressedSize !== sourceFile?.size)) {
         throw invalidBundle();
       }
+      const localHeader = await zip.readLocalFileHeaderPromise(entry);
+      if (localHeader.crc32 !== entry.crc32 || localHeader.compressionMethod !== entry.compressionMethod
+          || localHeader.generalPurposeBitFlag !== entry.generalPurposeBitFlag
+          || localHeader.fileName.toString('utf8') !== name) throw invalidBundle();
       seen.add(name);
       totalBytes += entry.uncompressedSize;
       if (totalBytes > MAX_BUNDLE_BYTES) throw invalidBundle();
-      const stream = await new Promise<Readable>((resolve, reject) => {
-        zip!.openReadStream(entry, (error, result) => error ? reject(error) : resolve(result!));
-      });
+      const stream = await zip.openReadStreamPromise(entry);
       const hash = createHash('sha256');
       const metadata: Buffer[] = [];
       let bytes = 0;
+      let crc = 0;
       for await (const chunk of stream) {
         const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         bytes += data.length;
         if (bytes > entry.uncompressedSize) throw invalidBundle();
         hash.update(data);
+        crc = crc32(data, crc);
         if (name === 'SHA256SUM') metadata.push(data);
       }
-      if (bytes !== entry.uncompressedSize) throw invalidBundle();
+      if (bytes !== entry.uncompressedSize || crc !== entry.crc32) throw invalidBundle();
       if (name === 'SHA256SUM') recordedDigest = Buffer.concat(metadata).toString('ascii');
-      else digests.push(`${name} ${hash.digest('hex')}`);
+      else {
+        const digest = hash.digest('hex');
+        if (digest !== sourceFile?.sha256) throw invalidBundle();
+        digests.push(`${name} ${digest}`);
+      }
     }
     const contentDigest = `${createHash('sha256').update(digests.sort().join('\n')).digest('hex')}\n`;
     if (seen.size !== expected.size || recordedDigest !== contentDigest) throw invalidBundle();
@@ -69,6 +83,7 @@ export async function verifyTexBundleZip(path: string, fileList: readonly string
 
 /** Recover a corrupted or stale cache using only a previously SHA-256-verified tarball. */
 export async function ensureTexBundleZip(source: string, destination: string, fileList: readonly string[]): Promise<void> {
+  const sourceFiles = await readTexBundleFileDigests(source, fileList);
   let info;
   try {
     info = await lstat(destination);
@@ -78,7 +93,7 @@ export async function ensureTexBundleZip(source: string, destination: string, fi
   if (info !== undefined && !info.isFile()) throw invalidBundle();
   if (info !== undefined) {
     try {
-      await verifyTexBundleZip(destination, fileList);
+      await verifyZipContents(destination, sourceFiles);
       return;
     } catch {
       await rm(destination);
@@ -86,7 +101,7 @@ export async function ensureTexBundleZip(source: string, destination: string, fi
   }
   await convertTexBundle(source, destination, fileList);
   try {
-    await verifyTexBundleZip(destination, fileList);
+    await verifyZipContents(destination, sourceFiles);
   } catch (error) {
     await rm(destination);
     throw error;

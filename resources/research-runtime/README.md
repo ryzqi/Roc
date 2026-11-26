@@ -28,7 +28,7 @@ pnpm exec tsx scripts/research/smoke.ts --toolchain .runtime/research-toolchain/
 
 `prepare.ts` 组装锁定的原生工具、TypeScript 运行器、TeX 子集及[许可证](licenses/README.md)，生成文件完整性清单和源码 `lockHashes`。输出目录须不存在；已存在时仅校验，不覆盖。规则、样式和许可目录中的 README 也参与源码哈希，修改后须使用新的输出目录重新准备工具链。生成物留在 `.runtime/`，不提交到源码仓库。
 
-升级时，原生工具归档按锁定的 SHA-256 和上游文件名缓存在 `.runtime/research-downloads/`。TeX 的 2.88 GB 上游 tar 也始终按锁定 SHA-256 验证（命中缓存时无需重新下载）。派生的 `tex-bundle.zip` 经过文件清单与解压后内容摘要验证后复用；文件不匹配或缓存损坏则从已验证的 tar 重建。由于压缩结果依赖 zlib 版本，不再将派生 ZIP 的压缩字节哈希作为跨环境固定值；打包清单和应用运行时仍验证 ZIP 的实际 SHA-256。
+升级时，原生工具归档按锁定的 SHA-256 和上游文件名缓存在 `.runtime/research-downloads/`。TeX 的 2.88 GB 上游 tar 也始终按锁定 SHA-256 验证（命中缓存时无需重新下载）。派生的 `tex-bundle.zip` 逐项与该 tar 的所选文件大小、解压后 SHA-256 比较，并核对 ZIP 本地／中央目录 CRC 后才可复用；ZIP 内的 `SHA256SUM` 不能单独证明来源。来源内容或文件清单改变、缓存损坏时从已验证的 tar 重建，仅有 ZIP 缓存不能跳过 tar 的下载和校验。由于压缩结果依赖 zlib 版本，不再将派生 ZIP 的压缩字节哈希作为跨环境固定值；打包清单和应用运行时仍验证 ZIP 的实际 SHA-256。
 
 前两条命令使用 Node 26 的原生 TypeScript 支持。第三条使用项目锁定的 `tsx`，离线解析子进程通过 Node 的 `--import` 加载同一版本。
 

@@ -33,8 +33,8 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check release and TeX archive behavior
-        run: node --test tests/unit/github-release.test.mjs tests/unit/research-tex-bundle-cache.test.mjs
+      - name: Check release, TeX archive and ad-hoc signing behavior
+        run: node --test tests/unit/github-release.test.mjs tests/unit/research-tex-bundle-cache.test.mjs tests/integration/research-toolchain-signing.test.mjs
 
       - name: Cache verified research downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -50,4 +50,8 @@ jobs:
           node scripts/research/manifest.ts --root .runtime/research-toolchain/darwin-arm64
 
       - name: Package and smoke-test Roc.app (no Release writes)
+        # The configured "-" identity uses no certificate. Run the custom
+        # signing hook on PRs to finalize the toolchain manifest and app seal.
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
         run: pnpm package:mac
