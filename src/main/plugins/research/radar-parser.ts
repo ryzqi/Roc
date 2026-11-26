@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {XMLParser, XMLValidator} from 'fast-xml-parser';
 import {Parser} from 'htmlparser2';
+import {z} from 'zod';
 import type {RadarArticle} from '../../../shared/schemas/research-reading';
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const array = (value: unknown): unknown[] => value === undefined ? [] : Array.isArray(value) ? value : [value];
@@ -31,6 +32,27 @@ export function parseRadarFeed(xml: string, feedId: string, sourceUrl: string): 
       authors: array(row.author ?? row.creator).map(value => string(object(value).name ?? value)).filter(Boolean),
       publishedAt: date && Number.isFinite(Date.parse(date)) ? new Date(date).toISOString() : null,
       arxivId, doi, read: false, importedItemId: null, score: null}];
+  });
+}
+const huggingFacePapersSchema = z.array(z.object({paper:z.object({
+  id:z.string().regex(/^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/u),
+  title:z.string().trim().min(1),summary:z.string().optional().default(''),
+  authors:z.array(z.object({name:z.string()})).optional().default([]),
+  publishedAt:z.string().nullable().optional()
+})})).max(500);
+export function parseHuggingFacePapers(json: string, feedId: string): RadarArticle[] {
+  let input: unknown;
+  try {input = JSON.parse(json);} catch {throw new Error('Hugging Face 每日论文响应不是有效的 JSON。');}
+  const result = huggingFacePapersSchema.safeParse(input);
+  if (!result.success) throw new Error('Hugging Face 每日论文响应格式无效。');
+  return result.data.map(({paper}) => {
+    const title = plainArticleText(paper.title), identity = paper.id.replace(/v\d+$/u,'');
+    if (!title) throw new Error('Hugging Face 每日论文标题为空。');
+    return {id:createHash('sha256').update(`${feedId}\n${identity}`).digest('hex'),feedId,title,
+      url:`https://huggingface.co/papers/${identity}`,summary:plainArticleText(paper.summary).slice(0,60000),
+      pdfUrl:`https://arxiv.org/pdf/${paper.id}`,authors:paper.authors.map(author => plainArticleText(author.name)).filter(Boolean),
+      publishedAt:paper.publishedAt && Number.isFinite(Date.parse(paper.publishedAt)) ? new Date(paper.publishedAt).toISOString() : null,
+      arxivId:paper.id,doi:null,read:false,importedItemId:null,score:null};
   });
 }
 export function cosineSimilarity(a: number[], b: number[]): number {

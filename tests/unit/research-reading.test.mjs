@@ -64,6 +64,70 @@ test('refresh coalesces requests and preserves read/import state and prior data 
  invalid=true;await assert.rejects(()=>radar.refresh(f.project.id,feed.id),/RSS/);assert.equal(radar.articles(f.project.id,feed.id).length,1);assert.match(radar.feeds(f.project.id)[0].error,/RSS/);
  }finally{await radar.shutdown();f.close();}
 });
+test('existing Hugging Face subscription refreshes daily papers and preserves its identity and article state',async()=>{
+ const f=scene();let renamed=false,invalid=false;const requests=[];
+ const radar=new api.RadarService(f.reading,{}, {importRecord:async()=>({items:[paper(f)]})},async(url,options)=>{
+   requests.push(url);assert.equal(options.signal.aborted,false);
+   assert.equal(url,'https://huggingface.co/api/daily_papers');
+   return invalid?JSON.stringify({error:'provider response changed'}):JSON.stringify([{paper:{
+     id:renamed?'2611.00001v2':'2611.00001',title:renamed?'Updated daily paper':'Daily <b>paper</b>',
+     summary:'<p>Original abstract</p><script>bad()</script>',authors:[{name:'Fixture author'}],
+     publishedAt:'2026-11-06T00:00:00.000Z'
+   },publishedAt:'2026-11-07T00:00:00.000Z'}]);
+ });
+ try{
+   const input={id:'hf-feed',projectId:f.project.id,title:'Huggingface',url:'https://huggingface.co/papers/feed',
+     pinned:true,archived:false,expectedRevision:0};
+   const feed=radar.saveFeed(input);
+   f.db.prepare('UPDATE research_radar_feeds SET snapshot_json=? WHERE id=?')
+     .run(JSON.stringify({...feed,error:'The operation was aborted'}),feed.id);
+   const refreshed=await radar.refresh(f.project.id,feed.id);
+   assert.equal(refreshed.url,input.url);assert.equal(refreshed.revision,1);assert.equal(refreshed.pinned,true);
+   assert.equal(refreshed.error,null);assert.equal(refreshed.refreshedAt,'2026-11-07T00:00:00.000Z');
+   const article=radar.articles(f.project.id,feed.id)[0];
+   assert.equal(article.title,'Daily paper');assert.equal(article.summary,'Original abstract');
+   assert.equal(article.url,'https://huggingface.co/papers/2611.00001');assert.equal(article.arxivId,'2611.00001');
+   assert.equal(article.pdfUrl,'https://arxiv.org/pdf/2611.00001');assert.deepEqual(article.authors,['Fixture author']);
+   assert.equal(article.publishedAt,'2026-11-06T00:00:00.000Z','retain the paper publication date');
+   radar.mark(f.project.id,article.id,true);const imported=await radar.importArticle(f.project.id,article.id);
+   renamed=true;await radar.refresh(f.project.id,feed.id);
+   const updated=radar.articles(f.project.id,feed.id);
+   assert.equal(updated.length,1);assert.equal(updated[0].id,article.id);
+   assert.equal(updated[0].title,'Updated daily paper');assert.equal(updated[0].read,true);
+   assert.equal(updated[0].importedItemId,imported.itemId);
+   invalid=true;await assert.rejects(()=>radar.refresh(f.project.id,feed.id),/Hugging Face.*论文/);
+   assert.equal(radar.articles(f.project.id,feed.id)[0].title,'Updated daily paper');
+   assert.match(radar.feeds(f.project.id)[0].error,/Hugging Face.*论文/);
+   assert.equal(requests.length,3);
+ }finally{await radar.shutdown();await f.close();}
+});
+test('Hugging Face source aliases retain queries while other sites and official blog feeds use RSS',async()=>{
+ const f=scene(),requests=[];
+ const radar=new api.RadarService(f.reading,{}, {},async url=>{
+   requests.push(url);return url.startsWith('https://huggingface.co/api/daily_papers')?'[]':rss();
+ });
+ try{
+   for(const [index,url] of [
+     'https://huggingface.co/papers',
+     'https://huggingface.co/papers/feed/?date=2026-11-06',
+     'https://huggingface.co/api/daily_papers',
+     'https://huggingface.co/blog/feed.xml',
+     'https://example.org/papers/feed'
+   ].entries()){
+     const feed=radar.saveFeed({id:`source-${index}`,projectId:f.project.id,title:`Source ${index}`,url,
+       pinned:false,archived:false,expectedRevision:0});
+     await radar.refresh(f.project.id,feed.id);
+     assert.equal(radar.articles(f.project.id,feed.id).length,index<3?0:1);
+   }
+   assert.deepEqual(requests,[
+     'https://huggingface.co/api/daily_papers',
+     'https://huggingface.co/api/daily_papers?date=2026-11-06',
+     'https://huggingface.co/api/daily_papers',
+     'https://huggingface.co/blog/feed.xml',
+     'https://example.org/papers/feed'
+   ]);
+ }finally{await radar.shutdown();await f.close();}
+});
 test('citation discovery caches pages, preserves marks, validates membership and falls back to Crossref',async()=>{
  const f=scene(),item=paper(f),radar=new api.RadarService(f.reading,{},{});let calls=0,fail=false;
  const discovery=new api.ReadingDiscoveryService(f.reading,radar,async url=>{calls++;if(url.includes('semanticscholar')){if(fail)throw new Error('HTTP 429');return JSON.stringify({data:[{citedPaper:{paperId:'s2',title:'Reference',externalIds:{DOI:'10.1234/ref'},authors:[{name:'A'}]}}],next:100});}return JSON.stringify({message:{reference:[{DOI:'10.1234/fallback','article-title':'Fallback'}]}});});

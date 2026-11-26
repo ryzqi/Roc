@@ -6,7 +6,7 @@ import type {ReadingRepository} from './reading-repository';
 import type {ResearchEmbeddingService} from './embedding-service';
 import type {ResearchLibraryService} from './library-service';
 import {fetchReadingText, publicReadingUrl, type ReadingFetch} from './reading-network';
-import {parseRadarFeed, cosineSimilarity} from './radar-parser';
+import {parseRadarFeed, parseHuggingFacePapers, cosineSimilarity} from './radar-parser';
 import {RocDomainError} from '../../services/errors';
 
 type RecommendationStage = 'probe' | 'feed' | 'embedding';
@@ -71,7 +71,12 @@ export class RadarService {
     const feed = this.feeds(projectId).find(feed => feed.id === feedId && !feed.archived);
     if (!feed) throw new Error('订阅不存在或已移除。');
     try {
-      const parsed = parseRadarFeed(await this.fetchText(feed.url,{signal:this.controller.signal}),feed.id,feed.url);
+      const source = publicReadingUrl(feed.url);
+      const huggingFace = source.hostname === 'huggingface.co' &&
+        ['/papers','/papers/feed','/api/daily_papers'].includes(source.pathname.replace(/\/$/u,''));
+      if (huggingFace) source.pathname = '/api/daily_papers';
+      const text = await this.fetchText(huggingFace ? source.href : feed.url,{signal:this.controller.signal});
+      const parsed = huggingFace ? parseHuggingFacePapers(text,feed.id) : parseRadarFeed(text,feed.id,feed.url);
       this.reading.scope(projectId,true); this.controller.signal.throwIfAborted();
       return this.reading.db.transaction(() => {
         const current = this.feeds(projectId).find(value => value.id === feedId);
