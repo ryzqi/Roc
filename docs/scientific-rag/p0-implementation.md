@@ -77,4 +77,4 @@ node scripts/benchmark-scientific-native-baseline.mjs \
 - 旧 SciEGQA PDF benchmark/verifier 的 `compact`/`complete` 约定不一致，当前未使用该链路。
 
 `pnpm evaluation:scientific-rag:check` 应返回 exit 2，所有科学质量指标仍为 null。
-P1–P5 尚未实施；统一检索、深度知识、持续 Wiki、写作集成和发布验收按原方案继续分阶段推进。
+P0 交付时 P1–P5 尚未实施；后续阶段的工程交付与当前验收边界见[专题索引](README.md)。

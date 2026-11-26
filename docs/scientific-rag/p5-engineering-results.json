@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "kind": "scientific-p5-original-pdf-engineering",
+  "measuredAt": "2026-11-26T09:22:52.707Z",
+  "status": "verified-engineering-quality-pending",
+  "command": [
+    "node",
+    "scripts/benchmark-scientific-p5.mjs",
+    "evaluation/local/corpora/sciegqa-bench-v1/pdfs/cs/2311.07631.pdf",
+    "2551035de153b3de967b7f2372802af4548408ee73dd2aa2910c43987c3b091f",
+    ".artifacts/p5-original-pdf-e2e-final",
+    "data science"
+  ],
+  "workingDirectory": ".",
+  "source": {
+    "path": "evaluation/local/corpora/sciegqa-bench-v1/pdfs/cs/2311.07631.pdf",
+    "sha256": "2551035de153b3de967b7f2372802af4548408ee73dd2aa2910c43987c3b091f",
+    "bytes": 424938
+  },
+  "hardware": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.1",
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 10,
+    "totalMemoryBytes": 34359738368
+  },
+  "observation": {
+    "parseMode": "native-text",
+    "pageCount": 28,
+    "blocks": 1131,
+    "parseMs": 1972.0930829999998,
+    "indexMs": 773.3274999999999,
+    "irHash": "804acb68a228b148d8a7d80f3452bceb59968fdee2ef8800abb74f040721661c",
+    "irBlocks": 1131,
+    "indexedChunks": 1146,
+    "queries": [
+      {
+        "cache": "first-query",
+        "elapsedMs": 4160.212165999999,
+        "hitCount": 10,
+        "sourceRefs": 9,
+        "receiptId": "scientific-query:40cda8495d8b93affc8285519ff95162af3a25c8770c0d17d3a700783e56e884",
+        "hitHash": "c622c97b01dd305fc03c9475b249bfc874e86f35140ccf13874fc5db0d652be9"
+      },
+      {
+        "cache": "repeated-query",
+        "elapsedMs": 3913.3873329999988,
+        "hitCount": 10,
+        "sourceRefs": 9,
+        "receiptId": "scientific-query:655fd9b7b5ebfb924fabea34bf1e610bf5adbdb53578d489a907373c71043d31",
+        "hitHash": "c622c97b01dd305fc03c9475b249bfc874e86f35140ccf13874fc5db0d652be9"
+      }
+    ],
+    "contextObjects": 4,
+    "contextTokens": 6002,
+    "originalQuoteValidated": true,
+    "forgedQuoteRejected": true,
+    "preAbortedQueryRejected": true,
+    "providerCalls": 0,
+    "modelTokens": 0
+  },
+  "resource": {
+    "processPeakRssBytes": 858046464,
+    "cancellationWallMs": 805.4108750000014,
+    "cancelledChildExited": true,
+    "scratchRemoved": true
+  },
+  "corpusReady": false,
+  "scientificQualityMetrics": null,
+  "releaseAccepted": false,
+  "pending": [
+    "Independent reviewed frozen scientific gold and real model configuration.",
+    "Twenty-paper synthesis, full Agent writing/revision, and semantic support judgments.",
+    "OCR, embedding, reranker and generation model load/unload, sustained resource trials."
+  ],
+  "limitations": [
+    "One original native-text PDF; exact-source engineering evidence is not semantic quality.",
+    "First/repeated queries share a process; neither clears operating-system caches.",
+    "Peak RSS is the entire child process including bundled services and SQLite; 50ms samples can miss brief peaks.",
+    "Controlled IPC cancels a real native parser; no external model process is started.",
+    "Temporary PDF copies, parser artifacts, IR files and runtime bundle are removed; source and selected receipts remain."
+  ],
+  "code": {
+    "revision": "ff94f8aa534c7ff992497ced819a7eafa095c947",
+    "workingTreeSnapshot": true,
+    "sourceFiles": 364,
+    "sourceHash": "13fcdcd54882c09f441a9031ce6624750cf4297ec088fed51e87781bda2278a2",
+    "sourceHashFormat": "sha256 of UTF-8 JSON code.hashes with sorted keys and compact separators",
+    "bundleHash": "172d6dfa8994a1dbc861789cbcaa9da6dde9eb65f663a3f45bdb6253027545ed"
+  },
+  "evidence": {
+    "root": ".artifacts/p5-original-pdf-e2e-final",
+    "reportSha256": "d8b4332c7e22d0666f84b8f3db957af453046f021ed249146d22a30e1b60ac8e",
+    "verificationSha256": "6f2384a452f3d0317ff3402eb6bc79dfc6d671d3e1d31adf9e671899f4d1dac9",
+    "originalQuotePagesChecked": 1,
+    "checkScope": "Receipt integrity, source hash, whitespace-normalized quote on original PDF page, cancellation and cleanup.",
+    "retainedArtifacts": 10,
+    "temporaryBundleRemoved": true,
+    "temporaryScratchRemoved": true
+  },
+  "integrationChecks": {
+    "build": {
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "exitCode": 0,
+      "reportedBy": "root",
+      "scope": [
+        "skills",
+        "typecheck",
+        "electron-vite",
+        "renderer-chunks"
+      ]
+    },
+    "ipc": {
+      "command": [
+        "pnpm",
+        "check:ipc"
+      ],
+      "exitCode": 0,
+      "reportedBy": "root"
+    },
+    "shellSmoke": {
+      "command": "ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=.artifacts/p5-shell-smoke node scripts/smoke-electron.mjs",
+      "resultPath": ".artifacts/p5-shell-smoke/result.json",
+      "resultSha256": "12d83b61e8c148c117d878e768a6d25fd0468e3c043eff842d2e540a982d9726",
+      "target": "dist-main-fallback",
+      "full": false,
+      "tests": 23,
+      "failed": 0,
+      "rendererErrors": [],
+      "exitCode": 0
+    }
+  },
+  "cleanup": {
+    "removedIntermediateRuns": [
+      ".artifacts/p5-original-pdf-e2e",
+      ".artifacts/p5-original-pdf-e2e-v2",
+      ".artifacts/p5-original-pdf-e2e-v3"
+    ],
+    "preserved": [
+      "original PDF cache",
+      "P0 evidence",
+      ".artifacts/p5-original-pdf-e2e-final",
+      ".artifacts/p5-shell-smoke"
+    ],
+    "shellSmoke": {
+      "temporaryScreenshotsRemoved": 6,
+      "isolatedDirectoriesRemoved": 4,
+      "visualInspection": [
+        "canvas",
+        "assistant"
+      ],
+      "reportedBy": "root",
+      "retained": [
+        ".artifacts/p5-shell-smoke/result.json",
+        "smoke log"
+      ],
+      "distRetained": true
+    },
+    "emptyRuntimeDirectories": [
+      ".runtime/tmp",
+      ".runtime/test-bundles"
+    ]
+  }
+}
