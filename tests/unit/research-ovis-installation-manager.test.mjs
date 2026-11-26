@@ -30,7 +30,7 @@ async function fixture(operation) {
     for (const name of ['model-8bit', 'runtime', 'source', 'spec', 'tools']) await mkdir(join(generation, name));
     await symlink(executable, join(generation, 'runtime/python'));
     await writeFile(join(generation, 'model-8bit/weights'), 'weights');
-    const inferenceScript = join(generation, 'spec/infer.py'); await writeFile(inferenceScript, '# inference');
+    const inferenceScript = join(generation, 'spec/parse.py'); await writeFile(inferenceScript, '# inference');
     await writeFile(join(generation, 'spec/manifest.json'), JSON.stringify({model: {revision}}));
     const files = {};
     const visit = async directory => {
@@ -224,7 +224,7 @@ test('untrusted preparation handles cannot authorize deleting external paths', a
     await writeFile(join(external, 'keep'), 'keep');
     const store = manager({prepare: async request => {
       const result = await prepare(request);
-      return {...result, installation: {...result.installation, root: external, inferenceScript: join(external, 'spec/infer.py')}};
+      return {...result, installation: {...result.installation, root: external, inferenceScript: join(external, 'spec/parse.py')}};
     }});
     await assert.rejects(store.install(input), /preparation_invalid/);
     assert.equal(store.busy, false); assert.equal(await store.installed(), false);

@@ -100,7 +100,7 @@ export class OvisInstallationManager {
 
   private installation(selection: Selection) {
     const root = join(this.root, selection.generation);
-    return {root, pythonBase: selection.pythonBase, inferenceScript: join(root, 'spec/infer.py'), identity: selection.identity};
+    return {root, pythonBase: selection.pythonBase, inferenceScript: join(root, 'spec/parse.py'), identity: selection.identity};
   }
 
   /** Presence is not readiness: acquire performs complete verification before supplying a lease. */
@@ -151,7 +151,7 @@ export class OvisInstallationManager {
       const result = await this.dependencies.prepare({...input, parent: this.root, specification: this.specification,
         onProgress: progress => {this.state.progress = {...progress}; input.onProgress?.({...progress});}});
       const installation = result.installation, name = basename(installation.root);
-      if (installation.root !== join(this.root, name) || installation.inferenceScript !== join(installation.root, 'spec/infer.py')) {
+      if (installation.root !== join(this.root, name) || installation.inferenceScript !== join(installation.root, 'spec/parse.py')) {
         throw new Error('research_ovis_installation_preparation_invalid');
       }
       const info = await lstat(installation.root);

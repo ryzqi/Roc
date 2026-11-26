@@ -20,6 +20,9 @@ const metricSchema = z.object({
 });
 const reportSchema = z.object({schemaVersion: z.literal(1), status: z.literal('completed'), variant: z.literal('8bit'),
   revision: z.string(), receiptSha256: hash, evaluatorSha256: hash, promptSha256: hash,
+  settings: z.object({temperature: z.literal(0), maxTokens: z.literal(16384), enableThinking: z.literal(false),
+    minPixels: z.literal(200704), maxPixels: z.literal(8294400), seed: z.literal(0),
+    repetitionPenalty: z.literal(1.03), repetitionContextSize: z.literal(20)}).strict(),
   network: z.literal('denied-by-seatbelt'), pagesManifestSha256: hash, pages: z.array(metricSchema)});
 
 // -I -S keeps user site, .pth startup and project modules out of the interpreter.
@@ -40,14 +43,14 @@ sys.path.append(request["packagePath"])
 inference = runpy.run_path(request["inference"], run_name="roc_ovis_worker")
 inference["require_offline"]()
 # Hash every runtime/model entry before importing installed executable packages.
-inference["verify_installation"](Path(request["installation"]), "8bit")
+inference["verify_installation"](Path(request["installation"]))
 import mlx.core as mx
 if not mx.metal.is_available():
     raise RuntimeError("research_ovis_metal_unavailable")
 mx.set_default_device(mx.gpu)
 mx.set_memory_limit(4 * 1024**3)
 mx.set_cache_limit(64 * 1024**2)
-sys.argv = [request["inference"], "--installation", request["installation"], "--variant", "8bit",
+sys.argv = [request["inference"], "--installation", request["installation"],
             "--pages", request["pages"], "--output", request["output"], "--offline-worker"]
 raise SystemExit(inference["main"]())
 `;

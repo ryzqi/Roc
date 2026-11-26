@@ -40,7 +40,8 @@ async function respond(request) {
       valid: true, errors: [], generationTokens: 2,
       termination: {finishReason: 'stop', eosObserved: true, truncated: false, errors: []}});
   }
-  const report = {schemaVersion: 1, status: 'completed', variant: '8bit',
+  const report = {settings: {temperature: 0, maxTokens: 16384, enableThinking: false, minPixels: 200704,
+    maxPixels: 8294400, seed: 0, repetitionPenalty: 1.03, repetitionContextSize: 20}, schemaVersion: 1, status: 'completed', variant: '8bit',
     revision: '5b252386ba615bd464a5a26597560eaba87dae5c', receiptSha256: wire.receiptSha256,
     evaluatorSha256: wire.inferenceSha256, promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1',
     network: 'denied-by-seatbelt', pagesManifestSha256: hash(manifestBytes), pages};
@@ -72,12 +73,13 @@ test('one supervised request binds multiple pages and cleans only its own job/Me
 });
 
 test('wrong or partial page results never return a successful document', async () => {
-  for (const mode of ['missing-page', 'reordered', 'manifest', 'model', 'raw', 'source', 'symlink', 'exit']) {
+  for (const mode of ['decoder', 'missing-page', 'reordered', 'manifest', 'model', 'raw', 'source', 'symlink', 'exit']) {
     const f = await fixture(); let request;
     try {
       await assert.rejects(api.runOvisDocumentPages(f.input, async value => {
         request = value;
         const {report, wire, result} = await respond(value);
+        if (mode === 'decoder') report.settings.repetitionPenalty = 1.05;
         if (mode === 'missing-page') report.pages.pop();
         if (mode === 'reordered') report.pages.reverse();
         if (mode === 'manifest') report.pagesManifestSha256 = 'e'.repeat(64);

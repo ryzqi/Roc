@@ -1,6 +1,8 @@
 # OvisOCR3 8-bit adaptation evidence
 
-Status: installation, conversion, inference smoke and the complete 8-bit worker lifecycle verified; **P3 quality acceptance has not passed**. Application parsing still uses its existing implementation until that gate passes.
+Status: the user explicitly adopted **8-bit directly, with no further comparison tests**, on 2026-11-26. P3 adoption is this product decision, not a claim that the historical quality gates passed. Production integration is in progress.
+
+The production entry is `resources/ovis-ocr/parse.py`: 8-bit only, repetition penalty 1.03 with context 20. Its bytes are copied into a new managed installation generation and included in its receipt and parser identity. `infer.py` and existing evaluation evidence remain frozen. The twenty-page run completed 20/20 valid outputs and 20/20 structural replays; the comparison scorer was stopped at the user's request. No additional inference cohort, BF16 comparison, CDM/TEDS run or backend parity check is required for adoption. Installation, functional parsing, cancellation and source integrity remain required. Unverified regions retain page-only citations.
 
 The reproducible installer is [prepare-ovis-ocr.py](../scripts/research/prepare-ovis-ocr.py); [usage and limitations](../resources/ovis-ocr/README.md) describe its explicit destination and interpreter inputs. The model is downloaded separately from the application. The source manifest pins ATH-MaaS/OvisOCR3 revision `5b252386ba615bd464a5a26597560eaba87dae5c`, individual file sizes and SHA-256 digests. Dependencies are 67 hash-locked wheels under CPython 3.14.10, MLX 0.32.5 and MLX-VLM 0.8.1.
 
@@ -148,7 +150,7 @@ checks. The evaluator regression suite passed 26/26 from the repository root:
   -s evaluation/ovis-evaluator -p 'test_*.py' -v
 ```
 
-P3 remains incomplete pending the user-authorized twenty-page candidate check and
+Historical P3 quality acceptance remained incomplete before direct adoption; it required the twenty-page candidate check and
 remaining resource qualification. No application parser has been enabled by these
 results. The latest sample scope supersedes the earlier full-cohort requirement
 for the new candidate; historical full-cohort failures remain recorded.

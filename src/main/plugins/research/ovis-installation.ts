@@ -77,7 +77,7 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
   }
   await verifyOvisRequirementsFile(join(input.specification, 'requirements.lock'));
   const specification = new Map<string, {bytes: Buffer; sha256: string}>();
-  for (const name of ['manifest.json', 'requirements.in', 'requirements.lock', 'convert.py', 'infer.py']) {
+  for (const name of ['manifest.json', 'requirements.in', 'requirements.lock', 'convert.py', 'parse.py']) {
     const path = join(input.specification, name), info = await lstat(path);
     if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 1024 ** 2) {
       throw new Error('research_ovis_installation_spec_invalid');
@@ -125,9 +125,9 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
       signal.throwIfAborted();
       await writeFile(join(root, 'receipt.json'), bytes, {flag: 'wx', mode: 0o600});
       const inspected = await inspectOvisInstallation({root, pythonBase: runtime.prefix,
-        inferenceScript: join(spec, 'infer.py'), identity: {engine: 'ovisocr3-mlx', revision: sourcePin.model.revision as
+        inferenceScript: join(spec, 'parse.py'), identity: {engine: 'ovisocr3-mlx', revision: sourcePin.model.revision as
           '5b252386ba615bd464a5a26597560eaba87dae5c', quantization: '8bit', groupSize: 64, visionPrecision: 'bfloat16', device: 'metal',
-          installationReceiptSha256: hash(bytes), inferenceSha256: specification.get('infer.py')!.sha256,
+          installationReceiptSha256: hash(bytes), inferenceSha256: specification.get('parse.py')!.sha256,
           promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1'}}, signal);
       signal.throwIfAborted();
       return inspected;
