@@ -158,7 +158,12 @@ The4GiB MLX memory limit is a guideline; Apple compiler-service memory is outsid
 Worker RSS monitoring. Ordinary Python experiment permissions do not change.
 
 The wrapper requires the entire requested page sequence and verifies report
-identity, image hashes, raw output and EOS before returning any page. It rejects
+identity, then image hashes, raw output and EOS for each page. Production capture
+awaits a per-page consumer before reading the next raw output, so full-document
+raw text and adapted blocks no longer accumulate in the Main Process. These
+callbacks stage provisional evidence only; the capture publishes its atomic
+manifest after every page succeeds. Direct inspection/replay callers can still
+collect the page array by omitting the consumer. The wrapper rejects
 invalid/partial documents and changed image bytes. Owned temporary output/cache
 directories are removed after confirmed completion or cancellation. If process
 exit cannot be proved, directories remain for recovery rather than being removed
@@ -235,6 +240,15 @@ the input rasters without a completion marker for recovery. A512MiB total budget
 includes rasters, crops and evidence; each page raster remains bounded by the
 existing renderer. Cancellation during a raster waits for that bounded render
 to settle before cleanup.
+
+PDF native text is staged per page under a private `native/` directory and read
+back with its pinned hash while persisting that page's final evidence. Each
+temporary native file is removed after consumption; the directory is removed
+before publication. Source PDF/image bytes and decoder state leave their
+preparation scope before model inference starts. Temporary native evidence also
+counts toward the existing total artifact byte budget. Full source loading
+during raster preparation and final Paper IR assembly remain separate peak
+memory costs; no long-running RSS or Metal benchmark is implied by these changes.
 
 The real frozen PDF slice completed with11regions and2source crops. Generation
 took30.910s, supervised hold38.862s, sampled peakRSS1,581,547,520B under mixed host

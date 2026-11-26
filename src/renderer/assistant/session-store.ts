@@ -12,6 +12,7 @@ import type {
 } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
+import { clearThreadAssistantComposerDrafts } from './composer-draft';
 
 /**
  * Assistant data layer (P4/T4.2–T4.7).
@@ -163,7 +164,9 @@ export function listThreads(client: RocClient): Promise<IpcLikeResult<{ threads:
   return client.api.tasks.getSnapshot();
 }
 
-export function deleteThread(client: RocClient, threadId: string): Promise<IpcLikeResult<unknown>> {
-  return client.api.tasks.deleteThread({ threadId });
+export async function deleteThread(client: RocClient, threadId: string): Promise<IpcLikeResult<unknown>> {
+  const result = await client.api.tasks.deleteThread({ threadId });
+  if (result.ok) clearThreadAssistantComposerDrafts(threadId);
+  return result;
 }
 

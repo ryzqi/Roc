@@ -62,10 +62,14 @@ async function pixels(image) {
 test('real rotated/cropped PDF binds actual rasters, preserves raw/native evidence and crops only source pixels', async () => {
   await fixture(async ({input}) => {
     let calls = 0;
-    const result = await api.createOvisSourceArtifact(input, async request => {calls++; return respond(request);});
+    const timing = {installationVerificationSeconds: 0.25, loadSeconds: 1.5, firstInferenceSeconds: 2.25};
+    const result = await api.createOvisSourceArtifact(input, async request => {
+      calls++; const result = respond(request); result.process.ovisTiming = timing; return result;
+    });
     assert.equal(calls, 1); assert.equal(result.pageCount, 4); assert.deepEqual(result.selectedPages, [1, 2, 3, 4]);
     assert.equal(result.sourceHash, hash(await readFile(input.sourcePath)));
     assert.deepEqual(JSON.parse(await readFile(join(input.outputDir, 'manifest.json'), 'utf8')), result);
+    assert.deepEqual(result.process.ovisTiming, timing);
     await absent(join(input.outputDir, 'manifest.json.part'));
     for (const page of result.pages) {
       const evidenceBytes = await readFile(join(input.outputDir, page.evidence.path));
@@ -137,6 +141,30 @@ test('derived worker blocks are reconstructed from bound raw output, never trust
     });
     const evidence = JSON.parse(await readFile(join(input.outputDir, artifact.pages[0].evidence.path), 'utf8'));
     assert.equal(evidence.blocks.length, 4); assert.equal(artifact.pages[0].crops.length, 2);
+  });
+});
+
+test('streamed pages persist before the next page and late failure cannot publish a partial artifact', async () => {
+  await fixture(async ({input}) => {
+    for (const fail of [true, false]) {
+      const operation = api.createOvisSourceArtifact({...input, pages: [1, 2]}, async request => {
+        const result = respond(request);
+        for (const [index, page] of result.pages.entries()) {
+          await request.onPage(page, index);
+          await access(join(input.outputDir, `evidence/page-${page.frame.page}.json`));
+          await absent(join(input.outputDir, 'manifest.json'));
+          if (fail) throw new Error('late_page_failed');
+        }
+        return {...result, pages: []};
+      });
+      if (fail) {
+        await assert.rejects(operation, /late_page_failed/); await absent(input.outputDir);
+      } else {
+        const artifact = await operation;
+        assert.deepEqual(artifact.selectedPages, [1, 2]);
+        await absent(join(input.outputDir, 'native'));
+      }
+    }
   });
 });
 

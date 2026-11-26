@@ -1,7 +1,7 @@
 import {before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {access, mkdir, mkdtemp, readFile, rm, symlink, writeFile} from 'node:fs/promises';
+import {access, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
@@ -51,8 +51,9 @@ async function respond(request) {
     admission: {waitMs: 0, holdMs: 1}}};
 }
 
-test('one supervised request binds multiple pages and cleans only its own job/Metal cache', async () => {
+test('one supervised request binds multiple pages, retains timings and cleans only its own job/Metal cache', async () => {
   const f = await fixture(); let request, calls = 0;
+  const timing = {installationVerificationSeconds: 0.25, loadSeconds: 1.5, firstInferenceSeconds: 2.25};
   try {
     const result = await api.runOvisDocumentPages(f.input, async value => {
       request = value; calls++;
@@ -63,10 +64,13 @@ test('one supervised request binds multiple pages and cleans only its own job/Me
       assert.ok(value.args.at(-1).indexOf('verify_installation') < value.args.at(-1).indexOf('import mlx.core'));
       assert.equal(value.resourceLimits.maxResidentBytes, 6 * 1024 ** 3);
       assert.deepEqual(value.admission, f.input.admission);
-      return (await respond(value)).result;
+      const {report, wire, result} = await respond(value);
+      await writeFile(join(wire.output, 'report.json'), JSON.stringify({...report, ...timing}));
+      return result;
     });
     assert.equal(calls, 1); assert.deepEqual(result.pages.map(p => p.frame.page), [3, 7]);
     assert.deepEqual(result.pages.map(p => p.blocks[0].rawContent), ['page-1', 'page-2']);
+    assert.deepEqual(result.process.ovisTiming, timing);
     for (const path of request.writablePaths) await missing(path);
     await access(f.root); for (const page of f.input.pages) await access(page.imagePath);
   } finally {await rm(f.root, {recursive: true, force: true});}
@@ -97,6 +101,26 @@ test('wrong or partial page results never return a successful document', async (
       for (const path of request.writablePaths) await missing(path);
     } finally {await rm(f.root, {recursive: true, force: true});}
   }
+});
+
+test('page consumers finish before the next page is read and results are not retained', async () => {
+  const f = await fixture(); let request, output;
+  const consumed = [];
+  try {
+    const result = await api.runOvisDocumentPages({...f.input, onPage: async (page, index) => {
+      consumed.push(page.frame.page);
+      await access(output);
+      // The second file need not exist until the first consumer has finished.
+      if (index === 0) await rename(join(output, 'pending.raw.txt'), join(output, 'page-2.raw.txt'));
+    }}, async value => {
+      request = value;
+      const response = await respond(value); output = response.wire.output;
+      await rename(join(output, 'page-2.raw.txt'), join(output, 'pending.raw.txt'));
+      return response.result;
+    });
+    assert.deepEqual(consumed, [3, 7]); assert.deepEqual(result.pages, []);
+    for (const path of request.writablePaths) await missing(path);
+  } finally {await rm(f.root, {recursive: true, force: true});}
 });
 
 test('preflight rejects changed runtime identities, images and duplicate pages before launching', async () => {

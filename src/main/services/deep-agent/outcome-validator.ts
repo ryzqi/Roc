@@ -1,3 +1,5 @@
+import type {StreamTextSummary} from './stream-consumers';
+
 export type OutcomeValidationError = {
   code: string;
   message: string;
@@ -5,16 +7,16 @@ export type OutcomeValidationError = {
 };
 
 export type OutcomeState = {
-  assistantChunks: string[];
-  reasoningChunks: string[];
+  assistantText: StreamTextSummary;
+  reasoningText: StreamTextSummary;
   toolCallsByBlockId: Map<string, string>;
   hookDisplayTexts: string[];
   usageAccumulated: boolean;
 };
 
 export function validateOutcomeConsistency(state: OutcomeState): OutcomeValidationError | null {
-  const hasText = state.assistantChunks.some((c) => c.trim().length > 0);
-  const hasReasoning = state.reasoningChunks.some((c) => c.trim().length > 0);
+  const hasText = state.assistantText.hasContent;
+  const hasReasoning = state.reasoningText.hasContent;
   const hasTools = state.toolCallsByBlockId.size > 0;
   const hasHooks = state.hookDisplayTexts.length > 0;
 
@@ -24,10 +26,10 @@ export function validateOutcomeConsistency(state: OutcomeState): OutcomeValidati
       code: 'agent_run_produced_no_output',
       message: 'Agent 运行未产生任何输出(无文本、推理、工具调用或 hook 输出)',
       diagnostics: {
-        assistantChunksCount: state.assistantChunks.length,
-        assistantTotalChars: state.assistantChunks.join('').length,
-        reasoningChunksCount: state.reasoningChunks.length,
-        reasoningTotalChars: state.reasoningChunks.join('').length,
+        assistantChunksCount: state.assistantText.chunks,
+        assistantTotalChars: state.assistantText.characters,
+        reasoningChunksCount: state.reasoningText.chunks,
+        reasoningTotalChars: state.reasoningText.characters,
         toolCallsCount: state.toolCallsByBlockId.size,
         hookTextsCount: state.hookDisplayTexts.length,
         usageAccumulated: state.usageAccumulated

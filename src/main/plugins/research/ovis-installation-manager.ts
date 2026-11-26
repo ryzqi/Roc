@@ -4,7 +4,7 @@ import {basename, isAbsolute, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {ovisModelIdentitySchema} from '../../../shared/schemas/research-ovis';
-import {inspectOvisInstallation, type OvisInstallationInspection} from './ovis-model-store';
+import {inspectOvisInstallation, readOvisInstallationStatus, type OvisInstallationInspection, type OvisInstallationStatus} from './ovis-model-store';
 import {prepareOvisInstallation, type OvisInstallationInput, type OvisInstallationProgress} from './ovis-installation';
 import {readResearchFile} from './research-files';
 import {acquireOvisOperationReservation} from './ovis-operation-reservation';
@@ -134,6 +134,29 @@ export class OvisInstallationManager {
       signal.throwIfAborted();
       return {...result, release};
     } catch (error) {release(); throw error;}
+  }
+
+  /** Read pinned metadata for UI/derivation identity without reading model or runtime payloads. */
+  async status(signal: AbortSignal): Promise<OvisInstallationStatus> {
+    signal.throwIfAborted();
+    if (this.state.mutation || this.state.quarantined) throw new Error('research_ovis_installation_busy');
+    this.state.readers++;
+    let reservation: Awaited<ReturnType<typeof acquireOvisOperationReservation>> | undefined;
+    try {
+      if (!await this.directory(false)) throw new Error('research_ovis_installation_missing');
+      reservation = await acquireOvisOperationReservation(this.root);
+      const selection = await this.selection();
+      if (!selection) throw new Error('research_ovis_installation_missing');
+      await this.ownedGeneration(selection.value);
+      const result = await readOvisInstallationStatus(this.installation(selection.value), signal);
+      await this.ownedGeneration(selection.value);
+      await this.assertSelectionFile(selection);
+      signal.throwIfAborted();
+      return result;
+    } finally {
+      try {reservation?.release();}
+      finally {this.state.readers--;}
+    }
   }
 
   async install(input: Omit<OvisInstallationInput, 'parent' | 'specification'>): Promise<OvisInstallationInspection> {

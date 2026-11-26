@@ -170,6 +170,7 @@ function attachmentErrorMessage(caught: unknown): string {
     case 'chat_image_too_many': return '最多添加 4 张图片。';
     case 'chat_image_too_large': return '每张图片不能超过 5 MB。';
     case 'chat_image_unsupported_type': return '支持 PNG、JPEG 和 WebP 图片。';
+    case 'assistant_composer_draft_capacity': return '草稿容量已满，本次输入未添加。已有内容已保留，请先发送或清空其他会话的草稿。';
     default: return message;
   }
 }
@@ -251,13 +252,24 @@ export function AssistantComposer({
     if (!sendPending) setSubmittedIntent(null);
   }, [sendPending]);
 
+  const updateText = useCallback((value: string): boolean => {
+    try {
+      onDraftChange((current) => ({ ...current, text: value }));
+      setAttachmentError(null);
+      return true;
+    } catch (caught) {
+      setAttachmentError(attachmentErrorMessage(caught));
+      return false;
+    }
+  }, [onDraftChange]);
+
   // A hand-off from another surface replaces the draft once per nonce.
   useEffect(() => {
     if (seed === null || seedNonceRef.current === seed.nonce) {
       return;
     }
+    if (!updateText(seed.text)) return;
     seedNonceRef.current = seed.nonce;
-    onDraftChange((current) => ({ ...current, text: seed.text }));
     setCaret(seed.text.length);
     const element = textareaRef.current;
     if (element !== null) {
@@ -265,13 +277,14 @@ export function AssistantComposer({
       element.setSelectionRange(seed.text.length, seed.text.length);
     }
     onSeedConsumed?.();
-  }, [onDraftChange, onSeedConsumed, seed]);
+  }, [onSeedConsumed, seed, updateText]);
 
   const updateAttachments = useCallback(async (update: AssistantComposerDraftUpdater, restoreFocus = false): Promise<void> => {
     const isCurrent = () => scopeRef.current === scope && scope.active;
     const apply = () => {
       if (!isCurrent()) return;
       flushSync(() => onDraftChange(update));
+      setAttachmentError(null);
       if (restoreFocus && document.activeElement === document.body) textareaRef.current?.focus();
     };
     const strip = attachmentsRef.current as (HTMLDivElement & {
@@ -300,7 +313,7 @@ export function AssistantComposer({
         return;
       }
       const next = applyComposerCompletion(text, trigger, completion);
-      onDraftChange((current) => ({ ...current, text: next.value }));
+      if (!updateText(next.value)) return;
       setCaret(next.caret);
       setSuggestionsDismissed(false);
       const element = textareaRef.current;
@@ -309,7 +322,7 @@ export function AssistantComposer({
         element.setSelectionRange(next.caret, next.caret);
       }
     },
-    [onDraftChange, text, trigger]
+    [text, trigger, updateText]
   );
 
   const addFiles = useCallback(
@@ -574,7 +587,7 @@ export function AssistantComposer({
             }
             data-testid="assistant-composer-input"
             onChange={(event) => {
-              onDraftChange((current) => ({ ...current, text: event.target.value }));
+              if (!updateText(event.target.value)) return;
               setCaret(event.target.selectionStart);
               setSuggestionsDismissed(false);
             }}

@@ -10,10 +10,12 @@ import { adaptDeepAgentRun } from '../../services/deep-agent/deep-agent-stream-a
 import {
   consumeDeepAgentEventStream,
   createStreamConsumerState,
-  createUsageAccumulator
+  createUsageAccumulator,
+  recordStreamText
 } from '../../services/deep-agent/stream-consumers';
 import { RocDomainError } from '../../services/errors';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
+import { createOutcomeTextCollector } from '../../services/deep-agent/outcome-text';
 import { validateOutcomeConsistency } from '../../services/deep-agent/outcome-validator';
 import { resolveCheckpointResume } from './checkpoint-resume';
 import type { MetricsService } from '../../services/metrics-service';
@@ -91,8 +93,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       }
 
       const mode = input.snapshot.mode;
-      const assistantChunks: string[] = [];
-      const reasoningChunks: string[] = [];
       const hookDisplayTexts: string[] = [];
       const outcomeText = createOutcomeTextCollector(hookDisplayTexts);
       const successfulToolNamesByBlockId = new Map<string, string>();
@@ -105,16 +105,16 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         input.abortSignal.addEventListener('abort', abortFromParent, { once: true });
       }
       const emitRuntimeEvent = (event: ChatRunEvent): void => {
+        if (event.type === 'assistant_block' && event.block.kind === 'text' && event.block.text !== undefined) {
+          try { outcomeText.push(event.block.text); }
+          catch (error) { executionAbortController.abort(error); throw error; }
+        }
         input.observeRuntimeEvent?.(event);
         collectOutcomeProjection({
           event,
           hookDisplayTexts,
           successfulToolNamesByBlockId
         });
-        if (event.type === 'assistant_block' && event.block.kind === 'text' && event.block.text !== undefined) {
-          outcomeText.push(event.block.text);
-        }
-
         if (eventQueue.push(event)) {
           return;
         }
@@ -182,8 +182,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
       const run = adaptDeepAgentRun(rawRun, { projectToolOutput });
       const runOutputSettlement = Promise.allSettled([run.output] as const);
       const streamState = createStreamConsumerState({
-        assistantChunks,
-        reasoningChunks,
         usageAccumulator
       });
       const consumeRun = (async () => {
@@ -220,8 +218,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
               throw settledOutput.reason;
             }
             const finalAssistantText = settledOutput.value;
-            if (assistantChunks.join('').trim().length === 0 && finalAssistantText !== null) {
-              assistantChunks.push(finalAssistantText);
+            if (!streamState.assistantText.hasContent && finalAssistantText !== null) {
+              recordStreamText(streamState.assistantText, finalAssistantText);
               emitRuntimeEvent({
                 type: 'assistant_block',
                 runId: input.run.id,
@@ -237,8 +235,8 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
 
             // Outcome 一致性校验
             const validationError = validateOutcomeConsistency({
-              assistantChunks,
-              reasoningChunks,
+              assistantText: streamState.assistantText,
+              reasoningText: streamState.reasoningText,
               toolCallsByBlockId: successfulToolNamesByBlockId,
               hookDisplayTexts,
               usageAccumulated: usageAccumulator.inputTokens !== null && usageAccumulator.inputTokens > 0
@@ -331,51 +329,6 @@ function collectHookDisplayText(texts: string[], value: string | null): void {
   }
 }
 
-function createOutcomeTextCollector(hookDisplayTexts: readonly string[]): {
-  finish: () => string;
-  push: (delta: string) => void;
-} {
-  const chunks: string[] = [];
-  let pendingPrefix = '';
-  let prefixResolved = false;
-
-  const consumePrefix = (): void => {
-    while (pendingPrefix.length > 0) {
-      const matchingHookText = [...hookDisplayTexts]
-        .sort((left, right) => right.length - left.length)
-        .find((text) => pendingPrefix.startsWith(text));
-      if (matchingHookText !== undefined) {
-        pendingPrefix = pendingPrefix.slice(matchingHookText.length).trimStart();
-        continue;
-      }
-      if (hookDisplayTexts.some((text) => text.startsWith(pendingPrefix))) {
-        return;
-      }
-      prefixResolved = true;
-      chunks.push(pendingPrefix);
-      pendingPrefix = '';
-    }
-  };
-
-  return {
-    finish: () => {
-      consumePrefix();
-      if (!prefixResolved && pendingPrefix.length > 0) {
-        chunks.push(pendingPrefix);
-        pendingPrefix = '';
-      }
-      return chunks.join('');
-    },
-    push: (delta) => {
-      if (prefixResolved) {
-        chunks.push(delta);
-        return;
-      }
-      pendingPrefix += delta;
-      consumePrefix();
-    }
-  };
-}
 
 function recordPromptCacheMetrics(input: {
   metricsService: Pick<MetricsService, 'recordPromptCacheMetrics'> | undefined;

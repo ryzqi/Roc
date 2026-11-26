@@ -12,7 +12,7 @@ import {ovisDownloadAssets} from './ovis-downloads';
 import {researchContentHash} from './research-files';
 
 export type OvisProductionConfig = {pythonRoot: string; specification: string};
-type Manager = Pick<OvisInstallationManager, 'installed' | 'acquire' | 'install' | 'remove'>;
+type Manager = Pick<OvisInstallationManager, 'installed' | 'status' | 'acquire' | 'install' | 'remove'>;
 type Dependencies = {
   manager: (root: string, specification: string) => Manager;
   runtime: (root: string) => Pick<ResearchPythonRuntimeStore, 'prepare'>;
@@ -67,11 +67,9 @@ export class ResearchProductionModels {
 
   async identity(tier: ResearchModelPack): Promise<string> {
     if (tier === 'compact') return researchContentHash(JSON.stringify(researchParserIdentityPayload(modelPackManifest('compact'))));
-    const lease = await (await this.ovis()).acquire(new AbortController().signal);
-    try {
-      return researchContentHash(JSON.stringify({engine: 'ovisocr3-mlx', model: lease.installation.identity,
-        version: ovisParserVersion, runtime: ovisRuntime, generation: researchDerivationGenerationVersion}));
-    } finally {lease.release();}
+    const status = await (await this.ovis()).status(new AbortController().signal);
+    return researchContentHash(JSON.stringify({engine: 'ovisocr3-mlx', model: status.identity,
+      version: ovisParserVersion, runtime: ovisRuntime, generation: researchDerivationGenerationVersion}));
   }
 
   async status(): Promise<ResearchModelsStatus> {
@@ -79,11 +77,8 @@ export class ResearchProductionModels {
     let ready = false, installedBytes = 0, error: string | null = null;
     if (!this.job) {
       try {
-        const manager = await this.ovis();
-        if (await manager.installed()) {
-          const lease = await manager.acquire(new AbortController().signal);
-          try {ready = true; installedBytes = lease.bytes;} finally {lease.release();}
-        } else error = 'research_ovis_installation_missing';
+        const status = await (await this.ovis()).status(new AbortController().signal);
+        ready = true; installedBytes = status.bytes;
       } catch (failure) {error = errorMessage(failure);}
     }
     const complete: ResearchModelsStatus['packs'][number] = {

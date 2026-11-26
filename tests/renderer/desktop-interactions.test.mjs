@@ -16,7 +16,8 @@ before(async () => {
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {AssistantComposer} from './src/renderer/assistant/composer';
-    import {useAssistantComposerDraft} from './src/renderer/assistant/composer-draft';
+    import {useAssistantComposerDraft, updateAssistantComposerDraft, clearProjectAssistantComposerDrafts,
+      assistantComposerDraftLimits} from './src/renderer/assistant/composer-draft';
     import {ResizableDivider} from './src/renderer/shell/ResizableDivider';
     import {ModalShell} from './src/renderer/shell/ModalShell';
     import {focusDialogInitialElement} from './src/renderer/shell/focus-trap';
@@ -67,6 +68,12 @@ before(async () => {
       window.setSending = setSending;
       window.setReplyMode = setReplyMode;
       window.setComposerDraft = setDraft;
+      window.fillDraftCapacity = () => {
+        for (let index = 1; index < assistantComposerDraftLimits.count; index++) {
+          updateAssistantComposerDraft('capacity-test', 'thread-' + index, () => ({text: '保留未发送内容', attachments: []}));
+        }
+      };
+      window.releaseDraftCapacity = () => clearProjectAssistantComposerDrafts('capacity-test');
       window.setComposerThread = setComposerThread;
       window.setComposerSeed = setSeed;
       window.composerDraft = draft;
@@ -202,6 +209,30 @@ async function resetComposer() {
     window.modelSelectCalls = [];
   });
 }
+
+test('composer shows draft capacity rejection and preserves other unsent input', async () => {
+  await resetComposer();
+  const input = page.getByTestId('assistant-composer-input');
+  await input.fill('原会话的未发送内容');
+  await page.evaluate(() => {fillDraftCapacity(); setComposerThread('capacity-overflow');});
+  try {
+    await input.fill('本次新增');
+    await expect(input).toHaveValue('');
+    await expect(page.getByText('草稿容量已满，本次输入未添加。已有内容已保留，请先发送或清空其他会话的草稿。')).toBeVisible();
+    await page.evaluate(() => setComposerThread('test'));
+    await expect(input).toHaveValue('原会话的未发送内容');
+    await page.evaluate(() => releaseDraftCapacity());
+    await page.evaluate(() => setComposerThread('capacity-overflow'));
+    await input.fill('释放容量后可输入');
+    await expect(input).toHaveValue('释放容量后可输入');
+  } finally {
+    await page.evaluate(() => {
+      releaseDraftCapacity();
+      setComposerDraft({text: '', attachments: []});
+      setComposerThread('test');
+    });
+  }
+});
 
 test('composer waits for an attachment read before sending its complete draft', async () => {
   await resetComposer();

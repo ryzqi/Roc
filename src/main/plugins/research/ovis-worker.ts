@@ -12,6 +12,8 @@ import {hashResearchFile} from './research-job';
 
 const exec = promisify(execFile);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
+const timingSchema = z.object({installationVerificationSeconds: z.number().nonnegative().optional(),
+  loadSeconds: z.number().nonnegative().optional(), firstInferenceSeconds: z.number().nonnegative().optional()});
 const metricSchema = z.object({
   id: z.string(), sha256: hash, width: z.number().int().positive(), height: z.number().int().positive(),
   rawSha256: hash, valid: z.literal(true), errors: z.array(z.string()).length(0),
@@ -23,11 +25,11 @@ const reportSchema = z.object({schemaVersion: z.literal(1), status: z.literal('c
   settings: z.object({temperature: z.literal(0), maxTokens: z.literal(16384), enableThinking: z.literal(false),
     minPixels: z.literal(200704), maxPixels: z.literal(8294400), seed: z.literal(0),
     repetitionPenalty: z.literal(1.03), repetitionContextSize: z.literal(20)}).strict(),
-  network: z.literal('denied-by-seatbelt'), pagesManifestSha256: hash, pages: z.array(metricSchema)});
+  network: z.literal('denied-by-seatbelt'), pagesManifestSha256: hash, pages: z.array(metricSchema)}).extend(timingSchema.shape);
 
 // -I -S keeps user site, .pth startup and project modules out of the interpreter.
 // JSON stdin is data. Paths never become interpolated Python or shell code.
-export const ovisWorkerBootstrap = String.raw`import ctypes, hashlib, json, runpy, sys
+export const ovisWorkerBootstrap = String.raw`import ctypes, hashlib, json, runpy, sys, time
 from pathlib import Path
 request = json.loads(sys.stdin.read())
 for name in ("inference", "receipt"):
@@ -43,7 +45,9 @@ sys.path.append(request["packagePath"])
 inference = runpy.run_path(request["inference"], run_name="roc_ovis_worker")
 inference["require_offline"]()
 # Hash every runtime/model entry before importing installed executable packages.
-inference["verify_installation"](Path(request["installation"]))
+verification_start = time.perf_counter()
+verified = inference["verify_installation"](Path(request["installation"]))
+verification_seconds = time.perf_counter() - verification_start
 import mlx.core as mx
 if not mx.metal.is_available():
     raise RuntimeError("research_ovis_metal_unavailable")
@@ -52,6 +56,9 @@ mx.set_memory_limit(4 * 1024**3)
 mx.set_cache_limit(64 * 1024**2)
 sys.argv = [request["inference"], "--installation", request["installation"],
             "--pages", request["pages"], "--output", request["output"], "--offline-worker"]
+if "main_with_verified_installation" in inference:
+    raise SystemExit(inference["main_with_verified_installation"](Path(request["installation"]), verified, verification_seconds))
+# Existing installations retain their pinned parser and its original entry point.
 raise SystemExit(inference["main"]())
 `;
 
@@ -62,8 +69,11 @@ export type OvisWorkerInput = {
   installation: OvisWorkerInstallation;
   pages: readonly {imagePath: string; binding: OvisSourceBinding}[];
   admission: ResearchProcessRequest['admission']; timeoutMs: number; signal: AbortSignal;
+  /** Awaited per page; the caller must publish only after the whole Worker succeeds. Consumed pages are not retained. */
+  onPage?: (page: OvisAdaptedPage, index: number) => Promise<void>;
 };
-export type OvisWorkerResult = {pages: OvisAdaptedPage[]; process: ResearchProcessResult};
+export type OvisWorkerResult = {pages: OvisAdaptedPage[];
+  process: ResearchProcessResult & {ovisTiming?: z.infer<typeof timingSchema>}};
 
 async function regularFile(path: string, maxBytes: number): Promise<Buffer> {
   const info = await lstat(path);
@@ -151,12 +161,16 @@ export async function runOvisDocumentPages(input: OvisWorkerInput,
       }
       const raw = await regularFile(join(output, `${expected.id}.raw.txt`), 4 * 1024 ** 2);
       const tokens = JSON.parse((await regularFile(join(output, `${expected.id}.tokens.json`), 256 * 1024)).toString('utf8'));
-      adapted.push(adaptOvisPage(raw, {protocolVersion: 1, sourceHash: binding.sourceHash,
+      const adaptedPage = adaptOvisPage(raw, {protocolVersion: 1, sourceHash: binding.sourceHash,
         inputImageSha256: expected.sha256, page: binding.frame.page, width: page.width, height: page.height,
         model, rawSha256: page.rawSha256, generation: {finishReason: page.termination.finishReason,
-          generationTokens: page.generationTokens, tokenIds: tokens}}, binding));
+          generationTokens: page.generationTokens, tokenIds: tokens}}, binding);
+      if (input.onPage) await input.onPage(adaptedPage, index);
+      else adapted.push(adaptedPage);
     }
-    return {pages: adapted, process: result};
+    input.signal.throwIfAborted();
+    const ovisTiming = timingSchema.parse(report);
+    return {pages: adapted, process: Object.values(ovisTiming).some(value => value !== undefined) ? {...result, ovisTiming} : result};
   } catch (error) {
     if (hasUnprovenResearchProcessExit(error)) safeToClean = false;
     throw error;

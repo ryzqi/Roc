@@ -153,7 +153,8 @@ export function observeBaseline(directory: string): Record<string, unknown> {
   assert.equal(recordedTokens, usage.totalTokens);
   db.close();
   const reasoning = validateOutcomeConsistency({
-    assistantChunks: [], reasoningChunks: ['Working…'], toolCallsByBlockId: new Map(),
+    assistantText: {chunks: 0, characters: 0, hasContent: false},
+    reasoningText: {chunks: 1, characters: 'Working…'.length, hasContent: true}, toolCallsByBlockId: new Map(),
     hookDisplayTexts: [], usageAccumulated: true
   });
   return {

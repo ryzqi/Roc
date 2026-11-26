@@ -12,6 +12,8 @@ async function fixture(operation) {
   let installed = false, releases = 0, generation = 'first', prepared = 0;
   const manager = {
     installed: async () => installed,
+    status: async () => {if (!installed) throw new Error('research_ovis_installation_missing');
+      return {bytes: 123, identity: {generation}};},
     acquire: async signal => {signal.throwIfAborted(); if (!installed) throw new Error('research_ovis_installation_missing');
       return {bytes: 123, installation: {identity: {generation}}, release: () => releases++};},
     install: async input => {input.signal.throwIfAborted(); installed = true;},
@@ -37,6 +39,17 @@ test('complete is missing until installed, never borrows compact readiness, and 
     await service.download('complete'); assert.equal(counters().prepared, 1);
     assert.ok(counters().releases > 0);
     await service.remove('complete'); assert.equal((await service.status()).ready, false);
+  });
+});
+
+test('status and identity read metadata without acquiring a full installation lease', async () => {
+  await fixture(async ({service, manager, counters}) => {
+    await service.download('complete');
+    const before = counters().releases;
+    manager.acquire = async () => {throw new Error('full_inventory_must_not_be_read');};
+    assert.equal((await service.status()).packs.find(pack => pack.pack === 'complete').ready, true);
+    assert.equal(typeof await service.identity('complete'), 'string');
+    assert.equal(counters().releases, before);
   });
 });
 

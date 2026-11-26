@@ -2,7 +2,6 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import type {RocClient} from '../shared/roc-client';
 import type {LiteratureStore} from '../literature/use-literature-store';
 import {useTaskCenter} from '../management/use-task-center';
-import {clearAssistantComposerDraft} from '../assistant/composer-draft';
 import type {AppRouteController} from './use-app-route';
 import {recordUxEvent} from './ux-metrics';
 import type {AdoptAcceptedRun} from './workspace-scope';
@@ -33,7 +32,6 @@ export function useRunAttentionController(client: RocClient, {route, navigate}: 
     recordUxEvent('action_initiated', 'tasks');
   }, []);
   const deleteThread = useCallback((threadId: string): void => {
-    clearAssistantComposerDraft(routeRef.current.projectId, threadId);
     setAssistantThreadId(current => current === threadId ? null : current);
   }, []);
   const adoptAcceptedRun = useCallback<AdoptAcceptedRun>(({projectId,workspacePath,receipt}) => {

@@ -9,6 +9,7 @@ import {hashResearchFile, prepareResearchJob} from './research-job';
 import {extractResearchPdfPageNativeText, renderResearchPdfPage, withResearchPdf} from './pdf-render';
 import {decodeRasterDocument, imagePng} from './research-raster';
 import {hasUnprovenResearchProcessExit} from './process-exit-state';
+import {readResearchFile} from './research-files';
 
 const hash = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 type Asset = {path: string; sha256: string; bytes: number};
@@ -53,10 +54,9 @@ export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
   };
   try {
     signal.throwIfAborted();
-    const source = await readFile(job.source);
-    if (hash(source) !== job.sourceHash) throw new Error('research_source_changed_during_parse');
     const requests: OvisWorkerInput['pages'][number][] = [];
-    const rendered: Array<{image: Asset; native: Awaited<ReturnType<typeof extractResearchPdfPageNativeText>>}> = [];
+    const rendered: Array<{image: Asset; native: Asset | null}> = [];
+    await mkdir(join(job.output, 'native'), {mode: 0o700});
     const selection = (pageCount: number): number[] => {
       const selected = input.pages === null ? Array.from({length: pageCount}, (_, i) => i + 1) : [...input.pages];
       if (!selected.length || selected.length > 500 || selected.some((page, index) =>
@@ -65,52 +65,57 @@ export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
       }
       return selected;
     };
-    const pageCount = input.sourceKind === 'pdf' ? await withResearchPdf(source, async pdf => {
-      for (const number of selection(pdf.numPages)) {
-        signal.throwIfAborted();
-        const page = await pdf.getPage(number);
-        try {
-          const native = await extractResearchPdfPageNativeText(page, number);
+    // Keep source bytes and PDF/image decoder state out of the inference/consumption lifetime.
+    const pageCount = await (async () => {
+      const source = await readFile(job.source);
+      if (hash(source) !== job.sourceHash) throw new Error('research_source_changed_during_parse');
+      return input.sourceKind === 'pdf' ? await withResearchPdf(source, async pdf => {
+        for (const number of selection(pdf.numPages)) {
           signal.throwIfAborted();
-          const image = await renderResearchPdfPage(page, number, pdf.numPages, join(job.output, 'pages'), 2, true,
-            researchDocumentLimits.maxAssetBytes, {includeRgbaImage: false, text: native.text});
+          const page = await pdf.getPage(number);
+          try {
+            const native = await extractResearchPdfPageNativeText(page, number);
+            signal.throwIfAborted();
+            const image = await renderResearchPdfPage(page, number, pdf.numPages, join(job.output, 'pages'), 2, true,
+              researchDocumentLimits.maxAssetBytes, {includeRgbaImage: false, text: native.text});
+            signal.throwIfAborted();
+            if (!image.path) throw new Error('research_pdf_ocr_raster_missing');
+            account(image.pngBytes);
+            const sha256 = await hashResearchFile(image.path);
+            const binding: OvisSourceBinding = {sourceHash: job.sourceHash, inputImageSha256: sha256,
+              frame: image.coordinateFrame, model: input.installation.identity};
+            requests.push({imagePath: image.path, binding});
+            const nativeAsset = await store(`native/page-${number}.json`, Buffer.from(JSON.stringify(native)),
+              researchDocumentLimits.maxArtifactBytes);
+            rendered.push({image: {path: `pages/page-${number}.png`, sha256, bytes: image.pngBytes}, native: nativeAsset});
+          } finally {page.cleanup();}
+        }
+        return pdf.numPages;
+      }) : await (async () => {
+        const document = await decodeRasterDocument(source, extname(job.source));
+        await mkdir(join(job.output, 'pages'), {mode: 0o700});
+        for (const number of selection(document.pageCount)) {
           signal.throwIfAborted();
-          if (!image.path) throw new Error('research_pdf_ocr_raster_missing');
-          account(image.pngBytes);
-          const sha256 = await hashResearchFile(image.path);
-          const binding: OvisSourceBinding = {sourceHash: job.sourceHash, inputImageSha256: sha256,
-            frame: image.coordinateFrame, model: input.installation.identity};
-          requests.push({imagePath: image.path, binding});
-          rendered.push({image: {path: `pages/page-${number}.png`, sha256, bytes: image.pngBytes}, native});
-        } finally {page.cleanup();}
-      }
-      return pdf.numPages;
-    }) : await (async () => {
-      const document = await decodeRasterDocument(source, extname(job.source));
-      await mkdir(join(job.output, 'pages'), {mode: 0o700});
-      for (const number of selection(document.pageCount)) {
-        signal.throwIfAborted();
-        const raster = await document.page(number);
-        const image = await store(`pages/page-${number}.png`, await imagePng(raster));
-        requests.push({imagePath: join(job.output, image.path), binding: {sourceHash: job.sourceHash,
-          inputImageSha256: image.sha256, model: input.installation.identity,
-          frame: {kind: 'image', page: number, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT',
-            width: raster.width, height: raster.height}}});
-        rendered.push({image, native: {text: '', items: []}});
-      }
-      return document.pageCount;
+          const raster = await document.page(number);
+          const image = await store(`pages/page-${number}.png`, await imagePng(raster));
+          requests.push({imagePath: join(job.output, image.path), binding: {sourceHash: job.sourceHash,
+            inputImageSha256: image.sha256, model: input.installation.identity,
+            frame: {kind: 'image', page: number, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT',
+              width: raster.width, height: raster.height}}});
+          rendered.push({image, native: null});
+        }
+        return document.pageCount;
+      })();
     })();
     signal.throwIfAborted();
-    const result = await run({...input, pages: requests, signal});
-    signal.throwIfAborted();
-    if (result.pages.length !== requests.length) throw new Error('research_ovis_worker_report_invalid');
     await mkdir(join(job.output, 'evidence'), {mode: 0o700});
     await mkdir(join(job.output, 'regions'), {mode: 0o700});
     const artifacts: PageArtifact[] = [];
     let blockCount = 0, assetCount = requests.length;
-    for (const [index, request] of requests.entries()) {
+    const consume = async (returned: OvisAdaptedPage, index: number): Promise<void> => {
       signal.throwIfAborted();
-      const returned = result.pages[index];
+      const request = requests[index];
+      if (!request || index !== artifacts.length) throw new Error('research_ovis_worker_report_invalid');
       // Reconstruct derived blocks from raw evidence; a modified candidate object is never persisted as authority.
       const page: OvisAdaptedPage = adaptOvisPage(Buffer.from(returned.raw, 'utf8'), {
         protocolVersion: returned.protocolVersion, sourceHash: returned.sourceHash, inputImageSha256: returned.inputImageSha256,
@@ -140,11 +145,31 @@ export async function createOvisSourceArtifact(input: OvisSourceArtifactInput,
           } finally {canvas.width = 0; canvas.height = 0;}
         }
       }
+      const nativeAsset = rendered[index].native;
+      let native: Awaited<ReturnType<typeof extractResearchPdfPageNativeText>> = {text: '', items: []};
+      if (nativeAsset) {
+        const bytes = await readResearchFile(job.output, nativeAsset.path, nativeAsset.bytes);
+        if (hash(bytes) !== nativeAsset.sha256) throw new Error('research_ovis_input_changed');
+        native = JSON.parse(bytes.toString('utf8'));
+      }
       const evidence = await store(`evidence/page-${page.frame.page}.json`, Buffer.from(JSON.stringify({
-        ...page, native: rendered[index].native
+        ...page, native
       }) + '\n'), researchDocumentLimits.maxArtifactBytes);
+      if (nativeAsset) {
+        await rm(join(job.output, nativeAsset.path));
+        totalBytes -= nativeAsset.bytes;
+      }
       artifacts.push({page: page.frame.page, image: rendered[index].image, evidence, crops});
+    };
+    const result = await run({...input, pages: requests, signal, onPage: consume});
+    signal.throwIfAborted();
+    // Injected/replay Workers may still return pages; production uses the bounded consumer above.
+    if (result.pages.length) {
+      if (artifacts.length || result.pages.length !== requests.length) throw new Error('research_ovis_worker_report_invalid');
+      for (const [index, page] of result.pages.entries()) await consume(page, index);
     }
+    if (artifacts.length !== requests.length) throw new Error('research_ovis_worker_report_invalid');
+    await rm(join(job.output, 'native'), {recursive: true});
     signal.throwIfAborted();
     if (await hashResearchFile(job.source) !== job.sourceHash) throw new Error('research_source_changed_during_parse');
     const artifact: OvisSourceArtifact = {contractVersion: 1, status: 'completed', sourceHash: job.sourceHash, pageCount,

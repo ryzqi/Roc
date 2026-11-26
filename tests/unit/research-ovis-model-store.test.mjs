@@ -68,6 +68,22 @@ test('changed, omitted, extra and symlinked installed bytes are rejected without
   }
 });
 
+test('status reads only the pinned receipt and directories; loading still rejects changed model bytes', async () => {
+  const f = await fixture();
+  try {
+    const signal = new AbortController().signal;
+    const status = await api.readOvisInstallationStatus(f.input, signal);
+    assert.deepEqual(status.identity, f.input.identity);
+    assert.equal(status.bytes, Object.values(f.receipt.files).reduce((n, e) => n + (e.size ?? 0), 0));
+    // Model contents are deliberately outside the lightweight status contract.
+    await writeFile(join(f.root, 'model-8bit/weights'), 'changed');
+    assert.deepEqual(await api.readOvisInstallationStatus(f.input, signal), status);
+    await assert.rejects(api.inspectOvisInstallation(f.input, signal), /research_ovis_/u);
+    await writeFile(join(f.root, 'receipt.json'), '{}');
+    await assert.rejects(api.readOvisInstallationStatus(f.input, signal), /research_ovis_/u);
+  } finally {await f.cleanup();}
+});
+
 test('acquisition reserves before inspection, releases once and unwinds failures/cancellation', async () => {
   const f = await fixture();
   try {

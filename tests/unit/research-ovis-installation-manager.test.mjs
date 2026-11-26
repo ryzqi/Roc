@@ -60,6 +60,7 @@ async function fixture(operation) {
 test('missing and pre-cancelled acquisitions never create a model directory or retain a lease', async () => {
   await fixture(async ({root, input, manager}) => {
     const store = manager(); assert.equal(await store.installed(), false);
+    await assert.rejects(store.status(signal), /installation_missing/);
     await assert.rejects(store.acquire(signal), /installation_missing/);
     await assert.rejects(store.acquire(AbortSignal.abort()), {name: 'AbortError'});
     await assert.rejects(store.install({...input, signal: AbortSignal.abort()}), {name: 'AbortError'});
@@ -74,6 +75,8 @@ test('verified publication survives process restart, preserves model identity an
     const result = await store.install({...input, onProgress: progress => phases.push(progress.phase)});
     assert.deepEqual(phases, ['verifying']); assert.equal(store.busy, false); assert.equal(store.progress, null);
     assert.equal(result.qualityQualified, false); assert.equal(await store.installed(), true);
+    assert.deepEqual(await store.status(signal), {identity: result.installation.identity, entries: result.entries, bytes: result.bytes});
+    assert.equal(store.busy, false);
     assert.deepEqual((await readdir(root)).sort(), ['active.json', basename(result.installation.root)].sort());
     const active = JSON.parse(await readFile(join(root, 'active.json'), 'utf8'));
     assert.deepEqual(active.identity, result.installation.identity);
@@ -186,6 +189,7 @@ test('damaged installed bytes refuse acquisition and explicit removal can finish
   await fixture(async ({root, input, manager}) => {
     const store = manager(), result = await store.install(input);
     await writeFile(join(result.installation.root, 'model-8bit/weights'), 'damaged');
+    assert.equal((await store.status(signal)).bytes, result.bytes);
     await assert.rejects(store.acquire(signal), /installation_/); assert.equal(store.busy, false);
     assert.equal(await store.installed(), true); await store.remove();
     const retry = await store.install(input); await rm(retry.installation.root, {recursive: true});

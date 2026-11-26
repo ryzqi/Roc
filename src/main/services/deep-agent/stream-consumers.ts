@@ -12,9 +12,22 @@ export type StreamConsumerCallbacks = {
   recordSessionToolCall?: (name: string, input: unknown, output: unknown) => void;
 };
 
+export type StreamTextSummary = {
+  chunks: number;
+  characters: number;
+  hasContent: boolean;
+};
+
+/** Outcome checks need only counts and presence; the event sink owns the text. */
+export function recordStreamText(summary: StreamTextSummary, text: string): void {
+  summary.chunks += 1;
+  summary.characters += text.length;
+  summary.hasContent ||= /\S/u.test(text);
+}
+
 export type StreamConsumerState = {
-  assistantChunks: string[];
-  reasoningChunks: string[];
+  assistantText: StreamTextSummary;
+  reasoningText: StreamTextSummary;
   usageAccumulator: ProviderUsageAccumulator;
   interrupted: readonly DeepAgentInterrupt[] | null;
   subagentSequence: number;
@@ -61,9 +74,9 @@ function consumeDeepAgentEvent(input: {
     }
     callbacks.markVisibleOutput?.();
     if (event.kind === 'reasoning') {
-      state.reasoningChunks.push(event.text);
+      recordStreamText(state.reasoningText, event.text);
     } else {
-      state.assistantChunks.push(event.text);
+      recordStreamText(state.assistantText, event.text);
     }
     callbacks.emitRuntimeEvent({
       type: 'assistant_block',
@@ -119,13 +132,11 @@ function consumeDeepAgentEvent(input: {
 }
 
 export function createStreamConsumerState(input: {
-  assistantChunks: string[];
-  reasoningChunks: string[];
   usageAccumulator: ProviderUsageAccumulator;
 }): StreamConsumerState {
   return {
-    assistantChunks: input.assistantChunks,
-    reasoningChunks: input.reasoningChunks,
+    assistantText: {chunks: 0, characters: 0, hasContent: false},
+    reasoningText: {chunks: 0, characters: 0, hasContent: false},
     usageAccumulator: input.usageAccumulator,
     interrupted: null,
     subagentSequence: 0

@@ -328,6 +328,10 @@ test('symlink storage root is rejected and persistence errors remain explicit in
       BEGIN SELECT RAISE(ABORT, 'synthetic persistence rejection'); END`);
     const started = f.start(); await delay(100);
     assert.throws(() => f.read(started), /persistence_failed/);
+    const replay = () => f.human(() => f.service.start(f.request));
+    assert.throws(replay, /persistence_failed/);
+    assert.equal(f.service.jobs.size, 0);
+    assert.equal(f.service.persistenceErrors, undefined, 'completed failures must not retain error objects or job IDs');
     await assert.rejects(f.service.shutdown(), /persistence_failed/);
     assert.equal(f.calls.length, 0, 'running receipt update must persist before source GET');
     f.db.exec('DROP TRIGGER reject_download_update');

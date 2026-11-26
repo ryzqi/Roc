@@ -235,16 +235,22 @@ class RssSampler:
                 "processLifetimePeakRssBytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
 
 
-def parse_document(args: argparse.Namespace) -> int:
+def parse_document(args: argparse.Namespace, verified_installation: tuple[Path, str, dict] | None = None,
+                   verification_seconds: float | None = None) -> int:
     require_offline()
     pages = read_pages(args.pages)
-    model_path, task_prompt, receipt = verify_installation(args.installation)
+    if verified_installation is None:
+        start = time.perf_counter()
+        verified_installation = verify_installation(args.installation)
+        verification_seconds = time.perf_counter() - start
+    model_path, task_prompt, receipt = verified_installation
     args.output.mkdir(mode=0o700)
     report = {"schemaVersion": 1, "status": "running", "variant": "8bit",
               "createdAt": datetime.now(timezone.utc).isoformat(), "network": "denied-by-seatbelt",
               "revision": REVISION, "receiptSha256": digest(args.installation / "receipt.json"),
               "evaluatorSha256": digest(Path(__file__)), "pagesManifestSha256": digest(args.pages),
               "promptSha256": PROMPT_SHA256, "dependencies": receipt["dependencies"],
+              "installationVerificationSeconds": verification_seconds,
               "settings": {"temperature": 0.0, "maxTokens": MAX_TOKENS, "enableThinking": False,
                            "minPixels": MIN_PIXELS, "maxPixels": MAX_PIXELS, "seed": 0,
                            "repetitionPenalty": 1.03, "repetitionContextSize": 20}, "pages": []}
@@ -300,6 +306,8 @@ def parse_document(args: argparse.Namespace) -> int:
                         last = result
                     mx.synchronize()
                 elapsed = time.perf_counter() - start
+                if not report["pages"]:
+                    report["firstInferenceSeconds"] = elapsed
                 if last is None:
                     raise ValueError("Generator returned no token evidence")
                 tokens = last.token_ids
@@ -327,7 +335,9 @@ def parse_document(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "completed" else 2
 
 
-def main() -> int:
+def main(*, verified_root: Path | None = None,
+         verified_installation: tuple[Path, str, dict] | None = None,
+         verification_seconds: float | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--installation", type=Path, required=True)
     parser.add_argument("--pages", type=Path, required=True, help="JSON manifest of local page images and SHA256 hashes")
@@ -341,6 +351,8 @@ def main() -> int:
             parser.error(f"--{name} must be absolute")
     if args.output.exists() or args.output.is_symlink() or not args.output.parent.is_dir():
         parser.error("--output must be new and its parent must exist")
+    if verified_installation is not None and (verified_root is None or verified_root.resolve() != args.installation.resolve()):
+        parser.error("Verified installation belongs to a different root")
     if not args.offline_worker:
         env = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "en_US.UTF-8",
                "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "DO_NOT_TRACK": "1"}
@@ -348,13 +360,18 @@ def main() -> int:
                   sys.executable, "-I", "-B", str(Path(__file__).resolve()), *sys.argv[1:], "--offline-worker"], env)
     signal.signal(signal.SIGTERM, lambda *_: signal.raise_signal(signal.SIGINT))
     try:
-        return parse_document(args)
+        return parse_document(args, verified_installation, verification_seconds)
     except KeyboardInterrupt:
         print("Parsing cancelled; partial raw output and report retained", file=sys.stderr)
         return 130
     except Exception as error:
         print(f"Parsing failed: {error}", file=sys.stderr)
         return 1
+
+
+def main_with_verified_installation(root: Path, installation: tuple[Path, str, dict], seconds: float) -> int:
+    """Same-process handoff from the trusted bootstrap; never accepted from argv or environment."""
+    return main(verified_root=root, verified_installation=installation, verification_seconds=seconds)
 
 
 if __name__ == "__main__":

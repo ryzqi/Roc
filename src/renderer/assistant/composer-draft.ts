@@ -11,15 +11,38 @@ export type AssistantComposerDraftUpdater = (
 ) => AssistantComposerDraft;
 
 const EMPTY_DRAFT: AssistantComposerDraft = { text: '', attachments: [] };
-const drafts = new Map<string, AssistantComposerDraft>();
+// Drafts can contain private input, so keep them in memory. Reject growth visibly
+// rather than evicting unsent text or attachments to make room for another draft.
+export const assistantComposerDraftLimits = { bytes: 128 * 1024 * 1024, count: 128 } as const;
+const drafts = new Map<string, { draft: AssistantComposerDraft; bytes: number }>();
 const listeners = new Map<string, Set<() => void>>();
+let retainedBytes = 0;
+
+function draftBytes(draft: AssistantComposerDraft): number {
+  // Count both payload and preview conservatively as UTF-16, even when V8 shares
+  // their backing strings. Include fixed overhead for the draft and attachments.
+  let bytes = 256 + draft.text.length * 2;
+  for (const attachment of draft.attachments) {
+    bytes += 256 + 2 * (attachment.name.length + (attachment.data?.length ?? 0) +
+      (attachment.path?.length ?? 0) + (attachment.previewUrl?.length ?? 0));
+  }
+  return bytes;
+}
+
+function deleteDraft(key: string): boolean {
+  const entry = drafts.get(key);
+  if (entry === undefined) return false;
+  retainedBytes -= entry.bytes;
+  drafts.delete(key);
+  return true;
+}
 
 function draftKey(projectId: string | null, threadId: string | null): string {
   return JSON.stringify([projectId, threadId]);
 }
 
 function readDraft(key: string): AssistantComposerDraft {
-  return drafts.get(key) ?? EMPTY_DRAFT;
+  return drafts.get(key)?.draft ?? EMPTY_DRAFT;
 }
 
 function notify(key: string): void {
@@ -47,9 +70,16 @@ export function updateAssistantComposerDraft(
   const key = draftKey(projectId, threadId);
   const next = update(readDraft(key));
   if (next.text.length === 0 && next.attachments.length === 0) {
-    drafts.delete(key);
+    deleteDraft(key);
   } else {
-    drafts.set(key, next);
+    const previousBytes = drafts.get(key)?.bytes ?? 0;
+    const bytes = draftBytes(next);
+    if ((previousBytes === 0 && drafts.size >= assistantComposerDraftLimits.count) ||
+        (bytes > previousBytes && retainedBytes - previousBytes + bytes > assistantComposerDraftLimits.bytes)) {
+      throw new Error('assistant_composer_draft_capacity');
+    }
+    retainedBytes += bytes - previousBytes;
+    drafts.set(key, { draft: next, bytes });
   }
   notify(key);
 }
@@ -78,8 +108,23 @@ export function clearAssistantComposerDraft(
 ): void {
   const key = draftKey(projectId, threadId);
   if (expectedDraft !== undefined && readDraft(key) !== expectedDraft) return;
-  if (drafts.delete(key)) {
+  if (deleteDraft(key)) {
     notify(key);
+  }
+}
+
+export function clearProjectAssistantComposerDrafts(projectId: string): void {
+  for (const key of drafts.keys()) {
+    const [draftProjectId] = JSON.parse(key) as [string | null, string | null];
+    if (draftProjectId === projectId && deleteDraft(key)) notify(key);
+  }
+}
+
+/** Threads are global; a deleted thread can have drafts in several project scopes. */
+export function clearThreadAssistantComposerDrafts(threadId: string): void {
+  for (const key of drafts.keys()) {
+    const [, draftThreadId] = JSON.parse(key) as [string | null, string | null];
+    if (draftThreadId === threadId && deleteDraft(key)) notify(key);
   }
 }
 

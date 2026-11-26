@@ -1,6 +1,7 @@
 import type { ResearchProject } from '../../shared/types';
 import type { IpcLikeResult } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
+import { clearProjectAssistantComposerDrafts } from '../assistant/composer-draft';
 
 /**
  * Project data layer (P2/T2.1).
@@ -51,8 +52,10 @@ export function updateProject(client: RocClient, input: ProjectUpdateInput): Pro
   return client.api.research.updateProject(input);
 }
 
-export function deleteProject(client: RocClient, id: string): Promise<IpcLikeResult<{ deleted: true; id: string }>> {
-  return client.api.research.deleteProject({ id });
+export async function deleteProject(client: RocClient, id: string): Promise<IpcLikeResult<{ deleted: true; id: string }>> {
+  const result = await client.api.research.deleteProject({ id });
+  if (result.ok) clearProjectAssistantComposerDrafts(id);
+  return result;
 }
 
 /* ------------------------------------------------------------------ */

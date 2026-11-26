@@ -40,11 +40,29 @@ Evidence: `.artifacts/research-toolchain-p3/index-lifecycle-red.log` and
 its simulated errors verify the consumers' retention decisions.
 
 `installed()` indicates a selection exists. It does not claim the payload is
-healthy or quality-qualified. `acquire()` reserves the generation before checking
+healthy or quality-qualified. `status()` validates the pinned receipt, selection
+and top-level directory identities, returning the declared byte count and model
+identity without reading model weights or runtime packages. Model settings and
+derivation identity use this lightweight status; their `ready` flag means a
+compatible installation is selected, not that every file has just been hashed.
+`acquire()` reserves the generation before checking
 all recorded bytes, interpreter and inference identities, then returns an
 idempotent release function. Installation and removal refuse while any acquisition
 or mutation is active. Parsing callers must retain the lease until the supervised
 Worker exits. No Python or MLX process starts merely to inspect model state.
+
+The Worker still validates every runtime/model file before importing installed
+executable packages. New parsers accept that verification result directly from
+the trusted bootstrap in the same Python process, avoiding a second identical
+inventory pass in the parser. No command-line flag or environment variable can
+skip verification. Standalone parsing performs its own full verification; older
+installed parsers retain their original verified entry point until reinstalled.
+New parser reports include `installationVerificationSeconds`, `loadSeconds` and
+`firstInferenceSeconds`; the Worker validates and retains available timings in
+the source artifact's `manifest.json` under `process.ovisTiming`, so cleanup of
+temporary Worker files does not discard them. Older reports may omit the added
+metrics. Main-process acquisition remains an independent full
+check before the Python interpreter starts.
 
 Explicit removal can delete a damaged generation, but refuses changed directory
 identities, aliases and symlinks. It removes only the selected generation and its

@@ -345,11 +345,16 @@ export class ResearchStageRuntime {
             clearInterval(heartbeat);
             this.active.delete(run.id);
             if (![...this.active.values()].some(entry => entry.taskId === node.taskId)) {
-              const task = this.repository.tasks.get(node.taskId, node.projectId);
-              if (task.status === 'failed' && task.statusReason === 'research_task_cleanup_pending') {
-                this.repository.tasks.setStatus(task.id, task.projectId, 'failed', this.cleanupFailures.has(task.id)
-                  ? 'research_task_cleanup_failed' : this.cleanupReasons.get(task.id) ?? 'research_role_execution_failed', ['failed']);
-                this.cleanupReasons.delete(task.id);
+              try {
+                const task = this.repository.tasks.get(node.taskId, node.projectId);
+                if (task.status === 'failed' && task.statusReason === 'research_task_cleanup_pending') {
+                  this.repository.tasks.setStatus(task.id, task.projectId, 'failed', this.cleanupFailures.has(task.id)
+                    ? 'research_task_cleanup_failed' : this.cleanupReasons.get(task.id) ?? 'research_role_execution_failed', ['failed']);
+                }
+              } finally {
+                // Durable task status owns terminal failures, including cancel/shutdown paths.
+                this.cleanupFailures.delete(node.taskId);
+                this.cleanupReasons.delete(node.taskId);
               }
             }
             this.notify(run);

@@ -44,8 +44,7 @@ export type OvisInstallationInspection = {installation: OvisWorkerInstallation; 
   /** Integrity is separate from the full-cohort quality/release gate. */
   qualityQualified: false};
 
-/** The expected receipt hash must come from a trusted preparation transaction, never from the inspected directory itself. */
-export async function inspectOvisInstallation(input: OvisWorkerInstallation, signal: AbortSignal): Promise<OvisInstallationInspection> {
+async function readReceipt(input: OvisWorkerInstallation, signal: AbortSignal) {
   const identity = ovisModelIdentitySchema.parse(input.identity);
   signal.throwIfAborted();
   if (!isAbsolute(input.root) || !isAbsolute(input.pythonBase) || !isAbsolute(input.inferenceScript)) {
@@ -68,8 +67,36 @@ export async function inspectOvisInstallation(input: OvisWorkerInstallation, sig
         isAbsolute(name) || name.includes('\\') || /[\u0000-\u001f]/u.test(name))) {
     throw new Error('research_ovis_installation_inventory_invalid');
   }
+  if (receipt.model.revision !== identity.revision) throw new Error('research_ovis_installation_model_invalid');
   if (await realpath(receipt.python.basePrefix) !== pythonBase || receipt.dependencies.mlx !== '0.32.5' ||
       receipt.dependencies['mlx-vlm'] !== '0.8.1') throw new Error('research_ovis_installation_runtime_invalid');
+  return {identity, root, pythonBase, receiptPath, receiptSize, receipt, names};
+}
+
+export type OvisInstallationStatus = {identity: OvisWorkerInstallation['identity']; entries: number; bytes: number};
+
+/** Metadata only: readiness to load is established by inspectOvisInstallation, never this result. */
+export async function readOvisInstallationStatus(input: OvisWorkerInstallation, signal: AbortSignal): Promise<OvisInstallationStatus> {
+  const {identity, root, receipt, names} = await readReceipt(input, signal);
+  for (const name of ['model-8bit', 'runtime', 'spec', 'tools']) {
+    signal.throwIfAborted();
+    const info = await lstat(join(root, name));
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('research_ovis_installation_directory_invalid');
+  }
+  let bytes = 0;
+  for (const entry of Object.values(receipt.files)) {
+    if (entry.type !== 'file') continue;
+    if (entry.size > 2 * 1024 ** 3 || bytes + entry.size > 6 * 1024 ** 3) {
+      throw new Error('research_ovis_installation_size_limit');
+    }
+    bytes += entry.size;
+  }
+  return {identity, entries: names.length, bytes};
+}
+
+/** The expected receipt hash must come from a trusted preparation transaction, never from the inspected directory itself. */
+export async function inspectOvisInstallation(input: OvisWorkerInstallation, signal: AbortSignal): Promise<OvisInstallationInspection> {
+  const {identity, root, pythonBase, receiptPath, receiptSize, receipt, names} = await readReceipt(input, signal);
   const python = await realpath(receipt.python.executable);
   const inBase = (path: string): boolean => {const name = relative(pythonBase, path);
     return name !== '' && !isAbsolute(name) && name !== '..' && !name.startsWith(`..${sep}`);};

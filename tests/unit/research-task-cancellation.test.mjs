@@ -288,6 +288,8 @@ test('shutdown waits for effect cleanup and reports a cleanup failure', async ()
     cleanup.resolve();
     await assert.rejects(shutdown, /research_shutdown_cleanup_failed/);
     assert.equal(f.tasks.get(running.taskId, f.project.id).statusReason, 'research_task_cleanup_failed');
+    assert.equal(runtime.cleanupFailures.size, 0, 'settled task cleanup must release failure IDs');
+    assert.equal(runtime.cleanupReasons.size, 0, 'settled task cleanup must release reasons');
   } finally { cleanup.resolve(); f.close(); }
 });
 
