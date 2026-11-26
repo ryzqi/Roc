@@ -44,6 +44,9 @@ jobs:
       - name: Check release behavior
         run: node --test tests/unit/github-release.test.mjs
 
+      - name: Verify database upgrade safety
+        run: node --test tests/unit/database-schema.test.mjs tests/unit/database-migrations.test.mjs
+
       - name: Cache verified research downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
