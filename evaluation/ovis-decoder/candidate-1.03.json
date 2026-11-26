@@ -1,0 +1,1826 @@
+{
+  "schemaVersion": 1,
+  "id": "ovis-8bit-repetition-1.03-candidate",
+  "scope": "New complete 347-page decoder candidate after original8bit and penalty1.05 failures; no replacement of previous evidence",
+  "selection": "Penalty1.03 finishes253, retains both captions on240;043 still loses two geometric matches. These observed pages informed selection. No held-out claim; all347 pages must be rerun.",
+  "identities": {
+    "acceptance": {
+      "path": "evaluation/ovis-evaluator/acceptance-v2.json",
+      "sha256": "0b87b9d8db6039561e59a5094d9e3437d744f6bb6d6a6be877fa5d62b8b2fa70"
+    },
+    "paired": {
+      "path": "evaluation/ovis-evaluator/paired-inference.json",
+      "sha256": "0770efdb3cdd46c152572d7ac567835c5f382fe9ba4622e2a5e3abc8c6b63f41"
+    },
+    "launcher": {
+      "path": "scripts/research/probe-ovis-repetition.py",
+      "sha256": "3e1f261c0dbcb79545706637042f737ed01ebf274a1292eb3a083298a383d068"
+    },
+    "generatedInference": {
+      "path": ".artifacts/research-toolchain-p3/diagnostic-repetition-1.03/infer-probe.py",
+      "sha256": "bcdd4ee8b7e9cdd17a3cd2f5839a1925c25bd96de16ea004289746fdd305c391"
+    },
+    "referenceInference": {
+      "path": ".artifacts/research-toolchain-p3/paired-347/original-bf16/report.json",
+      "sha256": "01eda8a41a1856becbf37e1def114342e46d16de2d2b80e89f6004e2ab688abd"
+    },
+    "original8bitInference": {
+      "path": ".artifacts/research-toolchain-p3/paired-347/8bit/report.json",
+      "sha256": "ad84fd9d4c21553641ce27adc3770cda7669593ea456e12ffda4abac2b7e2cd6"
+    },
+    "referenceScore": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/original-bf16/report.json",
+      "sha256": "37b892ce01bff51b22a322834a1f04fc8b3ec7eee9cedb538ffa7d3718c42a99"
+    },
+    "controls": {
+      "path": ".artifacts/research-toolchain-p3/diagnostic-repetition-1.03/diagnostic.json",
+      "sha256": "adcf45effcdc499242d211795f70a1593d61dcd702a9f0225b395d8d370f3d36"
+    },
+    "backendReferenceScore": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/official-mps/report.json",
+      "sha256": "f9418c8eaf92dcf539f2135f0b16074e028fcfd93cd5998ed7bb6a92f614ab27"
+    },
+    "regionContract": {
+      "path": "evaluation/ovis-decoder/acceptance-regions-v3.json",
+      "sha256": "3e50363cbd6ff1ea0df712081aad0a0062cd0fe859ea82fa9370b17da7314716"
+    },
+    "regionImplementation": {
+      "path": "scripts/research/ovis-formula-regions.py",
+      "sha256": "4c83acd8e3c8373991e7f8459b02dd484fd16837a73abe6482ea5a9836a70022"
+    },
+    "backendInputs": {
+      "path": "evaluation/ovis-evaluator/backend-inputs-v2.json",
+      "sha256": "135aa481ddd9ac80a619d99ef046ab2781b8e19d13d104c6569e13a4f8421455"
+    },
+    "priorCandidateComparison": {
+      "path": ".artifacts/research-toolchain-p3/candidate-repetition-1.05-score/comparison.json",
+      "sha256": "64b53f26ca7865081d1ce0c43a57700b9261ffbc74db61e0e6aa14ec6a1ed252"
+    },
+    "priorCandidateRegionComparison": {
+      "path": ".artifacts/research-toolchain-p3/formula-regions-v3/candidate-1.05-comparison.json",
+      "sha256": "d38118b98a71a19ee3c5de0d5daf72ea463d089c141fe11dcd81b1c9737f7a15"
+    }
+  },
+  "variant": "8bit",
+  "modelRevision": "5b252386ba615bd464a5a26597560eaba87dae5c",
+  "installationReceiptSha256": "7c7a694446845d7659f6d42997190f53250061c6a9e5b4012b1332a6d63be057",
+  "settings": {
+    "temperature": 0.0,
+    "maxTokens": 16384,
+    "enableThinking": false,
+    "minPixels": 200704,
+    "maxPixels": 8294400,
+    "seed": 0,
+    "eosTokenIds": [
+      248044,
+      248046
+    ],
+    "promptSha256": "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1",
+    "formattedPromptSha256": "ce378948dcf390d26edc26d089805f48147de6044525a69e24a2d48c1229e709",
+    "network": "denied-by-seatbelt",
+    "pageOrder": "full upstream image path ascending",
+    "repetitionPenalty": 1.03,
+    "repetitionContextSize": 20
+  },
+  "pages": [
+    {
+      "id": "scientific-001",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg",
+      "sha256": "5fe73ef247263ce0b7fe8b6905ddc72cdd1f20f8c641c06bb624243e5acdb435"
+    },
+    {
+      "id": "scientific-002",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ana.20363.pdf_5.jpg",
+      "sha256": "548f9432984f3b6fe8ba461648d3c6ca43e80b87380aa36ff159b7352d3b7507"
+    },
+    {
+      "id": "scientific-003",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-bf00151572.pdf_3.jpg",
+      "sha256": "67e5a56bc14f8d5d2c87e6156b0bc576da3e2dda5510386937f16f9ba1cc8872"
+    },
+    {
+      "id": "scientific-004",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-bf00326833.pdf_3.jpg",
+      "sha256": "68aa6aa65a1d78eb4e0d76752480204968178c43c95ea09a85bb3c07b3304fde"
+    },
+    {
+      "id": "scientific-005",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg",
+      "sha256": "299daa711a9fa60bfb90d1f24f66c5352f5d6c1895ecc571a1e9879a105f9115"
+    },
+    {
+      "id": "scientific-006",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg",
+      "sha256": "2ae27f3a9284810bf7ce479ac8921359ccf00b7ebee1017b5e8da3e28ebe4af4"
+    },
+    {
+      "id": "scientific-007",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ceat.200600266.pdf_2.jpg",
+      "sha256": "a062e2b04990df15c6b7bbdd41ddeef395e60c90cf90662dad7fd374571a4686"
+    },
+    {
+      "id": "scientific-008",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ceat.200600410.pdf_5.jpg",
+      "sha256": "40176d68325572bddb597280b7ed868494bfd33caa30736e76a78feee56b69ee"
+    },
+    {
+      "id": "scientific-009",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ceat.200600410.pdf_8.jpg",
+      "sha256": "0977e1ebe5f2105c6961b95ee7fc5b4a8f8eb1ab0a5e8e9b33ac4f8e99f2a46c"
+    },
+    {
+      "id": "scientific-010",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chem.200700118.pdf_7.jpg",
+      "sha256": "59888eebee9efa7ed129b8263e09a999b227a981e491d0b75231c4f21d8eebd7"
+    },
+    {
+      "id": "scientific-011",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chem.200700133.pdf_6.jpg",
+      "sha256": "9070f3292304ab74a32386f323f1f7185e6e485b5037d862bf908e12d5d9c4e0"
+    },
+    {
+      "id": "scientific-012",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chem.200700285.pdf_4.jpg",
+      "sha256": "a6cbd6fe1c6d9569643fd9179548566e84031dba8cbb00aab594c58336ec39f7"
+    },
+    {
+      "id": "scientific-013",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chem.200701412.pdf_10.jpg",
+      "sha256": "c019b853ab3e082fe42a9c63b9d92166894e25d81378fd6ed606af006c7bf6f7"
+    },
+    {
+      "id": "scientific-014",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chem.200701981.pdf_9.jpg",
+      "sha256": "3ac76661178e2b90bd544a9ac76d798a5209465d5d40cc5b0dc8c264a3da2d59"
+    },
+    {
+      "id": "scientific-015",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chin.200305072.pdf_1.jpg",
+      "sha256": "70b7f151a13ff9ca7ba836d9f03bc23c9f6ca1cdd160bda84f54bb511ba48e0b"
+    },
+    {
+      "id": "scientific-016",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chin.200427104.pdf_1.jpg",
+      "sha256": "fc2b1b3a2f8d1d4aa4212e1d2580eba79f7c137fbf2abf2e29620411ca6da319"
+    },
+    {
+      "id": "scientific-017",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chin.201023119.pdf_1.jpg",
+      "sha256": "f14cd7f111da5641f472292212095b7f14b1117bc9d78a24da69cd318bed4a7c"
+    },
+    {
+      "id": "scientific-018",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-chin.201025015.pdf_1.jpg",
+      "sha256": "1201d95f39e23db66dcb5e2a5d065d8277f345fecb446208f25bef2ec416d6a9"
+    },
+    {
+      "id": "scientific-019",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-dneu.20401.pdf_2.jpg",
+      "sha256": "5b2e584e9f0266e0a3ec90a7a3b4792231ae5f60ed7aadf3520f490e6ff38a1e"
+    },
+    {
+      "id": "scientific-020",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-dneu.20833.pdf_13.jpg",
+      "sha256": "f820a11cbddabb0467e09962bb299a19a9ac2096cddc9d12834e89db19178d90"
+    },
+    {
+      "id": "scientific-021",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-dvdy.10165.pdf_7.jpg",
+      "sha256": "b62b32a5dfab9bce595c5136a25a38ebedca892fddc51de610dff38afdf1d117"
+    },
+    {
+      "id": "scientific-022",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-hup.777.pdf_7.jpg",
+      "sha256": "e334e4f823c20f95d0edf976f798cd899cae9327fa2d38c7f1ca77bb03c1b5f1"
+    },
+    {
+      "id": "scientific-023",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-hup.777.pdf_8.jpg",
+      "sha256": "ea9603a6b1cd595ecad672ff4f19afef92bf6ea9c90281ea2e6e8a792064f280"
+    },
+    {
+      "id": "scientific-024",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-hup.908.pdf_5.jpg",
+      "sha256": "86dc1e3d1e0b97c7c318dc5eca07f92ac7ecf2f1563f6f33f34dd3f2953e76b8"
+    },
+    {
+      "id": "scientific-025",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-hyp.1040.pdf_9.jpg",
+      "sha256": "4130049fe5321619a31acec95f9a361bd37b6c97ccb1f798df81a81da9978fc2"
+    },
+    {
+      "id": "scientific-026",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-hyp.1092.pdf_1.jpg",
+      "sha256": "6c34770354f7cbcdab3fb611e7364d72c1f44bfb042ebe35c12e90fdc95db37f"
+    },
+    {
+      "id": "scientific-027",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ijc.22820.pdf_4.jpg",
+      "sha256": "d708dfdbe96d6efd7346d206a7ecfd24f770f5e4fc5c4e072d402494071e2578"
+    },
+    {
+      "id": "scientific-028",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ijc.22994.pdf_3.jpg",
+      "sha256": "e533614dc88bbbcf325dcf7dcac2ce64c66c5e167d4231b5f0d663db52f6608d"
+    },
+    {
+      "id": "scientific-029",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-ijc.22999.pdf_3.jpg",
+      "sha256": "77c129d87449fa757593ef75984af1d57721e413faeee9d51e4bb2db6db71c44"
+    },
+    {
+      "id": "scientific-030",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1365-2117.1999.00104.x.pdf_11.jpg",
+      "sha256": "b92c1ba95a0e66a5b6764248d2f17f2445dd1b9af212bcfe853fb248dadc18ba"
+    },
+    {
+      "id": "scientific-031",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1365-2117.2002.00179.x.pdf_10.jpg",
+      "sha256": "78f8236acd31d3af9c2ba51ac0df1117df20568940bb81e32c27121398bc153b"
+    },
+    {
+      "id": "scientific-032",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1365-2818.2000.00739.x.pdf_4.jpg",
+      "sha256": "51377e5ad5231757508b3562b7dcfddecf93b5bd445fde93a2b6eb0ded02f742"
+    },
+    {
+      "id": "scientific-033",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1365-2818.2000.00739.x.pdf_8.jpg",
+      "sha256": "51935d5465a32c9c219b084219c30d69d4a134236b3dfbf4a2e71ef9937d4a6d"
+    },
+    {
+      "id": "scientific-034",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1365-2818.2003.01210.x.pdf_7.jpg",
+      "sha256": "9d2b76f971a648a3a1a76128c04d36152997fbd5495f848d41a62682aee14578"
+    },
+    {
+      "id": "scientific-035",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1444-2906.2002.00466.x.pdf_4.jpg",
+      "sha256": "6ce6eadfc3456678fa2da06b781ec164ef4fddef16f9a814c9bc82e31b0251d7"
+    },
+    {
+      "id": "scientific-036",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.1445-2197.2003.02751.x.pdf_3.jpg",
+      "sha256": "4911795c0102bdd5cbdb11e35ce4cb244a6e655ca66e2f1ffeccaa79217aa1b1"
+    },
+    {
+      "id": "scientific-037",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ab.2007.10.021.pdf_3.jpg",
+      "sha256": "e996ca4fb34ab2f114d33e4c5ae50e7dadcbf3104e6cf81ba6e86c070614d0ff"
+    },
+    {
+      "id": "scientific-038",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ab.2007.11.016.pdf_5.jpg",
+      "sha256": "0e60befe9670f5aea9fb831c20bbdae5c33c4031bf6d736f42797ea4ec0c95dd"
+    },
+    {
+      "id": "scientific-039",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ab.2008.05.027.pdf_7.jpg",
+      "sha256": "afa2406373d59a9b6699efd18ffaa19bc18354ef7f53fc417ef441697f1c0e2e"
+    },
+    {
+      "id": "scientific-040",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.apcata.2004.01.008.pdf_6.jpg",
+      "sha256": "432e3729218838fae1aa73d2c2c4fe7987206651678aa2e361c72029008421ec"
+    },
+    {
+      "id": "scientific-041",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.apcata.2006.05.010.pdf_2.jpg",
+      "sha256": "283d5f33489a9ce0d32c134153745376371f21171f73e95d996c59f0d8044c86"
+    },
+    {
+      "id": "scientific-042",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.apcata.2007.01.024.pdf_7.jpg",
+      "sha256": "d1530d3e6b9525f38163a59d729f416a96009775010bd9b03f5508c0c0d9c4bd"
+    },
+    {
+      "id": "scientific-043",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.02.018.pdf_6.jpg",
+      "sha256": "2ae70fa7b75e4a2ae168a3da31699334c8f037d6129c3e83ef67264a139aa4a1"
+    },
+    {
+      "id": "scientific-044",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.03.134.pdf_6.jpg",
+      "sha256": "cbd24e3d7b44c8da3a1010d156975d718501668c59849e156194448d96974504"
+    },
+    {
+      "id": "scientific-045",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.05.085.pdf_4.jpg",
+      "sha256": "4e9058bfe130253081875f7c2b3c0577d72bbb854978ad16b9792b23732f3b58"
+    },
+    {
+      "id": "scientific-046",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.08.021.pdf_7.jpg",
+      "sha256": "d8b9c9f494f3cafb046433b72264e74da1ae61ae6221671579b1558ba05e6734"
+    },
+    {
+      "id": "scientific-047",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.11.024.pdf_7.jpg",
+      "sha256": "9d648abb563e35a8967c7bb52ad705bbe3ac3a5bcbb5107f5efeed3bb4afa15c"
+    },
+    {
+      "id": "scientific-048",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ergon.2003.12.002.pdf_5.jpg",
+      "sha256": "c742c22767e6b394de24ae0e132585c049cd8116ded37e38d29602688ce62e5c"
+    },
+    {
+      "id": "scientific-049",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ergon.2004.09.009.pdf_13.jpg",
+      "sha256": "6b2321180692237f1b390fb27f0bd2fd54a6a4ba3aa7cf32eee99b5193d9a518"
+    },
+    {
+      "id": "scientific-050",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.ergon.2006.10.025.pdf_6.jpg",
+      "sha256": "66f6847540913d383a7c4ebd429d0aec097b73bebdaa592bbfad7d2217a28f31"
+    },
+    {
+      "id": "scientific-051",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.eswa.2008.01.070.pdf_5.jpg",
+      "sha256": "857986432f3c0cacebfb8c89f4b2c15cc7ca80afc35d598756f203d40fe150ea"
+    },
+    {
+      "id": "scientific-052",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.jcp.2010.12.006.pdf_14.jpg",
+      "sha256": "c394168bdcb67747f0661949917e25c2859c7df6ad034bb2ee81e6f9f860890e"
+    },
+    {
+      "id": "scientific-053",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.jcp.2010.12.006.pdf_5.jpg",
+      "sha256": "a5064e9c2cb456618fb9c113f77a400a0674ee70a4c82f1f9a4d8053b0213185"
+    },
+    {
+      "id": "scientific-054",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.jcrimjus.2010.04.003.pdf_8.jpg",
+      "sha256": "3ed521bd8c502a557ca6a5d05b3b596eb41d08a1ce91fcf16d7af2c8636d012c"
+    },
+    {
+      "id": "scientific-055",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.mseb.2009.12.004.pdf_2.jpg",
+      "sha256": "1593f0e3673106a331c1ce439d238a49d0cbd51aa8795a4f2c4422b2f1b82310"
+    },
+    {
+      "id": "scientific-056",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.msec.2003.09.055.pdf_1.jpg",
+      "sha256": "88f671e04f05046f37d0a5515385b151d644cde846f39159e7dbf19137324644"
+    },
+    {
+      "id": "scientific-057",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.msec.2005.01.019.pdf_4.jpg",
+      "sha256": "5ea3aa610b8e1f4185eb0391d60f1a2c7e86245565a4dae11e3001bc1a9337f4"
+    },
+    {
+      "id": "scientific-058",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.msec.2005.03.002.pdf_7.jpg",
+      "sha256": "ead7bd5e7d02c1f1993a065ea0ef746329d1c6fe800ce1140d382cb856383662"
+    },
+    {
+      "id": "scientific-059",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.physletb.2004.02.015.pdf_4.jpg",
+      "sha256": "d4c38139912ed78edb9c2f290cd738c75d5ecb4c387ac02e52f6fc2d38b30049"
+    },
+    {
+      "id": "scientific-060",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.physletb.2004.06.101.pdf_3.jpg",
+      "sha256": "72973d16afd94a4466b4070af16e7c6ad5ea6f58a4dab739c5be9a2abceffe32"
+    },
+    {
+      "id": "scientific-061",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.physletb.2004.11.060.pdf_2.jpg",
+      "sha256": "541783bee53320d7e227b7caf6241706a2e4fcb049d9342dc47e2f32fd546aa6"
+    },
+    {
+      "id": "scientific-062",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.snb.2004.05.025.pdf_5.jpg",
+      "sha256": "19eb02299a6a46ef26cea745fe87d14ee87ff33ec1c58cb7324c127c4514c6b5"
+    },
+    {
+      "id": "scientific-063",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-j.snb.2004.06.022.pdf_2.jpg",
+      "sha256": "2f422dfa262f14d906e7c0d1cf44ef23e47565a8614b4b664f8be7d70050dfe9"
+    },
+    {
+      "id": "scientific-064",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-007-9171-1.pdf_2.jpg",
+      "sha256": "5aa621dcb301183de78bcf749a0fdd66afbc4b90bf7968dca1077b4b9e994f01"
+    },
+    {
+      "id": "scientific-065",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-007-9171-1.pdf_3.jpg",
+      "sha256": "1a498c66c37e74f6169478c941cf30b78ab5615c895c28ea4745eb1b259c01f1"
+    },
+    {
+      "id": "scientific-066",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-007-9344-y.pdf_5.jpg",
+      "sha256": "9e2cff4c53603e4c3f18af32d6e62adce498e3c59b33ac45117b816ed8ea54db"
+    },
+    {
+      "id": "scientific-067",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-008-9367-z.pdf_4.jpg",
+      "sha256": "b239f0347a86b489a082ed4bd66e6d2328d3260f1ed05731de7edd930208491d"
+    },
+    {
+      "id": "scientific-068",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-009-9752-2.pdf_5.jpg",
+      "sha256": "e2e9cd87371321bc3cbed9ef4e29ba95468a2b46a49e49d5bfead34351250b5c"
+    },
+    {
+      "id": "scientific-069",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-009-9772-y.pdf_1.jpg",
+      "sha256": "cf3d82798badd802f0210c6300ed9032a2ce7e3b5dfc5e9f950ea12112e3fd78"
+    },
+    {
+      "id": "scientific-070",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00128-010-0006-0.pdf_5.jpg",
+      "sha256": "b5642f5f4eb3b96eaaef7cb3d6e77657859c52b4c28fa3041c46ee6327f1f9ee"
+    },
+    {
+      "id": "scientific-071",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00348-003-0689-7.pdf_3.jpg",
+      "sha256": "2d5dd15d51beb6e5a74c1c48208f3464c10ef9893f251956e3e8ea6ac44f700e"
+    },
+    {
+      "id": "scientific-072",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00348-005-0004-x.pdf_3.jpg",
+      "sha256": "0201104385ca099efb06950b94ebd671699525d482021175b0718ccb30a6cfe3"
+    },
+    {
+      "id": "scientific-073",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00348-006-0117-x.pdf_11.jpg",
+      "sha256": "6894bcc2d8fbd836b44c8d57ca88850392b4420234f8c4cfc2e8e688ff85db61"
+    },
+    {
+      "id": "scientific-074",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00348-006-0148-3.pdf_5.jpg",
+      "sha256": "f0afe2ecd35ae9cc3af2af506ab410cf178c604b5f5711faa8af5d3c94c3a933"
+    },
+    {
+      "id": "scientific-075",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00348-006-0169-y.pdf_2.jpg",
+      "sha256": "9d1b2e1844fe4c514f66ab19b0a6c3983da87147f73c79553156552d9fd5ebec"
+    },
+    {
+      "id": "scientific-076",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00374-003-0583-8.pdf_1.jpg",
+      "sha256": "cd673e311c387abbd12bfde7f00fcf3faafa7ee7ada6a90bbb1032c978e112b6"
+    },
+    {
+      "id": "scientific-077",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00374-003-0589-2.pdf_6.jpg",
+      "sha256": "671f0982cddc3d22ea7a7694cb0630a194c42aa03ff45f860a07126331406e82"
+    },
+    {
+      "id": "scientific-078",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00374-004-0768-9.pdf_2.jpg",
+      "sha256": "f217e05c17b690d2ba2562d5ed28014e437f854c37f7667a0e80bc5693d52e68"
+    },
+    {
+      "id": "scientific-079",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00374-006-0103-8.pdf_11.jpg",
+      "sha256": "0bed0f0421e3f19a0081ff2722833057c67c387a3d46a69aac79b6c9f91626d3"
+    },
+    {
+      "id": "scientific-080",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00395-011-0222-8.pdf_10.jpg",
+      "sha256": "e0157946a35aefbaf846c0ede638dc77e8873fbe5994ea3f0761ebebf386ceb8"
+    },
+    {
+      "id": "scientific-081",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s003950050126.pdf_6.jpg",
+      "sha256": "7b4246541c3c895aebc57a42feb36ba77e957ac12773d681deb2cd0ce636464b"
+    },
+    {
+      "id": "scientific-082",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s00396-003-0935-9.pdf_2.jpg",
+      "sha256": "2c6f736d33b625595de0ddb7e95fa7ceb8e604b46261a13c4930431438a799fe"
+    },
+    {
+      "id": "scientific-083",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s0167-8655%2800%2900107-0.pdf_6.jpg",
+      "sha256": "7be1a7358362de7ac879e9288b6f4b4472125d1cd75499fe9083687d87aabcea"
+    },
+    {
+      "id": "scientific-084",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s0167-8655%2801%2900019-8.pdf_10.jpg",
+      "sha256": "ddcd104f259ef38dc7a122cbc8e06c838061dab85e2a1438b0a200d77780ac9c"
+    },
+    {
+      "id": "scientific-085",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s0362-546x%2897%2900070-9.pdf_7.jpg",
+      "sha256": "445a1c7a96fe5b614e90054b7a52e617bcdccf538a82f2068f6097ef7da47aaa"
+    },
+    {
+      "id": "scientific-086",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s10555-005-1578-8.pdf_5.jpg",
+      "sha256": "2a35a74a37afc559245027f4fa381d7bce7fdfd05fb4b05a874d47e7f587d946"
+    },
+    {
+      "id": "scientific-087",
+      "imagePath": "images/docstructbench_llm-raw-scihub-o.O-s10653-010-9369-8.pdf_11.jpg",
+      "sha256": "a9f8d3ac4d33dd3c00382e629e7d4fa9c6946455fae7036dc33cd33fc8c31459"
+    },
+    {
+      "id": "scientific-088",
+      "imagePath": "images/docstructbench_llm-raw-the-eye-o.O-1995_2418.pdf_1.jpg",
+      "sha256": "2e55d95a912e722deec07720955000a860e99d1fdaa6e2138c7e290066391635"
+    },
+    {
+      "id": "scientific-089",
+      "imagePath": "images/docstructbench_llm-raw-the-eye-o.O-Attitudes_Towards_Rainwater_Harvesting_1999.pdf_5.jpg",
+      "sha256": "2e0e7704f50abc046c7836ecec7ed25dcf92099f7701532d1e7af465088e5784"
+    },
+    {
+      "id": "scientific-090",
+      "imagePath": "images/docstructbench_llm-raw-the-eye-o.O-Player%27s%20Options%20-%20Halflings.pdf_11.jpg",
+      "sha256": "75b82f61183e9dd1ce3a2f27135a5e39888f3822a2fb68a15881f4d008526ae6"
+    },
+    {
+      "id": "scientific-091",
+      "imagePath": "images/eastmoney_0022ae8eddb0de117978289e16ba7fe995dddd3f64aca9e147bb07c848c84aa6.pdf_8.jpg",
+      "sha256": "3b2c83e445855621f2fd51af18d2243d5532f4bcc6da013d9c3db6284a0c7674"
+    },
+    {
+      "id": "scientific-092",
+      "imagePath": "images/eastmoney_03e39833d520af7d1abb96dd624dcd15f2b57d061969d196e80922e2f590503f.pdf_22.jpg",
+      "sha256": "0003d10d4fd76bb89f6bd2087ce624feb49c3742f32512b703c2487d7c8c281d"
+    },
+    {
+      "id": "scientific-093",
+      "imagePath": "images/eastmoney_1746461e6e00efee224a9209974b4bb6de3b11e339e4d86c41569eeddcc3c20e.pdf_8.jpg",
+      "sha256": "f300e64937550fc1e86110d8e5d25d424d62126104bec596f1deff97e3a4ac3d"
+    },
+    {
+      "id": "scientific-094",
+      "imagePath": "images/eastmoney_1885ca41425d245551f3482457304f78b48186bff625fa91e675eaf6bba5229f.pdf_0.jpg",
+      "sha256": "e3c1aa1fbd52efd8288632232b08a52ff20a015ef7cbd8c52b1ee925038079c6"
+    },
+    {
+      "id": "scientific-095",
+      "imagePath": "images/eastmoney_2dea7cdb5a3e018ffec3c80eb4435de524f2a14bd32735b78f563adc355272ab.pdf_6.jpg",
+      "sha256": "82cc0ff994c3c8a1654e6e3b7ac0584b22fd12217e3a5b1b8469c1ab74d5667f"
+    },
+    {
+      "id": "scientific-096",
+      "imagePath": "images/eastmoney_34d623c64d12b5f02ffe4bff74f464b368270b1d6930192876bfe353d8fd6c30.pdf_0.jpg",
+      "sha256": "403100ebf4178f28a2a88da928dd82e18d78c3e72560e294faf566d5574961bc"
+    },
+    {
+      "id": "scientific-097",
+      "imagePath": "images/eastmoney_3ad44cb9fef0899c347e83dec4ce05b65deaa17bbe9324bde97c0916afc98e0a.pdf_2.jpg",
+      "sha256": "ba03f1e5e484557c50e2acf982a60b2660154f445760b0bb3af869436f0a9bbd"
+    },
+    {
+      "id": "scientific-098",
+      "imagePath": "images/eastmoney_5c22c7d248262382ae63af18e9ef65bd26ffdf78c2f3af32137e0b4f92a0ba92.pdf_4.jpg",
+      "sha256": "a6b5d3ed8e0be57c6edb5835c9becc35c62583b1f7aa3bcf72cbc14ca57aa229"
+    },
+    {
+      "id": "scientific-099",
+      "imagePath": "images/eastmoney_5f75d8df19ab34c706ae823d8ed54f845b6a693e31c0fae19b16cdd94c32a636.pdf_2.jpg",
+      "sha256": "d97f830356dc47fc953cfe3ff29101b7fed55d7762574cf1846fcc1a176ea52b"
+    },
+    {
+      "id": "scientific-100",
+      "imagePath": "images/eastmoney_5f75d8df19ab34c706ae823d8ed54f845b6a693e31c0fae19b16cdd94c32a636.pdf_3.jpg",
+      "sha256": "9bb03b67153027cc781a3f65fe6e6d0c46c2f5f4918314b7ba9f7b495ec47bc6"
+    },
+    {
+      "id": "scientific-101",
+      "imagePath": "images/eastmoney_62b4149b1612ce28d20f26cd5c5b2e18f80b26fca6e4452e090376a2fe72eae3.pdf_0.jpg",
+      "sha256": "6daff9df78a43b55350b4dea32f77748736e2e6da67b96c8738c14a19e5c9569"
+    },
+    {
+      "id": "scientific-102",
+      "imagePath": "images/eastmoney_66eea274d39b939da0f10253d279e119d87646f10fd21b3942eaf6c5d93b8134.pdf_0.jpg",
+      "sha256": "90f964f74e3780376424223f0086b7997a1ff2b5603c092e4e867d0de29fce4f"
+    },
+    {
+      "id": "scientific-103",
+      "imagePath": "images/eastmoney_6be3f3cd9e5361946ee49252f12dd57fe7c73df330116d6998e2198ec79a05c9.pdf_2.jpg",
+      "sha256": "f222d96a66da5c0da8eebb63a9e1ee896ef2054299db39d52c7da1a8fcf0904f"
+    },
+    {
+      "id": "scientific-104",
+      "imagePath": "images/eastmoney_6e1cdb75430fe7d7a7757754d163d1a4a8a1c2a3fca38b74a8a2e8df009f2ce0.pdf_2.jpg",
+      "sha256": "f96b0175269115d79997bf7a9247356957eebae8945cb73a18a82803202744fb"
+    },
+    {
+      "id": "scientific-105",
+      "imagePath": "images/eastmoney_7c25f92e2ab21d83e1eada0e40a68e3151e7c1c2d673ddb12b0242fa3ab931ab.pdf_13.jpg",
+      "sha256": "d2198f03f51eff93869f02190eafa77615a4c64b9ab5182a6bd36f04c1a34d07"
+    },
+    {
+      "id": "scientific-106",
+      "imagePath": "images/eastmoney_7e9f2d3e6d80483c7556fe65fe39f432d669cee3dc80840f126db9c7d7140d52.pdf_1.jpg",
+      "sha256": "3c111498a494c8492ddbb70791d1dacdef18349cec51b8824dbd84d6a3564eeb"
+    },
+    {
+      "id": "scientific-107",
+      "imagePath": "images/eastmoney_7f55aa1223310144165074707803522240cf20120b15f5d78fdf61eb4dcefba3.pdf_2.jpg",
+      "sha256": "14bd89e1c31129ec1795b2e14dcfc96bc36afbb94f80bfdd45b180518df4e546"
+    },
+    {
+      "id": "scientific-108",
+      "imagePath": "images/eastmoney_8b3e01e3cd92a034f45945887a5170602774a8480effda5bd791451578a93b7d.pdf_5.jpg",
+      "sha256": "bdf966eac2013a39bdb9c06334266b8b3126649d983a85772cbed430e8b6bf97"
+    },
+    {
+      "id": "scientific-109",
+      "imagePath": "images/eastmoney_8e0ecdad6ea6edd7014a328fa79e4b69230c1b4f82cc031dd247c3c1c39744cf.pdf_11.jpg",
+      "sha256": "c32b22ce57ae100807285a6e0eb31315a68294cfbedf4a198668ad17a8f97140"
+    },
+    {
+      "id": "scientific-110",
+      "imagePath": "images/eastmoney_8f87670d793f4415afca95380e8e46cc8517d6f97fa65a6680308bfc34fa7b5e.pdf_4.jpg",
+      "sha256": "b067b233fa34e2976c49182ae561b5e28f054bccf7c80ba9ee2cffe7241e59a6"
+    },
+    {
+      "id": "scientific-111",
+      "imagePath": "images/eastmoney_944c06af0b176ef718ee34d3affee40554920f76210dfbf007972fe9c39074fc.pdf_0.jpg",
+      "sha256": "40a655df647f74842e235437b8f4523d25c10346e083af476a311b7f00ce70a6"
+    },
+    {
+      "id": "scientific-112",
+      "imagePath": "images/eastmoney_a2542ccf95ec3bb51dcc6fb90a7c32b18f883e10a3cb301901a428882d8d2015.pdf_2.jpg",
+      "sha256": "0295a8bf7a16caefddb22c3d1f5fddab50d7ec2e66c0fa2457d9e79f84fbad7a"
+    },
+    {
+      "id": "scientific-113",
+      "imagePath": "images/eastmoney_bd6c2b9aa7ca0ebf8672f8f50e3eacab7f67d0ffa15e0d94b1f3c0d1b5f179b8.pdf_19.jpg",
+      "sha256": "195ec2e77bf953108a6ae91be327d8779653b9b4db2fad71010e95111434a75b"
+    },
+    {
+      "id": "scientific-114",
+      "imagePath": "images/eastmoney_bdbfdb8a6ab56be3ab1b40009ee648b6d250013ce653c146f2d2023bd8d14772.pdf_26.jpg",
+      "sha256": "a4e70836cbbb26e0b45f80b2d522ca53e3abb1d45321d86bb64bfb1afc292277"
+    },
+    {
+      "id": "scientific-115",
+      "imagePath": "images/eastmoney_bef4bcf5f2faff08a78d49945e4ac8983320f367c450720c87ab8cc6ed5726e4.pdf_1.jpg",
+      "sha256": "4af8eb49b4c8cdcb54df9f7c9bfc1f4e8a6f0149216ea22c3942139ed951f94f"
+    },
+    {
+      "id": "scientific-116",
+      "imagePath": "images/eastmoney_c07e6795bc92e8782d09bf3af7dc766960a1db2088262126a0856311d95361a2.pdf_6.jpg",
+      "sha256": "badba3fb955750e64c0e0f56a89b4def5521d1f4fdb6f14d11aed0d5fa0a0da6"
+    },
+    {
+      "id": "scientific-117",
+      "imagePath": "images/eastmoney_c1c12db90c6ecfae16a8eafa49caecfbc0e5f5654140320fe127f7c09bde96c9.pdf_1.jpg",
+      "sha256": "16f1a8b1d3facb16f91314070c3f89b4b94d235fb18a553bba4a20e7ca75bdd5"
+    },
+    {
+      "id": "scientific-118",
+      "imagePath": "images/eastmoney_c2abc680754ea4676c752cb3bda24323046ece560f8b23ce66b705887c9bcf9b.pdf_16.jpg",
+      "sha256": "de4f896213357d592eff2584789e10a6354c8e55ca6a530f5947efbbd2a8983f"
+    },
+    {
+      "id": "scientific-119",
+      "imagePath": "images/eastmoney_c683eb2923c442ad9fd8c1f25abb7b1b35b359611d5b8a07d1eede7a81983769.pdf_21.jpg",
+      "sha256": "59fdb72fe0d3d40e3666dcf7b8dc4bcfd5092bcad35a7d348a0026aae128fb1f"
+    },
+    {
+      "id": "scientific-120",
+      "imagePath": "images/eastmoney_c87249cc61825e8bcd1e0ba5434d32606fecb2ff8302f8602f8d6860fd773252.pdf_1.jpg",
+      "sha256": "e1a3f88fbc870bf38649baa7b497a3597b2a1f254f4bd1aeef12dc79a4ca925b"
+    },
+    {
+      "id": "scientific-121",
+      "imagePath": "images/eastmoney_d0313ed730f58180b1f005a3607c2a77dc3672410e8f7ee1de3b814668da9bcb.pdf_5.jpg",
+      "sha256": "dad551884ab8838d27a31714e6bde72d390a4415a220701cda658ae543ab2105"
+    },
+    {
+      "id": "scientific-122",
+      "imagePath": "images/eastmoney_d08a4020e49029cf68b5dbf69e5ecaa40e969f918819c62579e5f4b1a357422f.pdf_3.jpg",
+      "sha256": "48e7497f56d97273f51078c2f6440dfb9445c4d7ccd8763621f17b69ff26a82f"
+    },
+    {
+      "id": "scientific-123",
+      "imagePath": "images/eastmoney_d201644f6fbc869ea857c5d9f8ec38adc54250a94b77d826280b0d1c25d13a13.pdf_4.jpg",
+      "sha256": "a1fdd6ca9f0135b8ea37331630ed14756407d77d2931990313f2c88cf5f50019"
+    },
+    {
+      "id": "scientific-124",
+      "imagePath": "images/eastmoney_d2bb183f5254ede5760932ac3118524aa7eddad551935713b435541f1525c1ee.pdf_3.jpg",
+      "sha256": "b224c3d1589fd4c7fbe98d9e2570facfd671ea89a9c98e73755aec36327473de"
+    },
+    {
+      "id": "scientific-125",
+      "imagePath": "images/eastmoney_d2bb183f5254ede5760932ac3118524aa7eddad551935713b435541f1525c1ee.pdf_7.jpg",
+      "sha256": "39136a54feea62d4334194755ee288cbee5bd95301f1548f87d54d7de059dfb9"
+    },
+    {
+      "id": "scientific-126",
+      "imagePath": "images/eastmoney_d64a9204564ad81332a4dc3767365740a00228323d2862604d15cb15b318f3af.pdf_3.jpg",
+      "sha256": "f7e6a92be7d79a2f2a4353c8db871ecb2d9ad93bb930c91ab597e5db5531f67b"
+    },
+    {
+      "id": "scientific-127",
+      "imagePath": "images/eastmoney_db7967d371df6e4fb5850f3583fcf255c2ed8ef153e11aa38e0bd020b65f13ac.pdf_1.jpg",
+      "sha256": "36fe50db869d1c8978dfeca3f8f2d94c315a03c11009641ce608949ec2fe00d8"
+    },
+    {
+      "id": "scientific-128",
+      "imagePath": "images/eastmoney_dcf347592d4160dffacffdf00a9c39aa75cf9859205a7543c283d1df8bb14f90.pdf_1.jpg",
+      "sha256": "92419570e50769e6715120f856ff5ba490ce2b7184d039eb1ed533cef5e242cd"
+    },
+    {
+      "id": "scientific-129",
+      "imagePath": "images/eastmoney_dd8f39ced2188b907304224a635ad605689270486020c34636003e57018c01d8.pdf_2.jpg",
+      "sha256": "ed062b7dff2d53c8538173cba97ec3b4e589b94c1d503905df210bffd31ca397"
+    },
+    {
+      "id": "scientific-130",
+      "imagePath": "images/eastmoney_df74f4c5f5f8c96ec2c051d34ea5c51686a45b2f1822b2d94982f84c81d25aa3.pdf_17.jpg",
+      "sha256": "a1939658db7d933054503d4253f4b70c73bdaceaf9753ba1b17f886b99fa26ee"
+    },
+    {
+      "id": "scientific-131",
+      "imagePath": "images/eastmoney_e42b6e1cd2d48113ff4db8854e539d828d632bf9b1757e10cb8ddb2cfc7b1393.pdf_12.jpg",
+      "sha256": "b7886678b067aa17e11a27e6f8908e334ac63741a6d60821a5d559214ad8e795"
+    },
+    {
+      "id": "scientific-132",
+      "imagePath": "images/eastmoney_e480008a65ea31d8c1a5e86900788b67d07422f02dbc5296aedf9423e1a23b4e.pdf_6.jpg",
+      "sha256": "36e591a4a7f0ea5b9f9a6b8a159098a92b7bf60eff3479088cca86d1ec6ae36e"
+    },
+    {
+      "id": "scientific-133",
+      "imagePath": "images/eastmoney_ea3eda50a04cf431d7412a567497c91e8cc52f72b4c5ccb554776c5c57b13e29.pdf_4.jpg",
+      "sha256": "9b04f79e1bd45f8bb13b472ed68b2629428b96b842b064eefdf84752a2e1713d"
+    },
+    {
+      "id": "scientific-134",
+      "imagePath": "images/eastmoney_ea59610b9b1a8f0df46f7a89da1116cbf256c772e1148f26017991e28c8bca21.pdf_18.jpg",
+      "sha256": "357896a43bdce2d8cd3854477d732d4cc3f1fac3ba5e51533b6c1bfa32e180ef"
+    },
+    {
+      "id": "scientific-135",
+      "imagePath": "images/eastmoney_f4848e9d70d37f406f54c714024c5ef002832a1bf64290aa5c163665887a3e55.pdf_5.jpg",
+      "sha256": "63a28e35261d218ed61d58247669cb3acacab76cb42b1c1768d3bd422384b774"
+    },
+    {
+      "id": "scientific-136",
+      "imagePath": "images/eastmoney_f671ab94bf8b8274d6736f1a3dc775b3b74fa68686df2946aa5307b6b2a32062.pdf_18.jpg",
+      "sha256": "64133c9755ef192dc85f5985b9f34acf5ccd90f49ffe88c6a587239b6f49b3fd"
+    },
+    {
+      "id": "scientific-137",
+      "imagePath": "images/eastmoney_f72b162baf25f1a2060e4ce877071ec27e490ab16e9de1a2b18572b596d2bde8.pdf_2.jpg",
+      "sha256": "4b31c75e3860f25537a45ae5d8096e6d7c2a339c8db8bfb81efce28778b9bfc8"
+    },
+    {
+      "id": "scientific-138",
+      "imagePath": "images/eastmoney_fca0676d8b0c4d3926a2d02229fa3372f87a45dbfbf7472773c6dbe04d35af65.pdf_3.jpg",
+      "sha256": "c738482dbf53ec8a2da3dfec698e0d30ab443f0e0eff1bc0419e1dccfe520348"
+    },
+    {
+      "id": "scientific-139",
+      "imagePath": "images/eastmoney_fcc1c7940f94c7f36157a4aa9c1c804fe16e6b681ca1cef589af39c6d3e0cb90.pdf_0.jpg",
+      "sha256": "991ad12c3e68b47ff188e331a986133aaae37af22c40d562034266e06a6fbd5f"
+    },
+    {
+      "id": "scientific-140",
+      "imagePath": "images/eastmoney_fdae27854b0cffed1364e2a4457189b2a10ad0b058242ee3c8c9ee8993d7f5c0.pdf_1.jpg",
+      "sha256": "b1e205f7a14ef92a42b5ef47ca9c4704f85e0231f5134681aa0d52e82ffcce5b"
+    },
+    {
+      "id": "scientific-141",
+      "imagePath": "images/page-035cb436-c01e-41db-b40e-8977678777eb.png",
+      "sha256": "c0ecab3c722f44bcf0a27bc3c96dc12058d44e4070dfa0d6577d709e42ff1fe2"
+    },
+    {
+      "id": "scientific-142",
+      "imagePath": "images/page-05746fc5-2045-4dea-94e7-4bbab648d702.png",
+      "sha256": "93d284ac28b508f60e3a9b8ec8564627d6fa21c453a2cba90b2c27450515fc96"
+    },
+    {
+      "id": "scientific-143",
+      "imagePath": "images/page-07d333cf-4ebf-427c-b146-e419962b81fa.png",
+      "sha256": "5d72ce851f0aebd64b85aca24f9ca5b9f69f9ba3862229d3503a96a191fbb381"
+    },
+    {
+      "id": "scientific-144",
+      "imagePath": "images/page-0b011030-84e4-49e3-adfb-437c96b9947d.png",
+      "sha256": "34c1fe20597fd1f6a59eca845e70ab4c11ddccd33d01265ad6365996f1335b5e"
+    },
+    {
+      "id": "scientific-145",
+      "imagePath": "images/page-0cbdcfa9-3248-4e54-8704-2bc73e6d29e7.png",
+      "sha256": "9c7e71c6d2474a9f6d61902509703aa32fb1c283a0e21d9fd6c4d7361ee354de"
+    },
+    {
+      "id": "scientific-146",
+      "imagePath": "images/page-112859dc-07d9-473a-a027-94904db8fd84.png",
+      "sha256": "0eacae116e317aa51f93885aeef0fc8c2ec76dd302fa769e11c9efc4f0de0b91"
+    },
+    {
+      "id": "scientific-147",
+      "imagePath": "images/page-14a6b411-9097-4eec-86da-92075868d243.png",
+      "sha256": "910cf8db3bf5b05fcf91430d096e5b2a78882733f248964d615d58ae8fb8b023"
+    },
+    {
+      "id": "scientific-148",
+      "imagePath": "images/page-175b8afd-8077-4f65-bdbf-40682e0a9a4b.png",
+      "sha256": "47624d4f58e487527976a863d19fd29bceaacd58f63791021e503508d939a613"
+    },
+    {
+      "id": "scientific-149",
+      "imagePath": "images/page-1955f827-fb35-4806-b3a4-463d9e0d6cc8.png",
+      "sha256": "bb11e457faa614d72627d242094389eee85c2fb7a0685539d1a0a513528659dc"
+    },
+    {
+      "id": "scientific-150",
+      "imagePath": "images/page-1ce383cc-63a3-43c9-b6f2-7498a952b65c.png",
+      "sha256": "841c5e310d8596439d0a90d22372b7984ffb4e9d13e0d5b38481a694eae50eb6"
+    },
+    {
+      "id": "scientific-151",
+      "imagePath": "images/page-1cecd66d-3563-422a-a204-999bba0bb528.png",
+      "sha256": "bec1fc80da185fcb8c115882f5495775658ec92bcae23c564765b4dba6abd04d"
+    },
+    {
+      "id": "scientific-152",
+      "imagePath": "images/page-1f03d0f2-1166-4b9b-9609-94bf8bfd29b2.png",
+      "sha256": "84935f2747c3aae7c7b78d147a902003b52f4865818063875aabdba7de290d9f"
+    },
+    {
+      "id": "scientific-153",
+      "imagePath": "images/page-213e6a57-ba81-4afb-8184-2e1cf2a7664d.png",
+      "sha256": "b0c45f80d9c05baefd58aa0746e4134570959ec32267aeb256fc38b00f6c4f6c"
+    },
+    {
+      "id": "scientific-154",
+      "imagePath": "images/page-219a47e5-3b78-4fa4-9066-3b95bb342a87.png",
+      "sha256": "cec35b11fa8da002ac3ed5ebd4b3de13a6565667b4284257f5be1cb87d710029"
+    },
+    {
+      "id": "scientific-155",
+      "imagePath": "images/page-232d386f-6c9d-4b50-9463-89dedce995e5.png",
+      "sha256": "2899761a969f8f1c6266e7713fc2b67a4f27d5cb3028389366b51c15bc24e093"
+    },
+    {
+      "id": "scientific-156",
+      "imagePath": "images/page-25cb2b2a-e44a-4043-90e1-3f7058d8b99e.png",
+      "sha256": "cd2c517c2c3eb7f8461583a11a9fbe55e285db81f356d3a7ca341271addd1f7d"
+    },
+    {
+      "id": "scientific-157",
+      "imagePath": "images/page-268266af-56c0-4b3b-9d07-73c6e50feb58.png",
+      "sha256": "f21ab3e8181d4773bcf5fc7a1575015b64f27cb3e2cb7487503448248bff1d06"
+    },
+    {
+      "id": "scientific-158",
+      "imagePath": "images/page-2861127b-41a4-44d5-b026-2de9cb408347.png",
+      "sha256": "2f1cb0ed9b813ceeb573f0de19d7028f05dd7da5db3cf8dc9c4fbc48d247a7a1"
+    },
+    {
+      "id": "scientific-159",
+      "imagePath": "images/page-28657a85-95cc-4bfa-8156-cc98518a0b4c.png",
+      "sha256": "4cb49481716b2a6bf3479c296f125e2de636eabc59a075be46e97cd9e3c0901d"
+    },
+    {
+      "id": "scientific-160",
+      "imagePath": "images/page-28c45f5f-7e0d-464a-89ec-8de3a4abb927.png",
+      "sha256": "1da39183f965e593420283b93b2819543f39ca4e39c7a688a3f391b0e2b008a4"
+    },
+    {
+      "id": "scientific-161",
+      "imagePath": "images/page-2abc2a95-d39a-48db-9b6d-f40410412694.png",
+      "sha256": "c8c9306b5ade9638819cd4a86972df0aef35d42ab24157e877fcd66441636358"
+    },
+    {
+      "id": "scientific-162",
+      "imagePath": "images/page-2b4c4f44-c0de-41b6-9561-96195c233f47.png",
+      "sha256": "eb2be63433cc23db744803c14ff1d10aca7012448ea6cc59c2859e3d4a3e4da6"
+    },
+    {
+      "id": "scientific-163",
+      "imagePath": "images/page-2deb83b3-abe2-442c-a544-0b6a8db464f1.png",
+      "sha256": "86539a33d9a1d71c4423d51fd38f644e9bd7c7dfaaf48dd1ab5f439d745a1d3f"
+    },
+    {
+      "id": "scientific-164",
+      "imagePath": "images/page-2ff22832-e343-46a7-b94f-47ed864ce486.png",
+      "sha256": "2a82c54d8fc27fd79b88fd6b3e2b56d154d8a3fc9b8ae73d97969df7a5b68600"
+    },
+    {
+      "id": "scientific-165",
+      "imagePath": "images/page-349417c3-e5f4-4dae-b018-7323ef36b04e.png",
+      "sha256": "0b10d755574533e7d54deb705ee572c261e6350f1450481c3f1a7cae793ebce0"
+    },
+    {
+      "id": "scientific-166",
+      "imagePath": "images/page-35ecd651-17dd-43e6-8a6f-8f55d6796d96.png",
+      "sha256": "e843af67304c1f6afb371ea22eeaed1339c4f4ac41925594d808c9a0b2d4f6b4"
+    },
+    {
+      "id": "scientific-167",
+      "imagePath": "images/page-38fc7c6b-80ed-46be-bb53-29986a63ad3e.png",
+      "sha256": "1528851848a87db522151f3fdb43c7eee1f382f0211cce204158b696f32c1c8d"
+    },
+    {
+      "id": "scientific-168",
+      "imagePath": "images/page-39f38730-0ae6-4cfe-8b99-c65d06d09544.png",
+      "sha256": "be7bc1664f36bb8e60c41feb4fa2d6b4e93d86777d5753b3f357d178b3f6aac0"
+    },
+    {
+      "id": "scientific-169",
+      "imagePath": "images/page-3bed7e71-905d-4f69-aabe-dbff56d7ac4c.png",
+      "sha256": "f428a5a7385371bc62cb2c75fb8597d189f5a85f8dd90645194d91362d86953c"
+    },
+    {
+      "id": "scientific-170",
+      "imagePath": "images/page-3c690b07-30d7-4e77-bf20-012f0080fb1d.png",
+      "sha256": "319abfb5393081cd64dddfafc60cef7488eee3bc67aa6711ad2f0f1278748ec2"
+    },
+    {
+      "id": "scientific-171",
+      "imagePath": "images/page-3ce15378-6ffd-4f3c-9473-8b897451c770.png",
+      "sha256": "bd2954743dc7651f76a7772f4657900a63f96607247e7a760d3edcb3866694e0"
+    },
+    {
+      "id": "scientific-172",
+      "imagePath": "images/page-3e0da562-e549-4a04-8335-e76db83d57e6.png",
+      "sha256": "9bc9966070d6bb34277c9f364774354fc1ced327d6e70a5a460503f28e761423"
+    },
+    {
+      "id": "scientific-173",
+      "imagePath": "images/page-3f872a77-3faf-47d6-8574-bd2e5806ff98.png",
+      "sha256": "fd18575d7293add5d001005aa5cf2b1b876f9d62c84b0b7aa87cb9802adbbc35"
+    },
+    {
+      "id": "scientific-174",
+      "imagePath": "images/page-3f8eed58-8b86-4f3a-958d-13671977d3c6.png",
+      "sha256": "6e2da3c9b896c147d60d0466c80afd600d2845a74548ac629dc4178588e91843"
+    },
+    {
+      "id": "scientific-175",
+      "imagePath": "images/page-4009495f-1a7c-46dc-9f52-7f80f5f0cc5c.png",
+      "sha256": "e83b311d1208ee6e95f5adbf143846a25475b51d310576ff280a336bcca083c2"
+    },
+    {
+      "id": "scientific-176",
+      "imagePath": "images/page-404e0471-bd71-426a-8e5a-81b8327f88e5.png",
+      "sha256": "b37ac7d281d46e47083add71c44d5351e02730c559b8738e4c17089b4f9dd4d1"
+    },
+    {
+      "id": "scientific-177",
+      "imagePath": "images/page-4089ffa0-27f5-4a20-ba2f-c68e3ad46ce2.png",
+      "sha256": "8ffa35f8aa69d107735746f6486326641ca44c2946105c15453dfe0878e95fe4"
+    },
+    {
+      "id": "scientific-178",
+      "imagePath": "images/page-458ab820-615f-42fe-af33-3a8fb15ad691.png",
+      "sha256": "4ee0c19b89398647e93a49fc5b478d4b099c342c764936acd5db0b5b0b8e8d87"
+    },
+    {
+      "id": "scientific-179",
+      "imagePath": "images/page-472c26e2-6bc2-4c05-9889-05132c87a8a9.png",
+      "sha256": "37c859384630bd8ca9b175720e25f100c8bc36ab5c351a9ce572be4c926f3ff5"
+    },
+    {
+      "id": "scientific-180",
+      "imagePath": "images/page-47977c29-59ca-4534-9a00-becad3bfdaa4.png",
+      "sha256": "65fa8d3c2fa9e2bce82709ea31196fadb4afc1bf2b884d9ed15d500e7e2269e6"
+    },
+    {
+      "id": "scientific-181",
+      "imagePath": "images/page-49746735-505c-442d-b3f6-c55b1bf9e48b.png",
+      "sha256": "8a374ec7275f3a633a3ecb285dac32b3cd90d72583b04815e21a6c1afac9d865"
+    },
+    {
+      "id": "scientific-182",
+      "imagePath": "images/page-50ffe5d2-cd27-449a-a813-d4a8c44b12ea.png",
+      "sha256": "c01458b8cb10b1f4f41e932dd9b3c263c22807276ed9b15313ac0e9de5e5d7bb"
+    },
+    {
+      "id": "scientific-183",
+      "imagePath": "images/page-572316a1-cdf8-4c50-81d4-2e6dc13dcdce.png",
+      "sha256": "c34d9441396e97fc705bbc6839b9876f525b245cd329352de2a8014570fba006"
+    },
+    {
+      "id": "scientific-184",
+      "imagePath": "images/page-5b2f2dec-8e96-450f-aea0-b73d46eac172.png",
+      "sha256": "ff9bc85bd56f292a1b7b0280fe734a31f3de858e41401adbf074e7d628df8b73"
+    },
+    {
+      "id": "scientific-185",
+      "imagePath": "images/page-5cb4b2fe-c14d-450e-9b97-4b6e7c99493b.png",
+      "sha256": "7e72664ba4def4ff2c8eb11a9811f1c3025c6c0a4c3b98191b447d9f64c0d9f2"
+    },
+    {
+      "id": "scientific-186",
+      "imagePath": "images/page-5d58cdf7-6d00-4ea5-97b2-358cbc0cab21.png",
+      "sha256": "2d9654c164b8eb51baea7b182f88ff4e18bda8634bf3c9ccd291507dc9acd80b"
+    },
+    {
+      "id": "scientific-187",
+      "imagePath": "images/page-5ef91820-15a4-41af-b57f-36ec76879fee.png",
+      "sha256": "08c41dac8cd6e9c2921733c62cd56bc227f45fbd48652e52a7f9c4a0c8db0b09"
+    },
+    {
+      "id": "scientific-188",
+      "imagePath": "images/page-60d560a3-cd92-4b7d-b6c5-f0d6ce6dc3f1.png",
+      "sha256": "3ecabbb0f400441bc29af191727518915bdf2b98d43667a8cee2a97aee0f441d"
+    },
+    {
+      "id": "scientific-189",
+      "imagePath": "images/page-632fad6b-6da9-4567-bd2d-a4763a03a314.png",
+      "sha256": "9132289298555e687abf09ebc8cf43eb8cb3f40a43e60a8b8bc1e28c298212ce"
+    },
+    {
+      "id": "scientific-190",
+      "imagePath": "images/page-66aa2b38-32c0-4222-839a-50df648218df.png",
+      "sha256": "29f0d5da14ef4e403fdad7636916cd95fff6b90264986942b3f2337fdade45bb"
+    },
+    {
+      "id": "scientific-191",
+      "imagePath": "images/page-68e347d8-6f34-431b-a2a2-549b3634dabc.png",
+      "sha256": "ec9931a3c9f8bbba10b028f14af2d6f7656c03338704a521bdfcaf9d04a971b0"
+    },
+    {
+      "id": "scientific-192",
+      "imagePath": "images/page-69c15957-4d6d-485c-a244-04a1a8d29d37.png",
+      "sha256": "4f9e8647dd64f09abaff778df87bed2a275a6275f16d3813f39475c81631899a"
+    },
+    {
+      "id": "scientific-193",
+      "imagePath": "images/page-6c29d065-b8f0-4bb0-b7c3-779f9cbab09a.png",
+      "sha256": "8bb30b5baee2e7ceeaf3507abb70b8f87d79ca954136d93e00588d087441a36c"
+    },
+    {
+      "id": "scientific-194",
+      "imagePath": "images/page-7050793e-109f-4066-be91-107f94b617b9.png",
+      "sha256": "90b3af7e769c2416b6092f50a8c5231b050f2a5bbcb29cf0e1bd4d68d7d0a7b3"
+    },
+    {
+      "id": "scientific-195",
+      "imagePath": "images/page-73432bc8-cd0f-4e14-b119-0a9de73ab141.png",
+      "sha256": "a19b189e9645c84faea26174cd1f259b82dd3ee4211d580deedaa8783c596357"
+    },
+    {
+      "id": "scientific-196",
+      "imagePath": "images/page-74749e1d-5239-4d8e-b89c-6d83f5e59374.png",
+      "sha256": "a2e4041923904d70f826b8aacfeb805bc74871c83552476793222f41dcc1bff7"
+    },
+    {
+      "id": "scientific-197",
+      "imagePath": "images/page-74961b9a-ef4c-42d8-a95f-406e6b84cf63.png",
+      "sha256": "a630f63711f4f752f6a2931df2adc67fdba590b9e9e021cfff272efbfa365512"
+    },
+    {
+      "id": "scientific-198",
+      "imagePath": "images/page-7a7566fd-43d8-46e4-8a4f-0330e1f27a88.png",
+      "sha256": "2119507e23447fb7b362164d35aa999071dfa18c2d3c4f34187247e27b58456a"
+    },
+    {
+      "id": "scientific-199",
+      "imagePath": "images/page-7bfad9a4-c5b7-40f3-8600-be513d1b1aaa.png",
+      "sha256": "c10518169c1c61a69869bba79388776c5cf82002a43d2f1202055a1d003c7943"
+    },
+    {
+      "id": "scientific-200",
+      "imagePath": "images/page-7d2d833d-37b1-4c18-9ee6-4e09d352e265.png",
+      "sha256": "74093f249b8f1cb1f3180ffd5a1a24e6f9e5a7151505f577738f873d4104159f"
+    },
+    {
+      "id": "scientific-201",
+      "imagePath": "images/page-83587fc3-fe55-4e51-a3c5-f0664edba743.png",
+      "sha256": "668334fd9fbb90a9531debaa494ed0ba17a493a794e6beb183348209bac180ee"
+    },
+    {
+      "id": "scientific-202",
+      "imagePath": "images/page-83a675ab-0021-4979-8293-8af0d36146a0.png",
+      "sha256": "f6005130e877aaf091246c37cb78848bcdc9fb274639564559ad1626f375eed7"
+    },
+    {
+      "id": "scientific-203",
+      "imagePath": "images/page-8524b54d-6372-4f9e-a662-5254349cfda3.png",
+      "sha256": "20b2b787eb6dc80f98ac7f25c98ae336307e8c3eb99223957fee2755c77f6530"
+    },
+    {
+      "id": "scientific-204",
+      "imagePath": "images/page-85377cdf-d6a2-4611-bd50-08795bf7acb6.png",
+      "sha256": "e7fa0d54fae81fe22297e602d4649dab95f2530339eb99b27dc1ff0f947c8862"
+    },
+    {
+      "id": "scientific-205",
+      "imagePath": "images/page-8792f466-c570-468c-86dc-402a510e9bb7.png",
+      "sha256": "2fbec7e06b0cdc99b82714420236da3575d85a5ea614608e0d9644f414450f5c"
+    },
+    {
+      "id": "scientific-206",
+      "imagePath": "images/page-87c18f88-ea2f-4044-b092-02e9b2a7436d.png",
+      "sha256": "edf341c21a6c6d1b14b9d6e2d651a4bc5b42192995de1eb5a8a3e52f84ff7e35"
+    },
+    {
+      "id": "scientific-207",
+      "imagePath": "images/page-8cbbe0d4-a3a8-4533-a620-048bebfa714b.png",
+      "sha256": "f76c861ffe10da07eb9ddaf202a8e4301a1e176b809c1d4f4fff8cf871f86dde"
+    },
+    {
+      "id": "scientific-208",
+      "imagePath": "images/page-8d707810-de48-43ba-81a7-b976918e7be2.png",
+      "sha256": "f0c36e9a86b5358596681ddd54fdf79cb5a2981a70ce0369314c0c89c7ccb438"
+    },
+    {
+      "id": "scientific-209",
+      "imagePath": "images/page-91460e0a-922c-4f9b-9d11-d1a7981c3a05.png",
+      "sha256": "1c39bb6f46a32b0e990fbfcb851e688e3475571f2b53ebe4097fce51911901ed"
+    },
+    {
+      "id": "scientific-210",
+      "imagePath": "images/page-91b20bf2-3ad5-41f4-b739-4cc4b18ab1eb.png",
+      "sha256": "9562b12305565f26e777f4cb4bb19bb19dc279af070e6fea7c7b54c9316e8fa5"
+    },
+    {
+      "id": "scientific-211",
+      "imagePath": "images/page-9390721f-e06c-47ea-8b21-0f27c72df7b7.png",
+      "sha256": "b6649d559b373dc48bd2944d96d790117fa89be78169cf62b0f851231dc111b3"
+    },
+    {
+      "id": "scientific-212",
+      "imagePath": "images/page-94600a77-35db-4549-b505-3dadc092b3f4.png",
+      "sha256": "1429366a685cd51f32cc5d2eb37854b4349805ad37066e68dcf0b2962c2a9537"
+    },
+    {
+      "id": "scientific-213",
+      "imagePath": "images/page-9470d573-83bd-40bb-8491-534e9df043f6.png",
+      "sha256": "5eb4c6b794b680156b9fe2ce236856786fa6a825ad09a54a69031d4e576b91da"
+    },
+    {
+      "id": "scientific-214",
+      "imagePath": "images/page-9477c155-19b3-4f2d-ac18-ee3f8997d2f8.png",
+      "sha256": "fc92cd29cd1bb164b3b2cc434a5e6f9325a20b3c719c45d9051fa9f854f8aa04"
+    },
+    {
+      "id": "scientific-215",
+      "imagePath": "images/page-9a25d716-f3a8-42e6-9a4d-e5e49a71ab41.png",
+      "sha256": "43e376e668f233e4cdf4e690e13fa1114289ffb9e2ea5797227bd59d1af165bb"
+    },
+    {
+      "id": "scientific-216",
+      "imagePath": "images/page-9edf7687-029e-4e72-a9a6-c23faa1e1861.png",
+      "sha256": "3316e28cd955c565a680eef7f24181f476e4a5f4c8bb461c69b05493f34ddaf9"
+    },
+    {
+      "id": "scientific-217",
+      "imagePath": "images/page-9f6bc620-1983-4503-bb0f-f9c7949ccb77.png",
+      "sha256": "7e0b0b1e44f8a8fa934da2276fca88558a0e8ad292860d8b23796ecc8032c655"
+    },
+    {
+      "id": "scientific-218",
+      "imagePath": "images/page-a6d06208-475c-4c6e-9d84-858f7e2ecf72.png",
+      "sha256": "f035c220a167a19439dd3ce1245d633db01382b609bb18aa6feea7156dc3126a"
+    },
+    {
+      "id": "scientific-219",
+      "imagePath": "images/page-a8d87718-ab19-4fc0-9ef5-3611ad10f88e.png",
+      "sha256": "6e3bdfec20438fa5dda1cfaa5bfc081e87bde94669ac020d90a078a64509fa2e"
+    },
+    {
+      "id": "scientific-220",
+      "imagePath": "images/page-ab4f331b-e8f3-41fb-ba6b-8da5ade54983.png",
+      "sha256": "336341d070f95fac74a52c5ad18831d33d7f3150450989d23b2b9975a7c9122a"
+    },
+    {
+      "id": "scientific-221",
+      "imagePath": "images/page-ad5a110f-a4b4-430b-b5db-ecd0ee394451.png",
+      "sha256": "5689b995ad3e7c721163d5eab7e3096ffb9d240cd52223f5f144e256bdc8d085"
+    },
+    {
+      "id": "scientific-222",
+      "imagePath": "images/page-b0bdb7a8-c7de-4e6c-9e9c-bf979f3a3227.png",
+      "sha256": "9592e3e48ec2d77a0a559dc4c5a15b7410870492f17b2be051a395e2939d2b98"
+    },
+    {
+      "id": "scientific-223",
+      "imagePath": "images/page-b23ec9d4-e4aa-458f-8e65-c2c7f8e9dd46.png",
+      "sha256": "294eef430885a89403db39261850a5703b1e8005e287ab2ce987e6ebe2e36227"
+    },
+    {
+      "id": "scientific-224",
+      "imagePath": "images/page-b3394f89-fe60-4f69-a0ee-aca79889950d.png",
+      "sha256": "79ca725ad4eaf1b68e7ed379530adef3cc5dacef2959de6a9a81b98b6ba78814"
+    },
+    {
+      "id": "scientific-225",
+      "imagePath": "images/page-b4b6b1d1-5fa6-42ce-8a62-8a6ddd4608f6.png",
+      "sha256": "4f9bb94c5b91711d2a30ad2d11077343ad4465bcf1a99ab1d935088338b14517"
+    },
+    {
+      "id": "scientific-226",
+      "imagePath": "images/page-b4d4cf5b-0a0e-454b-8220-8c7f58402791.png",
+      "sha256": "52010cc267ce8d7f145159c50f0df67d3369a9d72677c0db612995702d422611"
+    },
+    {
+      "id": "scientific-227",
+      "imagePath": "images/page-b527edec-3363-4d38-a390-2f3a307f2392.png",
+      "sha256": "008985ff47c6dd9780540830ec7e3cec403ebc90b07efdee45c7feb153f152e6"
+    },
+    {
+      "id": "scientific-228",
+      "imagePath": "images/page-b9d507e7-1239-42de-b70a-d7ca65393dc9.png",
+      "sha256": "0e1998a5bb434922c0b143b85bc35b67914bc00092ce8740a480b7a9287cb4ef"
+    },
+    {
+      "id": "scientific-229",
+      "imagePath": "images/page-bd6eb36e-0856-4d9d-b587-21b4a0209c8b.png",
+      "sha256": "525cdbe61c2fcc21d7eaebf6c67bafc0e5260381ce1dd0c92b1b338912a386f3"
+    },
+    {
+      "id": "scientific-230",
+      "imagePath": "images/page-bd9166d9-2c1a-4e3c-87f3-717e2474c77e.png",
+      "sha256": "556c0034afe8d5c7b1d4294c654b095e59ccef6293cd76131d78eb20ced5419c"
+    },
+    {
+      "id": "scientific-231",
+      "imagePath": "images/page-be2ebf31-5f24-4d3e-97f0-4a8df7e773b4.png",
+      "sha256": "b4e8c5ee98603eefb280f476261f6e774e761e65bccff496098031c7ed880820"
+    },
+    {
+      "id": "scientific-232",
+      "imagePath": "images/page-bf2cd266-22b7-41d7-a244-28595d23974f.png",
+      "sha256": "5479f2af92a247dfb13191a11e71d6777ff287d0abb95f751e3bd3eda972f15d"
+    },
+    {
+      "id": "scientific-233",
+      "imagePath": "images/page-bf3685a0-f0ea-46a7-bb99-1526da8f8077.png",
+      "sha256": "e468aa51c9f797f7bdf3bf07a111d9b064bc3095985cedb338d90c6e1a5945af"
+    },
+    {
+      "id": "scientific-234",
+      "imagePath": "images/page-c1c135ad-427e-482b-b01c-05c0ccbc6e76.png",
+      "sha256": "e16ab802801228020128fe5e4dbc990b7dd55437c9b359838866890e7722efc7"
+    },
+    {
+      "id": "scientific-235",
+      "imagePath": "images/page-c6168ed8-ca6a-4ddd-8bfc-92dec77f1870.png",
+      "sha256": "7c55bbc29949d5469286f12215f977a55419a40adcab5610050e5be0c228a387"
+    },
+    {
+      "id": "scientific-236",
+      "imagePath": "images/page-c7771a62-5b6b-48f0-b591-6b657d26e125.png",
+      "sha256": "34c11e9f492b0b4adecc07ebf72e890da445e9cb1be560d1bcabf1b8f7c78153"
+    },
+    {
+      "id": "scientific-237",
+      "imagePath": "images/page-c7792da7-4167-4f5c-a7ca-ec0f8833f83b.png",
+      "sha256": "8d7eef93d58690383deeba252ce916d88bb5b862d5dd594359a206d44911d55f"
+    },
+    {
+      "id": "scientific-238",
+      "imagePath": "images/page-c7fec126-2adb-4094-8110-5d81a92e05b0.png",
+      "sha256": "e47cd1c7fe0140ede359eae80d78f8e6acf81699a3eb189aff0a96436cb4ef5d"
+    },
+    {
+      "id": "scientific-239",
+      "imagePath": "images/page-c99421f9-4435-44a9-82f8-7b044bb0ee1d.png",
+      "sha256": "d8f477883120bc3eb47eeefe62e7c8c5a10ece8727482bdb100b12e4266d35f2"
+    },
+    {
+      "id": "scientific-240",
+      "imagePath": "images/page-cb30bac7-d4bd-47d0-ac84-e0b46d051fe9.png",
+      "sha256": "ce3adef8dac5fe0e0fd6ed03f8127b8be3ae94c36800b07a8d1909f23b9e8b66"
+    },
+    {
+      "id": "scientific-241",
+      "imagePath": "images/page-cc37a835-903b-4079-88fc-ae04625c9b5d.png",
+      "sha256": "8592562f477ec638032076f477cf412e7ac4c048bad95fe6b75725e7b57633e3"
+    },
+    {
+      "id": "scientific-242",
+      "imagePath": "images/page-cdb92c2f-f43f-45ef-ace7-91d4664a7834.png",
+      "sha256": "ce0658e064871bfb59cb5a26ceaa173ffdcf150e0dd0a1aafc1ad3718cdae2ae"
+    },
+    {
+      "id": "scientific-243",
+      "imagePath": "images/page-d0b2bb59-ce8e-4a1c-9ba1-a805606a477f.png",
+      "sha256": "9eb092c5f47397736fe2480449085aee039cddd252e26a25c3913abdf1e3ad88"
+    },
+    {
+      "id": "scientific-244",
+      "imagePath": "images/page-d2816bbe-3c28-4905-ad6d-5f873b525de3.png",
+      "sha256": "03b7ee778378f215dc834b9e512210e0d4ed51de5eead27e7fb021d1f68973e6"
+    },
+    {
+      "id": "scientific-245",
+      "imagePath": "images/page-d29fe4d2-832a-4ad6-ac80-dc01cf8b0e16.png",
+      "sha256": "85dc881cc847b5f95255d816b606c9db4e308acc67c41057e0d3b97b4920aec8"
+    },
+    {
+      "id": "scientific-246",
+      "imagePath": "images/page-d2cdac80-318c-4157-ac6e-bdab333f66bd.png",
+      "sha256": "adcb7c321f43bf4cd4c4e4140a58be2cdd2d4603f0f59af3f4cc16a6523bccab"
+    },
+    {
+      "id": "scientific-247",
+      "imagePath": "images/page-d5a3ea83-5427-4f90-a157-7b39b784b26e.png",
+      "sha256": "e74edfb932ab1d88d755e9950cf6611ed92a952c2f66896d89e1c17eb292cb07"
+    },
+    {
+      "id": "scientific-248",
+      "imagePath": "images/page-d5c82c0e-2a7d-4573-9dce-bff939504367.png",
+      "sha256": "9d6273dcc4cc8577ce9159cd9347b21c9a58cb6c0681d0e5489e7fec43f8db56"
+    },
+    {
+      "id": "scientific-249",
+      "imagePath": "images/page-d5e0cd38-ac0f-422c-b6d5-c8f001720491.png",
+      "sha256": "774b77846f87096c45abba7e7f8e373c898f97f5425d1b6911a30a5bc9f79477"
+    },
+    {
+      "id": "scientific-250",
+      "imagePath": "images/page-d627077d-61cd-45c5-936f-a2c306ec3b5b.png",
+      "sha256": "4e9b54629cabd048f0c4e132ad89b76564b87dec39d3b84ee2a24954c0722a8e"
+    },
+    {
+      "id": "scientific-251",
+      "imagePath": "images/page-d8376ede-3935-4a80-8acb-525b14796774.png",
+      "sha256": "3106a2c888e072bdabe658d04dcd3e3aa4fe123b65da8c6e8779642f96887acc"
+    },
+    {
+      "id": "scientific-252",
+      "imagePath": "images/page-d9a27df2-127e-4f76-bb61-e7e741078bef.png",
+      "sha256": "712bd43c65b71c00ec87b481fb7c4099b9e59f61243bf9594307212b1bad44ca"
+    },
+    {
+      "id": "scientific-253",
+      "imagePath": "images/page-dad0f4e5-290f-496f-bbdd-099ad75c6ff0.png",
+      "sha256": "2c13be3d5b7d4539b8f01a381d6b3ba752fa120ec35a5c17fd186bee59107e6a"
+    },
+    {
+      "id": "scientific-254",
+      "imagePath": "images/page-dbed9c07-e155-4ba1-92f9-a2962dc9a8f9.png",
+      "sha256": "778b9770a77f27ff31c921034b4310f448e8ac762e91ca287d7cb0eb4a490833"
+    },
+    {
+      "id": "scientific-255",
+      "imagePath": "images/page-dc728bd5-50a9-41e8-9e5a-d4b01e6664a2.png",
+      "sha256": "dab1e6e50b9f6cce70f088c4806a14db4710cf8e75415953d3a632211b8bffd9"
+    },
+    {
+      "id": "scientific-256",
+      "imagePath": "images/page-dca64e05-1ce6-49ee-857a-9b5d05a87357.png",
+      "sha256": "163f1dc05deecd29663f6c44e77ece3beb3ba001067b28c290a6200299dfb340"
+    },
+    {
+      "id": "scientific-257",
+      "imagePath": "images/page-dd5b0a99-4cc6-4fa9-ab63-a277947735b1.png",
+      "sha256": "972ab75a8b114570ccd3ed7209ed981eb8de70f6efc014a0ef5920effde42aca"
+    },
+    {
+      "id": "scientific-258",
+      "imagePath": "images/page-e13fef95-c179-4a0f-94f9-1cc970aab788.png",
+      "sha256": "a1f63360628eb6703288ab59fb5a6a6dcc77caf6613bdc92c3f9db44ddb01922"
+    },
+    {
+      "id": "scientific-259",
+      "imagePath": "images/page-e4053f20-e6e6-430e-83ef-db298a3199aa.png",
+      "sha256": "a8ac7985560151401106a593751e72e37deaa891a3d457c5596e77ca36e136a1"
+    },
+    {
+      "id": "scientific-260",
+      "imagePath": "images/page-e6c5454d-90ad-495c-85db-a416b7cd6452.png",
+      "sha256": "d28286e627314e31600381259d85c57645941a752144ca1480a87d3febf28ba3"
+    },
+    {
+      "id": "scientific-261",
+      "imagePath": "images/page-e721a819-6dbf-453a-a7ad-857c24f9aa3e.png",
+      "sha256": "185a251461a9616d11381897068c2b2a23db742a0eec992fd6a8d708237e0103"
+    },
+    {
+      "id": "scientific-262",
+      "imagePath": "images/page-e7681b54-2c4a-40a2-9abe-caebba01cefb.png",
+      "sha256": "e1acb6ebe468f599a31f8e6ac41d0d16a62fe47c09fa1185c6a7fe7eec07994a"
+    },
+    {
+      "id": "scientific-263",
+      "imagePath": "images/page-e9e8bc8e-e22d-4d1a-a3fb-5d175e5e4d70.png",
+      "sha256": "4248bdd7e9128b539ede8d0049f2d7025f07d4b533d5ff825c6c1c11b7aba227"
+    },
+    {
+      "id": "scientific-264",
+      "imagePath": "images/page-eff3dc3a-8d44-4c68-9c3a-55df4aaf1e36.png",
+      "sha256": "bb25a08dacf5bbd16904f98164e401ebd5d50d39ba57c15db2f4ffd8b02bdc95"
+    },
+    {
+      "id": "scientific-265",
+      "imagePath": "images/page-f108020f-edc5-4a27-85d9-d9d9c5d67309.png",
+      "sha256": "3dccd1fb3bb4378453fad59b6211400537d15fee881e732a94614bd7b00a6673"
+    },
+    {
+      "id": "scientific-266",
+      "imagePath": "images/page-f222e5f3-8628-47cd-a0b6-40f62123228f.png",
+      "sha256": "15ac1f3a7fddbc8417717099a29fd5ba3fc2e1aefda9bf54c27c98322d295e71"
+    },
+    {
+      "id": "scientific-267",
+      "imagePath": "images/page-f245e436-c16e-4d7c-8797-c473bf25880a.png",
+      "sha256": "ab1fbe162cfb999cb4516bb06d0f5349ce0d6db31a7d39cdd3aa307ddd747411"
+    },
+    {
+      "id": "scientific-268",
+      "imagePath": "images/page-f3e750d8-8201-4a22-9419-9776798b7a32.png",
+      "sha256": "cafb201fa9320670550a7dc4d18998f52de6af75b5391130f3fab6b3df0bfb82"
+    },
+    {
+      "id": "scientific-269",
+      "imagePath": "images/page-f46e72b1-865d-43e6-ab94-afae16c5f178.png",
+      "sha256": "5fdf0b14d8905eaee22c22b1330a1bdfd49d2f1f916d35a8929f70ebaebafdb2"
+    },
+    {
+      "id": "scientific-270",
+      "imagePath": "images/page-f5b824d0-be81-48a9-aae6-3060d11a6503.png",
+      "sha256": "27829b18028439b9245ed5001bf5a1c73280c19770ec1c2af8a7f39be99a279a"
+    },
+    {
+      "id": "scientific-271",
+      "imagePath": "images/page-f6b6cfb8-3bb5-4393-b3fb-70efef72aca5.png",
+      "sha256": "279254b2ef0d242ce1433938c646e4b35f6b1ff30a03ecd029274f96592ce93f"
+    },
+    {
+      "id": "scientific-272",
+      "imagePath": "images/page-f8c08102-a96d-4533-b3a1-dac6020513b5.png",
+      "sha256": "eff195732838e3b0c6483dcb9db9c6b3013680954cad4eb23315d72826d994d1"
+    },
+    {
+      "id": "scientific-273",
+      "imagePath": "images/page-f8fad378-8ee9-4bb0-b195-35a4d55f3113.png",
+      "sha256": "6cf0d46b125d4ae2ff17df642752cadade8a9676c5ed6ec3a9122b066c9030e2"
+    },
+    {
+      "id": "scientific-274",
+      "imagePath": "images/page-f9583127-1277-4424-be9d-35430e0aedd6.png",
+      "sha256": "ef878dbcbd458558b2cf322f4d4cab50fe1ad2ca7e8ab5996866ec2e5e12c605"
+    },
+    {
+      "id": "scientific-275",
+      "imagePath": "images/page-fb79f57d-9d7e-4129-a08c-6fc189e84a21.png",
+      "sha256": "8bd0903dd9ec1667c75aa1552dabc78deeb6533162e99caa00dc6e8571706133"
+    },
+    {
+      "id": "scientific-276",
+      "imagePath": "images/page-fd04ea51-677c-4de2-8e8e-adfd791e2957.png",
+      "sha256": "a4bf995e63c0b0b4a7056f7d6499b3d5e05bbe65468fae22486e459c0b0aa02e"
+    },
+    {
+      "id": "scientific-277",
+      "imagePath": "images/page-fd7003ba-9af2-4b60-8c45-1e2ac1c7f474.png",
+      "sha256": "9d4a673801a305ff3de65c047496a0d50108cfcae9ee923cd738c8d31fd3f1be"
+    },
+    {
+      "id": "scientific-278",
+      "imagePath": "images/scihub_AEM.01420-09.pdf_3.jpg",
+      "sha256": "bbf32dddddd08449eab6512b6ef57d50070b0174bdaa4e73a1ebe484baced177"
+    },
+    {
+      "id": "scientific-279",
+      "imagePath": "images/scihub_TNANO.2007.893575.pdf_0.jpg",
+      "sha256": "4517b4aa2367d570986b7e634decfc975272a96718e94f6d6f9c442e190c9055"
+    },
+    {
+      "id": "scientific-280",
+      "imagePath": "images/scihub_bloodadvances.2019030924.pdf_3.jpg",
+      "sha256": "690c23f41d81efaaaa4cd605e63a879ea6c294996eabeb21c80c0b3185df2cce"
+    },
+    {
+      "id": "scientific-281",
+      "imagePath": "images/scihub_c2gc35284b.pdf_6.jpg",
+      "sha256": "0c1b7f4779e1885475942cdca1ac4493f0d4fd1ce964d8c4af138efc8818092d"
+    },
+    {
+      "id": "scientific-282",
+      "imagePath": "images/scihub_carcin%2Fbgh032.pdf_2.jpg",
+      "sha256": "305d0ba3b689652ed763d3d501c54b6cfbf5ef54e1693f9ca675769eaadeeaea"
+    },
+    {
+      "id": "scientific-283",
+      "imagePath": "images/scihub_fmicb.2019.01892.pdf_2.jpg",
+      "sha256": "bdae93b4c14f4e21ed79641369f992139ab5c5e97aa9cc768a12350113a68284"
+    },
+    {
+      "id": "scientific-284",
+      "imagePath": "images/scihub_gbe%2Fevaa098.pdf_0.jpg",
+      "sha256": "cf063d3b167d4c206e6a3c7010d2f61919c6ee1c1beaf1fe5094d0781882417e"
+    },
+    {
+      "id": "scientific-285",
+      "imagePath": "images/scihub_iccwamtip51612.2020.9317329.pdf_4.jpg",
+      "sha256": "71b0209b48c9a5e38667d97146dd8fae2390e3744c32bdc0fb45da328e8f5869"
+    },
+    {
+      "id": "scientific-286",
+      "imagePath": "images/scihub_ie102256j.pdf_4.jpg",
+      "sha256": "bd3c8e56b512ddc5bd9abae4cec0951567d29e9b5dfa10977068e8f4c609a3a7"
+    },
+    {
+      "id": "scientific-287",
+      "imagePath": "images/scihub_ijcac.2012040101.pdf_5.jpg",
+      "sha256": "9bbd23d6550a75052239b1c58db04e9fe4ff260044501398284a2d34a9d1c2ba"
+    },
+    {
+      "id": "scientific-288",
+      "imagePath": "images/scihub_ijop.12033.pdf_5.jpg",
+      "sha256": "50cb35258722c1ba7e52bda274a4e439fa41c0e4e3913c4f24ea51ac17c76090"
+    },
+    {
+      "id": "scientific-289",
+      "imagePath": "images/scihub_j.1528-1167.2008.01552.x.pdf_3.jpg",
+      "sha256": "0e030589f920c1d3580a9ace99b3dd8632cfc564f029b46bc376921c7e7f0f34"
+    },
+    {
+      "id": "scientific-290",
+      "imagePath": "images/scihub_j.cbpb.2019.110324.pdf_6.jpg",
+      "sha256": "7aecb8e204932f055e04d7398371670e7a09e38ac22b9f31c992e15eea4424d3"
+    },
+    {
+      "id": "scientific-291",
+      "imagePath": "images/scihub_j.coisb.2017.11.013.pdf_0.jpg",
+      "sha256": "0e2da99fd16abfff46b10661e1f2488e717c51b1f03189aa191085e77bc22105"
+    },
+    {
+      "id": "scientific-292",
+      "imagePath": "images/scihub_j.conbuildmat.2019.117698.pdf_5.jpg",
+      "sha256": "f00953e66855cd47f5e94d511e4f987d365307ffa7bd5269b3f965da8a165e9f"
+    },
+    {
+      "id": "scientific-293",
+      "imagePath": "images/scihub_j.ejcts.2011.04.042.pdf_3.jpg",
+      "sha256": "9aa91bd80ca02b85af0890858cc4554267638a8cb4daa7179ce2a53b5ba2716c"
+    },
+    {
+      "id": "scientific-294",
+      "imagePath": "images/scihub_j.jallcom.2003.09.015.pdf_1.jpg",
+      "sha256": "b6de7934ec9aed2e8c22fc9dedc34946a366afbfe910de0cda752697cfee2026"
+    },
+    {
+      "id": "scientific-295",
+      "imagePath": "images/scihub_j.jmb.2003.10.009.pdf_4.jpg",
+      "sha256": "c1b487b1ec1bab305ce03d66725080e73e1224097936ffcbfb7cb5be4db0fb81"
+    },
+    {
+      "id": "scientific-296",
+      "imagePath": "images/scihub_j.jnutbio.2010.09.015.pdf_0.jpg",
+      "sha256": "f5eee990f4582095d34c989c0a80efcf1f348d0f0dfa7d3f29f130694f707469"
+    },
+    {
+      "id": "scientific-297",
+      "imagePath": "images/scihub_j.physe.2007.10.027.pdf_0.jpg",
+      "sha256": "b329c324d9aaf94106ff3c629c934f8553e34855a983dc91452ce9f12c708420"
+    },
+    {
+      "id": "scientific-298",
+      "imagePath": "images/scihub_jai.12343.pdf_3.jpg",
+      "sha256": "67dff010c1be26c33c6d0e54954d33b63cef658a1e59ee9544b2c854fdee75ee"
+    },
+    {
+      "id": "scientific-299",
+      "imagePath": "images/scihub_jb%2Fmvh022.pdf_1.jpg",
+      "sha256": "4707778e1606eb7f33e41c8cf3f33c66a950073d1693384138ef50b1dab4fb2e"
+    },
+    {
+      "id": "scientific-300",
+      "imagePath": "images/scihub_jee%2Ftoaa103.pdf_2.jpg",
+      "sha256": "a8bfe01e2f8ff78c4235fd3c9b5461cb885f2ea3d9ad0e4fe9da5e13e3cb3a79"
+    },
+    {
+      "id": "scientific-301",
+      "imagePath": "images/scihub_jgh.13044.pdf_2.jpg",
+      "sha256": "acbc8ed9d80fbf90ac76bb45658319cf573f871901ca48acf86f8efc8e0aa930"
+    },
+    {
+      "id": "scientific-302",
+      "imagePath": "images/scihub_jneurosci.16-15-04625.1996.pdf_2.jpg",
+      "sha256": "b080e90fdd8d4476187d2b4de16a06c2470202aece89a6db231fde7cfe40be62"
+    },
+    {
+      "id": "scientific-303",
+      "imagePath": "images/scihub_journal.pone.0166577.pdf_5.jpg",
+      "sha256": "514f39e747be4fe9a6ca035f45fe6436bd03701bc8e63867001416179f244cc0"
+    },
+    {
+      "id": "scientific-304",
+      "imagePath": "images/scihub_jp.2017.29.pdf_0.jpg",
+      "sha256": "773629a317124690318e1eeb7c3bf540bd73dcee4922c3c0c54ea3b05ee5d177"
+    },
+    {
+      "id": "scientific-305",
+      "imagePath": "images/scihub_jps.21547.pdf_7.jpg",
+      "sha256": "0b0b14f43e21fc9b57ce7c569312a4761e03fcf47185770e8d8eb5b6915f2627"
+    },
+    {
+      "id": "scientific-306",
+      "imagePath": "images/scihub_md.0000000000002934.pdf_0.jpg",
+      "sha256": "5cc6cad4d69dcb432b158f0382053ea1e8f3aeaf0139b2f0acdb4d233608cb36"
+    },
+    {
+      "id": "scientific-307",
+      "imagePath": "images/scihub_mol.66.4.921.pdf_1.jpg",
+      "sha256": "ed8c89a9be0e9d6ab3bbd8ddac50644b52bf7076de5a43c8a1656ee85727ed9d"
+    },
+    {
+      "id": "scientific-308",
+      "imagePath": "images/scihub_prrv.2001.0150.pdf_0.jpg",
+      "sha256": "e8fb7447ee4be174b6b568178e0a91e84504a90676318d74c6cb6ea1c3626772"
+    },
+    {
+      "id": "scientific-309",
+      "imagePath": "images/scihub_pssa.201330411.pdf_0.jpg",
+      "sha256": "8df01ed194a8a8100245870a55d0fb9d3e28fd437794fa38bbe4e3e7eae0cb1a"
+    },
+    {
+      "id": "scientific-310",
+      "imagePath": "images/scihub_s00381-021-05138-3.pdf_3.jpg",
+      "sha256": "519288cd624a4d0071586a6fa8ca8fed88aa31c9e7ec08d3f687d2129696880f"
+    },
+    {
+      "id": "scientific-311",
+      "imagePath": "images/scihub_s00586-010-1656-7.pdf_3.jpg",
+      "sha256": "9781cfe464b1d257347c0fcde468ab247ea1ff084c00ab9866fcddb701c70eb8"
+    },
+    {
+      "id": "scientific-312",
+      "imagePath": "images/scihub_s00784-003-0233-4.pdf_1.jpg",
+      "sha256": "5682071ca20d66e08f92c85b28900ff3f005afe56923b3b39fcc937745070095"
+    },
+    {
+      "id": "scientific-313",
+      "imagePath": "images/scihub_s00894-012-1568-z.pdf_2.jpg",
+      "sha256": "baaa470d0937a3c63925450ad266fcf2347d45b36658e60a3d664f915da8701a"
+    },
+    {
+      "id": "scientific-314",
+      "imagePath": "images/scihub_s11661-013-1726-7.pdf_2.jpg",
+      "sha256": "f0aa3028c5a5c4d92f5bc3dc6836e4375b2d98153a85bb66375419c6384026c2"
+    },
+    {
+      "id": "scientific-315",
+      "imagePath": "images/scihub_s12237-014-9873-7.pdf_4.jpg",
+      "sha256": "3c4028d6267981c8e650c3388a74c8f6a7988185a481524bca666993c662a2b8"
+    },
+    {
+      "id": "scientific-316",
+      "imagePath": "images/scihub_s12935-018-0683-z.pdf_0.jpg",
+      "sha256": "90c569ed886d222d4dd614648d03a657666076837dc9dada0baf1b5145680ba7"
+    },
+    {
+      "id": "scientific-317",
+      "imagePath": "images/yanbaopptmerge_0b41cf8ff07c565b2b3eed6b269c036bb41bc38effea5d0d11b90c69d07fac21.pdf_1.jpg",
+      "sha256": "7fa3267a11d955a394f4a78ebc5c5435867a036292f842ec376b3ccad195ee5a"
+    },
+    {
+      "id": "scientific-318",
+      "imagePath": "images/yanbaopptmerge_0c79d327060dbf9f1582d03c235dadb039533a19091d2c0d24f2ad95d267f79b.pdf_2.jpg",
+      "sha256": "db3b09727089da556f740c9e06674265d7e0603bd024aa1f15e5c0d75127ce8c"
+    },
+    {
+      "id": "scientific-319",
+      "imagePath": "images/yanbaopptmerge_0dd24976bcc395ad595cf73b411d627e14c19ba0299bb3fa0d8108993d079545.pdf_8.jpg",
+      "sha256": "1ea2be88a12bc4e97f83703c270544b9abef1e5eff0905fabd68dae69f82ea73"
+    },
+    {
+      "id": "scientific-320",
+      "imagePath": "images/yanbaopptmerge_11eeaa31ab6171a9d1ea55aeb0b167e51bffeaa8a83a97cb5e2c3fb7963bf1bf.pdf_7.jpg",
+      "sha256": "465be09deab707045a58499eabca87e2450bcbc97baee69e6adaa96225fe03bb"
+    },
+    {
+      "id": "scientific-321",
+      "imagePath": "images/yanbaopptmerge_2325ef43385f09f3c8539d0f817edf9b39a086325d416958e4b481904f9867db.pdf_12.jpg",
+      "sha256": "44084ac553aa0f1a5508fff7fd22295ea81bdf6851b039c8f45f3ab32dd325b7"
+    },
+    {
+      "id": "scientific-322",
+      "imagePath": "images/yanbaopptmerge_2b8553b00244437fa3e502aa2d3d319ed74459a1e264a4fdd9ecc14ce46609d5.pdf_2.jpg",
+      "sha256": "32cbec9ef808628ec509d558cf6cf9f08ea44d50191baae5aad2ba75c7087489"
+    },
+    {
+      "id": "scientific-323",
+      "imagePath": "images/yanbaopptmerge_2d0d871a074b4818b16b4425cafac8dd221d91fbde8deae28efba2af50359c50.pdf_1.jpg",
+      "sha256": "cbc3f329672306bd9983ff46a7dc80b931b65416813d94ef08f3bbbd84155f38"
+    },
+    {
+      "id": "scientific-324",
+      "imagePath": "images/yanbaopptmerge_2f4902871606698497c53ccb18d3fec2f83d05047d883cd65bbce26bfb27bcd2.pdf_1.jpg",
+      "sha256": "dc7654ea7276e36d4fd3a20db9d891b9ae7db2d25cb77f4cbdfa2860cbd3235b"
+    },
+    {
+      "id": "scientific-325",
+      "imagePath": "images/yanbaopptmerge_3f514841b9bba3e68710fde7af9562d36a424736a356ece18bb5eea86b43ada5.pdf_15.jpg",
+      "sha256": "eadba860f55264016dff75ee2bfb9985ebc4e5537e31a70bc81806e9712cf9c0"
+    },
+    {
+      "id": "scientific-326",
+      "imagePath": "images/yanbaopptmerge_4304d65458262c3161cf5d0440c6a56851222ce1da3d7886cdd2320ce2222c4a.pdf_7.jpg",
+      "sha256": "9e427331dc32d84894a3b86ab8a4156ca520984693e1afddadcb4aec766d3d4c"
+    },
+    {
+      "id": "scientific-327",
+      "imagePath": "images/yanbaopptmerge_46f23989f000d2a83058955c99cdcc1220d6649f16db4f5719d356aa5ced01bc.pdf_7.jpg",
+      "sha256": "96b3e6a9a66f5018dcbe9ccf13d2c8c2b9335560e1945370b5aead83d4e785f4"
+    },
+    {
+      "id": "scientific-328",
+      "imagePath": "images/yanbaopptmerge_51e549c0d1a2669ac976409fcf99ce91908b1e0a07f0fc70d92263abf6d07f18.pdf_1.jpg",
+      "sha256": "85454e4bae406c281b4486c7f99b3665be4020c3dbdbd35aa8f4023cec7fddf8"
+    },
+    {
+      "id": "scientific-329",
+      "imagePath": "images/yanbaopptmerge_5473246b8da789b9bfdeef53a70c4d72afd480415d5cbcedb83d105856710328.pdf_8.jpg",
+      "sha256": "9cdab800bb57d1beda55c1ad2d3508ae7b6027fd810fd5eb09df8bfbdecfb775"
+    },
+    {
+      "id": "scientific-330",
+      "imagePath": "images/yanbaopptmerge_56df5dde920f95a11bf5b9d69353fbd82045f3fec4f553bc928a0b50c136f99a.pdf_3.jpg",
+      "sha256": "21eb842485febf5cfe13908e249ce189aa42d0bc0dedc2ec691f330618811403"
+    },
+    {
+      "id": "scientific-331",
+      "imagePath": "images/yanbaopptmerge_6ffacf656934424ef14b39750f1d93926693dd8b7fa925859f1349d253ba2566.pdf_2.jpg",
+      "sha256": "9957fd203be5e160aef44512b481862ac5fa7e72836c0c2522adef0355e3e92f"
+    },
+    {
+      "id": "scientific-332",
+      "imagePath": "images/yanbaopptmerge_70a45bf10fb90ae0c91d44a11e0a97a8f9515d85626b54eb50a80b6146e5c2bf.pdf_10.jpg",
+      "sha256": "be448d5cb53b229f432cb78c8419ceacdef1180f766a4e5260dd7c46bc1949b0"
+    },
+    {
+      "id": "scientific-333",
+      "imagePath": "images/yanbaopptmerge_7c6e8be0695a66c716176c95257a76e940f7d08d8227b37e9ee47142eca6b448.pdf_5.jpg",
+      "sha256": "4749b09e7401391f8385a794d1fd19103b4fc60200dd9ec1318f51e3bb443a02"
+    },
+    {
+      "id": "scientific-334",
+      "imagePath": "images/yanbaopptmerge_903cf6cd7820b5463e95c5aaab9f16134f9853cd7963567497337527e73b9bcc.pdf_7.jpg",
+      "sha256": "1cc7b960f6a52896aca2046d226aa5ca02d718a65395e50c6a3e7f114bf18785"
+    },
+    {
+      "id": "scientific-335",
+      "imagePath": "images/yanbaopptmerge_a822e4cc59988e86ed9654dff1252cc3593961abf1aee12087c522068f2c54e2.pdf_2.jpg",
+      "sha256": "eddfa05faa0e10d9e08dc07c4c70760de0ed0e250ebbeb8f71f59936f844e3f1"
+    },
+    {
+      "id": "scientific-336",
+      "imagePath": "images/yanbaopptmerge_aec1bf4ddb8fb4996b0512e90b3bfb31c9b151919f5d7b4a4f658f4b1f762b9e.pdf_2.jpg",
+      "sha256": "cb668cc30a931530e3c5c1ef825e8c7d6ae84b4b5f7b7eac690256fe7c42f1d8"
+    },
+    {
+      "id": "scientific-337",
+      "imagePath": "images/yanbaopptmerge_b96c77724a4dcf5e1c535d2d4e8f77b26255cf5c4561d37e11fcff640a74919a.pdf_7.jpg",
+      "sha256": "627e0938a5c1b74579f7f6753745e028f149d5cac76f8713a583397153a13361"
+    },
+    {
+      "id": "scientific-338",
+      "imagePath": "images/yanbaopptmerge_baa6d02928efcac46ccf7dfd3859de565cfb0bea918ae0ec0eed50944a7c20b4.pdf_11.jpg",
+      "sha256": "18d6e2b0db7615dc642d948c354756b9f1fa976148f268d675ede04ba87a3851"
+    },
+    {
+      "id": "scientific-339",
+      "imagePath": "images/yanbaopptmerge_bde265c4886a63cc9a96575991522f2abfce961325fcd4884fabd9a79c423ffa.pdf_2.jpg",
+      "sha256": "f3b4009405db2799dffca668d08d9cfca33338548a04aa49d09614358fbdbe3f"
+    },
+    {
+      "id": "scientific-340",
+      "imagePath": "images/yanbaopptmerge_c75b0a56d8f1b31d04fbe97f776244f25f5238f6cada15fb4007f8bfb17bdf9f.pdf_1.jpg",
+      "sha256": "a274aa22a6f5c1a650448efe5bbd98c3505c515dbe92c8e292984e5e08cc66fe"
+    },
+    {
+      "id": "scientific-341",
+      "imagePath": "images/yanbaopptmerge_c894b375daca22d041c8a35946295d0a73d6589ad7c3d1d39d8664a2666372bf.pdf_10.jpg",
+      "sha256": "fd9ffda603b422e575fbdfce14166a9d9657822b472a737021d52a50eab17282"
+    },
+    {
+      "id": "scientific-342",
+      "imagePath": "images/yanbaopptmerge_cf41c3f5ddc7509959ef643ca6308d5ae90f3e87708855d6770df564b749fe7b.pdf_3.jpg",
+      "sha256": "b96bbf617b52a7626ceccf1bc15d4fc74c2500df30a90882154daf990e8fce00"
+    },
+    {
+      "id": "scientific-343",
+      "imagePath": "images/yanbaopptmerge_e3b48594d5a2a6dc86b51244737f24867a0c1781e9f0e4fb52d96bbc6f9d95c7.pdf_3.jpg",
+      "sha256": "a8557f54f3fee7294c2c5578fd4eed70e88bcbaec6c4ce2383829e1e6b72be2e"
+    },
+    {
+      "id": "scientific-344",
+      "imagePath": "images/yanbaopptmerge_ee19df4a08e3d07ac1190446f5b3dd3f25438c661b87cf4fbb9040ac5fac443b.pdf_1.jpg",
+      "sha256": "d692cc3d2cb06631c290423447a369810dde0feccf3e66b1f452c24354eeba8f"
+    },
+    {
+      "id": "scientific-345",
+      "imagePath": "images/yanbaopptmerge_fa82190001969f29ed969fe5034956ba12f782219a8345468bb6593cba7ffc48.pdf_2.jpg",
+      "sha256": "d7863e9724fe1025bcccba268d269dab3623ac374c288194bbf90e62c48519b2"
+    },
+    {
+      "id": "scientific-346",
+      "imagePath": "images/yanbaor2_1492d25d79af850815ea449254ea62418c3c7fd582792b5191e1879671ba1219.pdf_88.jpg",
+      "sha256": "c1c5d753533e70438561f01e2f89bd5042e990f1d45fb935ee044c74e34af7b5"
+    },
+    {
+      "id": "scientific-347",
+      "imagePath": "images/yanbaor2_8072f7ea9b3083ff5e8f9bfbba591771e61115039c96fda1c8ea391a7570f098.pdf_5.jpg",
+      "sha256": "c61e5903bf2178c54cea90cfb34c3f3933e63eb505a23057a35bff48c25335a5"
+    }
+  ],
+  "exclusions": [],
+  "automaticAdoption": false,
+  "performanceQualification": false,
+  "acceptance": "Apply unchanged content margins and v3 formula-number measurement contract. Caption and reading-order gates unchanged. Full-cohort and original three-page MPS comparisons must both pass."
+}
