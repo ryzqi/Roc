@@ -15,7 +15,7 @@ before(async () => {
         external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: '.runtime/tmp'})));
 });
 const hash = value => createHash('sha256').update(value).digest('hex');
-const model = {engine: 'ovisocr3-mlx', revision: '5b252386ba615bd464a5a26597560eaba87dae5c', quantization: '8bit',
+const model = {engine: 'ovisocr3-mlx', revision: '702a71f233a208be050b12779ee29fdd1eb2dab3', quantization: '8bit',
   groupSize: 64, visionPrecision: 'bfloat16', device: 'metal', installationReceiptSha256: 'a'.repeat(64),
   inferenceSha256: 'b'.repeat(64), promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1'};
 const block = (category, content, bbox) => ({category, content, bbox});

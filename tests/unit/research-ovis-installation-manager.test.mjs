@@ -14,7 +14,7 @@ before(async () => {
 });
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const signal = new AbortController().signal;
-const revision = '5b252386ba615bd464a5a26597560eaba87dae5c';
+const revision = '702a71f233a208be050b12779ee29fdd1eb2dab3';
 
 // Tiny real inventory exercises the production verifier. It never starts Python or MLX.
 async function fixture(operation) {
@@ -27,11 +27,11 @@ async function fixture(operation) {
   const prepare = async request => {
     request.onProgress?.({phase: 'verifying'});
     const generation = await mkdtemp(join(request.parent, 'ovis-install-'));
-    for (const name of ['model-8bit', 'runtime', 'source', 'spec', 'tools']) await mkdir(join(generation, name));
+    for (const name of ['model-8bit', 'runtime', 'spec', 'tools']) await mkdir(join(generation, name));
     await symlink(executable, join(generation, 'runtime/python'));
     await writeFile(join(generation, 'model-8bit/weights'), 'weights');
     const inferenceScript = join(generation, 'spec/parse.py'); await writeFile(inferenceScript, '# inference');
-    await writeFile(join(generation, 'spec/manifest.json'), JSON.stringify({model: {revision}}));
+    await writeFile(join(generation, 'spec/prequantized.lock.json'), JSON.stringify({model: {revision}}));
     const files = {};
     const visit = async directory => {
       for (const name of await readdir(directory)) {
@@ -42,10 +42,10 @@ async function fixture(operation) {
       }
     };
     await visit(generation);
-    const bytes = JSON.stringify({schemaVersion: 1, status: 'converted-unvalidated', files,
+    const bytes = JSON.stringify({schemaVersion: 2, status: 'installed', files,
       python: {basePrefix: pythonBase, executable, executableSha256: hash('python'), sharedLibrary,
         sharedLibrarySha256: hash('library'), pythonVersion: '3.14.10', implementation: 'cpython', machine: 'arm64', freeThreaded: false},
-      dependencies: {mlx: '0.32.5', 'mlx-vlm': '0.8.1'}, conversion: {quantization: {bits: 8, group_size: 64, mode: 'affine'},
+      dependencies: {mlx: '0.32.5', 'mlx-vlm': '0.8.1'}, model: {repository: 'fwgpiyawudk/OvisOCR3-mlx-8bit', revision, quantization: {bits: 8, group_size: 64, mode: 'affine'},
         visionDtype: 'bfloat16', visionTensors: 153, quantizedLanguageModules: 187}});
     await writeFile(join(generation, 'receipt.json'), bytes);
     return inspect({root: generation, pythonBase, inferenceScript, identity: {engine: 'ovisocr3-mlx', revision,

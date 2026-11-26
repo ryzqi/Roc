@@ -3,7 +3,7 @@ import {z} from 'zod';
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Identity comes from a verified installation lease, never from model-generated text. */
 export const ovisModelIdentitySchema = z.object({
-  engine: z.literal('ovisocr3-mlx'), revision: z.literal('5b252386ba615bd464a5a26597560eaba87dae5c'),
+  engine: z.literal('ovisocr3-mlx'), revision: z.literal('702a71f233a208be050b12779ee29fdd1eb2dab3'),
   quantization: z.literal('8bit'), groupSize: z.literal(64), visionPrecision: z.literal('bfloat16'),
   device: z.literal('metal'), installationReceiptSha256: hash, inferenceSha256: hash,
   promptSha256: z.literal('1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1')

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {lstat, mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
 import {isAbsolute, join} from 'node:path';
 import {z} from 'zod';
-import sourceLock from '../../../../resources/ovis-ocr/manifest.json';
+import sourceLock from '../../../../resources/ovis-ocr/prequantized.lock.json';
 import wheelLock from '../../../../resources/ovis-downloads/wheels.lock.json';
 import {downloadVerified, fileSha256, type DownloadProgress} from '../../../../scripts/research/download-asset';
 
@@ -24,7 +24,7 @@ export const ovisDownloadTarget = Object.freeze({...pinned.target});
 
 function validateAsset(asset: OvisDownloadAsset): void {
   const parts = asset.path.split('/'), url = new URL(asset.url);
-  if (!['source', 'wheels'].includes(parts[0]) || parts.length < 2 ||
+  if (!['model-8bit', 'wheels'].includes(parts[0]) || parts.length < 2 ||
       parts.some(part => !/^[A-Za-z0-9_.+-]+$/u.test(part) || part === '.' || part === '..') ||
       url.protocol !== 'https:' || url.username || url.password || url.port || url.search || url.hash ||
       !digest.safeParse(asset.sha256).success || !Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > 2 * 1024 ** 3 ||
@@ -56,7 +56,7 @@ export function verifyOvisRequirements(bytes: Uint8Array): void {
 
 export function ovisDownloadAssets(): readonly OvisDownloadAsset[] {
   const assets: OvisDownloadAsset[] = [
-    ...sourceLock.model.files.map(file => ({path: `source/${file.path}`, size: file.size, sha256: file.sha256,
+    ...sourceLock.model.files.map(file => ({path: `model-8bit/${file.path}`, size: file.size, sha256: file.sha256,
       url: `https://huggingface.co/${sourceLock.model.repository}/resolve/${sourceLock.model.revision}/${file.path}`})),
     ...pinned.wheels.map(wheel => ({path: `wheels/${wheel.filename}`, size: wheel.size, sha256: wheel.sha256, url: wheel.url}))
   ];

@@ -11,13 +11,13 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 async function fixture() {
   const parent = await mkdtemp('/private/tmp/roc-ovis-store-test-'), root = join(parent, 'installed'), pythonBase = join(parent, 'python');
   await mkdir(root); await mkdir(pythonBase);
-  for (const area of ['model-8bit', 'runtime', 'source', 'spec', 'tools']) await mkdir(join(root, area));
+  for (const area of ['model-8bit', 'runtime', 'spec', 'tools']) await mkdir(join(root, area));
   const executable = join(pythonBase, 'python'), sharedLibrary = join(pythonBase, 'libpython.dylib'), inferenceScript = join(parent, 'infer.py');
   await writeFile(executable, 'python'); await writeFile(sharedLibrary, 'library'); await writeFile(inferenceScript, '# inference');
   await symlink(executable, join(root, 'runtime/python'));
   await writeFile(join(root, 'model-8bit/weights'), 'weights');
-  const revision = '5b252386ba615bd464a5a26597560eaba87dae5c';
-  await writeFile(join(root, 'spec/manifest.json'), JSON.stringify({model: {revision}}));
+  const revision = '702a71f233a208be050b12779ee29fdd1eb2dab3';
+  await writeFile(join(root, 'spec/prequantized.lock.json'), JSON.stringify({model: {revision}}));
   const files = {};
   async function visit(directory) {
     for (const name of await readdir(directory)) {
@@ -28,10 +28,10 @@ async function fixture() {
     }
   }
   await visit(root);
-  const receipt = {schemaVersion: 1, status: 'converted-unvalidated', files,
+  const receipt = {schemaVersion: 2, status: 'installed', files,
     python: {basePrefix: pythonBase, executable, executableSha256: hash('python'), sharedLibrary, sharedLibrarySha256: hash('library'),
       pythonVersion: '3.14.10', implementation: 'cpython', machine: 'arm64', freeThreaded: false},
-    dependencies: {mlx: '0.32.5', 'mlx-vlm': '0.8.1'}, conversion: {quantization: {bits: 8, group_size: 64, mode: 'affine'},
+    dependencies: {mlx: '0.32.5', 'mlx-vlm': '0.8.1'}, model: {repository: 'fwgpiyawudk/OvisOCR3-mlx-8bit', revision, quantization: {bits: 8, group_size: 64, mode: 'affine'},
       visionDtype: 'bfloat16', visionTensors: 153, quantizedLanguageModules: 187}};
   const receiptBytes = Buffer.from(JSON.stringify(receipt)); await writeFile(join(root, 'receipt.json'), receiptBytes);
   const identity = {engine: 'ovisocr3-mlx', revision, quantization: '8bit', groupSize: 64, visionPrecision: 'bfloat16', device: 'metal',
@@ -90,8 +90,8 @@ test('malformed inventories and external runtime roots fail even with a caller-p
       if (mode === 'traversal') f.receipt.files['../outside'] = {type: 'file', mode: 420, size: 0, sha256: hash('')};
       if (mode === 'external') f.receipt.python.executable = f.input.inferenceScript;
       if (mode === 'revision') {
-        const path = join(f.root, 'spec/manifest.json'), bytes = Buffer.from(JSON.stringify({model: {revision: 'bad'}}));
-        await writeFile(path, bytes); f.receipt.files['spec/manifest.json'] = {...f.receipt.files['spec/manifest.json'], size: bytes.length, sha256: hash(bytes)};
+        const path = join(f.root, 'spec/prequantized.lock.json'), bytes = Buffer.from(JSON.stringify({model: {revision: 'bad'}}));
+        await writeFile(path, bytes); f.receipt.files['spec/prequantized.lock.json'] = {...f.receipt.files['spec/prequantized.lock.json'], size: bytes.length, sha256: hash(bytes)};
       }
       const bytes = Buffer.from(JSON.stringify(f.receipt)); await writeFile(join(f.root, 'receipt.json'), bytes);
       f.input.identity.installationReceiptSha256 = hash(bytes);

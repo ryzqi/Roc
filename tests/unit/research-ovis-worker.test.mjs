@@ -13,7 +13,7 @@ async function fixture() {
   const root = await mkdtemp('/private/tmp/roc-ovis-worker-test-');
   const script = join(root, 'infer.py'), receipt = Buffer.from('{}'), code = Buffer.from('# fixture\n');
   await writeFile(script, code); await writeFile(join(root, 'receipt.json'), receipt);
-  const identity = {engine: 'ovisocr3-mlx', revision: '5b252386ba615bd464a5a26597560eaba87dae5c',
+  const identity = {engine: 'ovisocr3-mlx', revision: '702a71f233a208be050b12779ee29fdd1eb2dab3',
     quantization: '8bit', groupSize: 64, visionPrecision: 'bfloat16', device: 'metal',
     installationReceiptSha256: hash(receipt), inferenceSha256: hash(code),
     promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1'};
@@ -42,7 +42,7 @@ async function respond(request) {
   }
   const report = {settings: {temperature: 0, maxTokens: 16384, enableThinking: false, minPixels: 200704,
     maxPixels: 8294400, seed: 0, repetitionPenalty: 1.03, repetitionContextSize: 20}, schemaVersion: 1, status: 'completed', variant: '8bit',
-    revision: '5b252386ba615bd464a5a26597560eaba87dae5c', receiptSha256: wire.receiptSha256,
+    revision: '702a71f233a208be050b12779ee29fdd1eb2dab3', receiptSha256: wire.receiptSha256,
     evaluatorSha256: wire.inferenceSha256, promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1',
     network: 'denied-by-seatbelt', pagesManifestSha256: hash(manifestBytes), pages};
   await writeFile(join(wire.output, 'report.json'), JSON.stringify(report));

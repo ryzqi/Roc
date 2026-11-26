@@ -7,7 +7,7 @@ progress. A durable operation marker also excludes other main processes and
 preserves an unresolved reservation after the owning host exits.
 
 Installation delegates to the verified preparation transaction: fixed official
-sources and wheels, offline private environment, controlled 8-bit conversion,
+sources and wheels, offline private environment, controlled 8-bit downloaded weight verification,
 and complete inventory verification. It publishes `active.json` exclusively only
 after the generation is complete. The selection pins parent and generation
 filesystem identities, the managed interpreter path and complete model identity.

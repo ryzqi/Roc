@@ -10,12 +10,15 @@ const content = Buffer.from('trusted fixture wheel'), sha256 = createHash('sha25
 const assets = [{path: 'wheels/fixture-1-py3-none-any.whl', size: content.length, sha256,
   url: 'https://files.pythonhosted.org/packages/fixture-1-py3-none-any.whl'}];
 
-test('all immutable source and wheel downloads derive from the existing lock without new versions', async () => {
+test('prequantized downloads are pinned with no original weights or remote executable code', async () => {
   const lock = await readFile('resources/ovis-ocr/requirements.lock');
   api.verifyOvisRequirements(lock);
   assert.throws(() => api.verifyOvisRequirements(Buffer.concat([lock, Buffer.from('# changed')])));
   const actual = api.ovisDownloadAssets();
-  assert.equal(actual.length, 96);
+  assert.equal(actual.length, 97);
+  assert.ok(actual.every(asset => !asset.path.startsWith('source/') && !asset.path.endsWith('.py')));
+  assert.equal(actual.find(asset => asset.path === 'model-8bit/model.safetensors').sha256,
+    '9fd155c8fbd83af37007e736099a60e927de72e52b6634758d0e4b0d97391fd8');
   assert.equal(actual.filter(a => a.path.startsWith('wheels/')).reduce((n,a) => n+a.size, 0), 199429047);
   assert.equal(api.ovisDownloadTarget.minimumMacOS, '15.0');
 });

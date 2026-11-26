@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-REVISION = "5b252386ba615bd464a5a26597560eaba87dae5c"
+REVISION = "702a71f233a208be050b12779ee29fdd1eb2dab3"
 PROMPT_SHA256 = "1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1"
 OFFLINE_PROFILE = "(version 1)(allow default)(deny network*)"
 MAX_TOKENS = 16384
@@ -134,9 +134,9 @@ def read_pages(path: Path) -> list[dict]:
 
 def verify_installation(root: Path) -> tuple[Path, str, dict]:
     receipt = strict_json((root / "receipt.json").read_text(encoding="utf-8"))
-    if not isinstance(receipt, dict) or receipt.get("status") != "converted-unvalidated":
+    if not isinstance(receipt, dict) or receipt.get("status") != "installed" or receipt.get("schemaVersion") != 2:
         raise ValueError("Expected a complete preparation receipt")
-    manifest = strict_json((root / "spec/manifest.json").read_text(encoding="utf-8"))
+    manifest = strict_json((root / "spec/prequantized.lock.json").read_text(encoding="utf-8"))
     if manifest["model"]["revision"] != REVISION:
         raise ValueError("Unexpected official model revision")
     if platform.python_version() != "3.14.10" or Path(sys.prefix).resolve() != (root / "runtime").resolve():
@@ -171,7 +171,7 @@ def verify_installation(root: Path) -> tuple[Path, str, dict]:
             raise ValueError(f"Installation directory changed: {name}")
     if importlib.metadata.version("mlx-vlm") != "0.8.1" or importlib.metadata.version("mlx") != "0.32.5":
         raise ValueError("Unexpected MLX runtime versions")
-    prompt_path = root / "source/prompts/document_structured.txt"
+    prompt_path = root / "model-8bit/prompts/document_structured.txt"
     if digest(prompt_path) != PROMPT_SHA256:
         raise ValueError("Official document_structured prompt changed")
     return root / model_name, prompt_path.read_text(encoding="utf-8"), receipt
@@ -265,7 +265,7 @@ def parse_document(args: argparse.Namespace) -> int:
                                     local_files_only=True)
             mx.synchronize()
             report["loadSeconds"] = time.perf_counter() - start
-            generation = strict_json((args.installation / "source/generation_config.json").read_text(encoding="utf-8"))
+            generation = strict_json((args.installation / "model-8bit/generation_config.json").read_text(encoding="utf-8"))
             eos_ids = generation["eos_token_id"]
             if eos_ids != [248044, 248046]:
                 raise ValueError("Official EOS ids changed")

@@ -13,13 +13,15 @@ const entrySchema = z.discriminatedUnion('type', [
   z.object({type: z.literal('directory'), mode}).strict(),
   z.object({type: z.literal('symlink'), mode, target: z.string().min(1)}).strict()
 ]);
-const receiptSchema = z.object({schemaVersion: z.literal(1), status: z.literal('converted-unvalidated'),
+const receiptSchema = z.object({schemaVersion: z.literal(2), status: z.literal('installed'),
   python: z.object({basePrefix: z.string(), executable: z.string(), executableSha256: digest,
     sharedLibrary: z.string(), sharedLibrarySha256: digest, pythonVersion: z.literal('3.14.10'),
     implementation: z.literal('cpython'), machine: z.literal('arm64'), freeThreaded: z.literal(false)}),
   dependencies: z.record(z.string(), z.string()),
-  conversion: z.object({quantization: z.object({bits: z.literal(8), group_size: z.literal(64), mode: z.literal('affine')}),
-    visionDtype: z.literal('bfloat16'), visionTensors: z.number().int().positive(), quantizedLanguageModules: z.number().int().positive()}),
+  model: z.object({repository: z.literal('fwgpiyawudk/OvisOCR3-mlx-8bit'),
+    revision: z.literal('702a71f233a208be050b12779ee29fdd1eb2dab3'),
+    quantization: z.object({bits: z.literal(8), group_size: z.literal(64), mode: z.literal('affine')}),
+    visionDtype: z.literal('bfloat16')}),
   files: z.record(z.string(), entrySchema)
 });
 const sameFile = (before: Awaited<ReturnType<typeof lstat>>, after: Awaited<ReturnType<typeof lstat>>): boolean =>
@@ -61,8 +63,8 @@ export async function inspectOvisInstallation(input: OvisWorkerInstallation, sig
   }
   const receipt = receiptSchema.parse(JSON.parse(bytes.toString('utf8')));
   const names = Object.keys(receipt.files), roots = new Set(names.map(name => name.split('/')[0]));
-  if (names.length === 0 || names.length > 100_000 || ['model-8bit', 'runtime', 'source', 'spec', 'tools'].some(name => !roots.has(name)) ||
-      roots.size !== 5 || names.some(name => name.split('/').some(part => !part || part === '.' || part === '..') ||
+  if (names.length === 0 || names.length > 100_000 || ['model-8bit', 'runtime', 'spec', 'tools'].some(name => !roots.has(name)) ||
+      roots.size !== 4 || names.some(name => name.split('/').some(part => !part || part === '.' || part === '..') ||
         isAbsolute(name) || name.includes('\\') || /[\u0000-\u001f]/u.test(name))) {
     throw new Error('research_ovis_installation_inventory_invalid');
   }
@@ -106,8 +108,8 @@ export async function inspectOvisInstallation(input: OvisWorkerInstallation, sig
   await visit(root);
   if (seen.size !== names.length) throw new Error('research_ovis_installation_inventory_changed');
   await verifyFile(receiptPath, identity.installationReceiptSha256, signal, receiptSize);
-  const manifest = JSON.parse((await readFile(join(root, 'spec/manifest.json'))).toString('utf8'));
-  if (manifest.model?.revision !== identity.revision) throw new Error('research_ovis_installation_model_invalid');
+  const manifest = JSON.parse((await readFile(join(root, 'spec/prequantized.lock.json'))).toString('utf8'));
+  if (manifest.model?.revision !== identity.revision || receipt.model.revision !== identity.revision) throw new Error('research_ovis_installation_model_invalid');
   return {installation: {root, pythonBase, inferenceScript: await realpath(input.inferenceScript), identity},
     entries: seen.size, bytes: installedBytes, qualityQualified: false};
 }

@@ -5,10 +5,9 @@ import {isAbsolute, join, relative, sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileSha256} from '../../../../scripts/research/download-asset';
 import runtimePin from '../../../../resources/research-runtime/python-tools.lock.json';
-import sourcePin from '../../../../resources/ovis-ocr/manifest.json';
+import sourcePin from '../../../../resources/ovis-ocr/prequantized.lock.json';
 import {ovisDownloadAssets, withOvisDownloads, verifyOvisRequirementsFile, type OvisDownloadProgress} from './ovis-downloads';
 import {installOvisPackages} from './ovis-package-installer';
-import {convertOvisModel} from './ovis-conversion';
 import {inspectOvisInstallation, type OvisInstallationInspection} from './ovis-model-store';
 import type {ManagedPythonRuntime} from './python-runtime-store';
 
@@ -50,7 +49,7 @@ async function inventory(root: string, python: string, signal: AbortSignal): Pro
   return entries;
 }
 
-export type OvisInstallationProgress = {phase: 'creating_runtime' | 'installing_wheels' | 'converting' | 'verifying'} |
+export type OvisInstallationProgress = {phase: 'creating_runtime' | 'installing_wheels' | 'verifying'} |
   OvisDownloadProgress;
 export type OvisInstallationInput = {
   /** Caller serializes preparations and supplies the freshly verified managed interpreter. */
@@ -77,7 +76,7 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
   }
   await verifyOvisRequirementsFile(join(input.specification, 'requirements.lock'));
   const specification = new Map<string, {bytes: Buffer; sha256: string}>();
-  for (const name of ['manifest.json', 'requirements.in', 'requirements.lock', 'convert.py', 'parse.py']) {
+  for (const name of ['prequantized.lock.json', 'requirements.in', 'requirements.lock', 'parse.py']) {
     const path = join(input.specification, name), info = await lstat(path);
     if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 1024 ** 2) {
       throw new Error('research_ovis_installation_spec_invalid');
@@ -93,7 +92,7 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
         requirements: join(input.specification, 'requirements.lock'), signal, projectId: input.projectId,
         onPhase: phase => input.onProgress?.({phase})});
       // All source bytes belong to this transaction; the bundle no longer needs them.
-      await rename(join(bundle.root, 'source'), join(root, 'source'));
+      await rename(join(bundle.root, 'model-8bit'), join(root, 'model-8bit'));
       const spec = join(root, 'spec'); await mkdir(spec, {mode: 0o700});
       for (const [name, file] of specification) await writeFile(join(spec, name), file.bytes, {flag: 'wx', mode: 0o600});
       await mkdir(join(root, 'tools'), {mode: 0o700});
@@ -101,32 +100,27 @@ export async function prepareOvisInstallation(input: OvisInstallationInput,
       if (await fileSha256(join(root, 'tools/uv'), signal) !== runtimePin.uv.binarySha256) {
         throw new Error('research_ovis_installation_uv_changed');
       }
-      const attempt = join(root, 'scratch/conversion'); await mkdir(attempt, {mode: 0o700});
-      input.onProgress?.({phase: 'converting'});
-      const converted = await convertOvisModel({runtime, packagesRoot: installed.runtime, source: join(root, 'source'),
-        specification: spec, destination: attempt, signal, projectId: input.projectId});
       signal.throwIfAborted();
-      await rename(converted.model, join(root, 'model-8bit'));
-      await rm(join(root, 'scratch'), {recursive: true});
       input.onProgress?.({phase: 'verifying'});
       const library = join(runtime.prefix, 'lib/libpython3.14.dylib');
       const libraryInfo = await lstat(library);
       if (!libraryInfo.isFile() || libraryInfo.isSymbolicLink() || libraryInfo.nlink !== 1) {
         throw new Error('research_ovis_installation_runtime_invalid');
       }
-      const receipt = {schemaVersion: 1, status: 'converted-unvalidated', createdAt: new Date().toISOString(),
+      const receipt = {schemaVersion: 2, status: 'installed', createdAt: new Date().toISOString(),
         python: {basePrefix: runtime.prefix, executable: runtime.executable, executableSha256: runtimePin.python.executable.sha256,
           sharedLibrary: library, sharedLibrarySha256: await fileSha256(library, signal),
           pythonVersion: runtime.version, implementation: 'cpython', machine: 'arm64', freeThreaded: false},
         managedRuntimeReceiptSha256: runtime.receiptHash, dependencies: installed.packages,
         specSha256: Object.fromEntries([...specification].map(([name, file]) => [name, file.sha256])),
-        conversion: converted.conversion, files: await inventory(root, runtime.executable, signal)};
+        model: {repository: sourcePin.model.repository, revision: sourcePin.model.revision,
+          quantization: sourcePin.model.quantization, visionDtype: sourcePin.model.visionDtype}, files: await inventory(root, runtime.executable, signal)};
       const bytes = Buffer.from(JSON.stringify(receipt, null, 2) + '\n');
       signal.throwIfAborted();
       await writeFile(join(root, 'receipt.json'), bytes, {flag: 'wx', mode: 0o600});
       const inspected = await inspectOvisInstallation({root, pythonBase: runtime.prefix,
         inferenceScript: join(spec, 'parse.py'), identity: {engine: 'ovisocr3-mlx', revision: sourcePin.model.revision as
-          '5b252386ba615bd464a5a26597560eaba87dae5c', quantization: '8bit', groupSize: 64, visionPrecision: 'bfloat16', device: 'metal',
+          '702a71f233a208be050b12779ee29fdd1eb2dab3', quantization: '8bit', groupSize: 64, visionPrecision: 'bfloat16', device: 'metal',
           installationReceiptSha256: hash(bytes), inferenceSha256: specification.get('parse.py')!.sha256,
           promptSha256: '1b6139ec72888e087c8af75f2e2dfb78b425e15ae1c1529940b96137613d1db1'}}, signal);
       signal.throwIfAborted();
