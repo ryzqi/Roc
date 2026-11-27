@@ -11,13 +11,17 @@
 | [索引、检索与证据上下文](retrieval.md) | 分块、嵌入预算、原子发布、六通道、精排、引用验证及可选视觉 |
 | [科研知识抽取与 Wiki](extraction.md) | 完整输入、Entity/Fact/Relation、条件来源权限、provider 工具 schema 与知识依赖 |
 | [科学评测资格与运行前提](evaluation.md) | corpus 配额、独立参考、六层评分、Baseline/A–I 配对及可用脚本限制 |
-| [知识库优化 P0 交付](p0-implementation.md) | 冻结工程基线、共享来源引用、真实 PDF 观察与待补质量证据 |
-| [P1 统一科研检索](p1-implementation.md) | 多轮预算、候选融合、精排与 UI/Agent 共用入口 |
-| [P2 按需论文深读](p2-implementation.md) | 对象策略、来源分类、批次恢复与阅读器入口 |
-| [P3 分层增量 Wiki](p3-implementation.md) | 模板、解释与审核状态、条件比较、局部来源更新 |
-| [P4 写作上下文](p4-implementation.md) | 持久原文依据、Claim/段落核验与变更影响 |
-| [P5 工程验收](p5-implementation.md) | 真实 PDF 实测、独立核验、资源与清理记录、正式质量缺口 |
 
 产品使用合同见[科研 RAG 与持久 Wiki](../research-rag-wiki.md)，界面位置见[科研工作台](../research-workbench.md)，数据库升级见[数据库存储](../database-storage.md)。
 
 开发检查入口为[开发指南](../development.md)。评测 CLI、隔离与封存见[评测指南](../../evaluation/README.md)，通用的[实验比较与采用](../../evaluation/README.md#实验比较与采用)和[验证方法](../../evaluation/README.md#验证方法)由该指南统一维护。
+
+## 工程验证记录
+
+| 范围 | 固定数据与历史报告 |
+| --- | --- |
+| 工程基线 | [P0 工程检查](p0-engineering-baseline.json)、[真实 PDF 观察](p0-native-baseline.json)、[原始记录](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p0-implementation.md) |
+| 专项交付 | [统一检索 P1](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p1-implementation.md)、[按需深读 P2](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p2-implementation.md)、[增量 Wiki P3](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p3-implementation.md)、[写作依据 P4](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p4-implementation.md) |
+| 最终工程回归 | [P5 测量](p5-engineering-results.json)、[运行与复跑记录](https://github.com/ryzqi/Roc/blob/0ea0b6c730c0825ce1173325d946cd5457953131/docs/scientific-rag/p5-implementation.md) |
+
+P5 的真实 PDF 实测覆盖解析、索引、无模型关键词检索、上下文装配和原文核验。精排收益、模型综合、人工 gold 和完整科学验收仍按[评测资格](evaluation.md)判断。

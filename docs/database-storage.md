@@ -2,14 +2,13 @@
 
 Roc 的七个 SQLite 数据库由 `DatabasePool` 管理，默认根目录为 `~/.roc/plugin-data`。
 Core 位于 `data/core.db`，插件库位于 `data/plugins/@roc/plugin-<name>.db`。
-当前结构定义在 `src/main/infrastructure/database-schemas.ts`；Wiki 的结构单独维护在 `wiki-schema.ts`。
+当前版本和结构以[数据库定义](../src/main/infrastructure/database-schemas.ts)为准，Wiki 的表定义见 [wiki-schema.ts](../src/main/infrastructure/wiki-schema.ts)。
 
-空库在单个事务内直接创建当前表、索引、触发器与 `schema_metadata`。当前版本为
-Core 1、Agent 25、Memory 2、Task 1、Workspace 1、Diagnostics 1、Research 77。
+空库在单个事务内直接创建当前表、索引、触发器与 `schema_metadata`。
 已有库必须具有匹配的结构、数据库身份、版本和结构校验和；重复打开不改写数据或元数据。
 版本号相同也不能替代结构和校验和验证。
 启动时先取得数据库维护租约，检查七库版本，然后才运行快速校验和加载插件。
-当前支持 **Research v71～v76 自动升级到 v77**：升级前验证冻结的历史结构校验和、
+当前支持 **Research v71～v77 自动升级到 v78**：升级前验证冻结的历史结构校验和、
 SQLite 完整性及历史执行记录，使用 SQLite Backup API 在 `plugin-data/schema-backups/upgrade-*/`
 保存原始数据库，完成备份验证后才在单个事务内升级表、索引、触发器及版本元数据。
 迁移连接保留来源的 journal mode，只设置连接级外键、超时及同步参数；事务失败时原库字节与
@@ -21,7 +20,7 @@ v71～v75 的历史 TypeScript 执行快照必须满足当前 strict 合同，�
 损坏、身份不匹配的执行快照时，在备份和原库写入前拒绝自动迁移并保留原库，
 交由离线迁移工具处理；未知历史版本、意外 DDL、未来版本和损坏数据库同样拒绝自动修改。
 自动迁移 **不删除用户业务数据**，也不为不支持的结构猜测转换规则。
-v76 到 v77 只新增文献永久删除的清理回执和 PDF 发布记录表，保留已有 Python 环境回执与执行历史。
+v77 增加永久删除清理回执与 PDF 发布记录，v78 增加本地文档导入批次及逐文件状态表。
 
 后续结构变更必须按版本增加受控迁移路径；不能只修改当前 DDL 或修改元数据版本号。
 对应的冻结结构检查见 `tests/unit/database-migrations.test.mjs`，Release CI 强制运行。

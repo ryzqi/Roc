@@ -26,7 +26,7 @@
 
 | 项目 | 值 | 权威源码 |
 | --- | --- | --- |
-| Research DB schema | 76 | `src/main/infrastructure/database-schemas.ts` |
+| Research DB schema | 见[数据库存储](../database-storage.md) | `src/main/infrastructure/database-schemas.ts` |
 | Parse Contract | 6 | `src/shared/schemas/research-production.ts` |
 | Derivation Generation / Parser | 12 / `roc-research-parser/12` | `src/shared/schemas/research-production.ts` |
 | Paper IR | schema 2 / `roc-paper-ir/2.2` | `src/shared/schemas/research-paper-ir-v2.ts` |
@@ -34,7 +34,7 @@
 | Scientific context | `roc-scientific-context/1` | `src/shared/schemas/research-scientific-context.ts` |
 | 抽取 Prompt | `roc-scientific-extraction-prompts/26` | `src/main/plugins/research/scientific-extraction-model.ts` |
 
-IR、chunk、索引、抽取、卡片与 Wiki 的代次有各自身份，不能用一个 parser 版本替代全部失效判断。经过冻结结构、完整性和历史执行校验的 Research v71～v75 可在启动时自动升级到 v76；不支持或不安全的旧库仍拒绝修改并交由离线迁移处理，详见[数据库存储](../database-storage.md)。
+IR、chunk、索引、抽取、卡片与 Wiki 的代次有各自身份，不能用一个 parser 版本替代全部失效判断。
 
 Provider 工具在递归 sanitizer 后要求 `type: 'object'` 根；未支持的纯引用/组合根、标量和可空根在 dispatch 前返回 `provider_tool_schema_root_unsupported`。从 properties 推导的对象根仍支持，嵌套引用与可空字段保留。源码与工程回归入口见[抽取模型的工具边界](extraction.md#provider-工具-schema-边界)。
 
@@ -51,4 +51,4 @@ Provider 工具在递归 sanitizer 后要求 `type: 'object'` 根；未支持的
 
 任一前提未满足时，相应范围保持未验收；不能从一次失败推断当前环境缺配置，也不能从一次成功推断完整质量达标。新的验证先核对[脚本与输入限制](evaluation.md#可用入口与输入限制)，准备被脚本实际消费的完整来源和新输出。性能、provider 延迟及费用需要各自的真实测量。
 
-知识库优化 P0–P5 的工程交付与逐阶段检查见[专题索引](README.md)。本次原始 PDF 验收使用无模型关键词路径，完整科学质量与发布仍未通过；详见 [P5 验收范围](p5-implementation.md)。
+固定 PDF 工程实测、历史报告及其适用范围见[工程验证记录](README.md#工程验证记录)。

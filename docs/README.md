@@ -7,9 +7,9 @@
 | 文档 | 内容 |
 | --- | --- |
 | [任务导航与组件设计契约](design-system.md) | 四个目的地及子视图、对象打开、状态与视觉约束、官方设计参考 |
-| [UI 重构验证](ui-refactor-validation.md) | 阶段工程证据、验收缺口与回滚范围 |
-| [文献库界面优化验证](ui-library-refinement-2026-11-27.md) | 固定列表、自动导入、可撤销项目移除与状态动效的分阶段证据 |
-| [UX 与动效合同](ux-motion/README.md) | 全界面状态清单、动效生命周期、阶段交付和当前生产采样 |
+| [UI 重构验证](ui-refactor-validation.md) | 界面回归入口与历史验收 |
+| [文献库界面优化验证](ui-library-refinement-2026-11-27.md) | 文献交互与历史资料启动记录 |
+| [UX 与动效合同](ux-motion/README.md) | 状态索引、动效生命周期和固定性能样本 |
 | [科研工作台](research-workbench.md) | 壳层、路由、助手输入与停止确认、文稿编辑和异步表单 |
 | [终端会话](terminal-sessions.md) | PTY 所有权、显示分离、输出回放与窗口清理 |
 | [科研工件检查器](research-artifact-inspector.md) | 工件快照、生产文件与人工审核版本 |
@@ -31,7 +31,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [学术检索融合](research-literature-fusion.md) | 多源检索、融合、原始池与执行回执 |
-| [文献自动入库](research-literature-acquisition.md) | PDF、解析、全文索引、Wiki 就绪状态与恢复合同 |
+| [文献自动入库](research-literature-acquisition.md) | 全文获取、可恢复文件批次、处理进度与删除 |
 | [Zotero 本地只读接入](research-zotero.md) | Zotero 本地只读同步、检查点与附件导入 |
 | [原 PDF 与解析定位](research-pdf-navigation.md) | 原文/解析导航、坐标、批注与证据定位 |
 | [结构化阅读、笔记与学术雷达](research-reading-radar.md) | 结构化阅读、笔记、翻译与学术雷达 |
@@ -70,7 +70,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [数据库存储](database-storage.md) | 当前结构初始化、维护与不兼容库处理 |
+| [数据库存储](database-storage.md) | 当前结构、启动升级、备份与离线恢复 |
 | [开发指南](development.md) | 构建、测试选择、smoke 替代行为与运行产物 |
 | [科研工作流实施验收](research-workflow-validation-2026-11-23.md) | 八项优化提交、原生闭环、回归命令及验证边界 |
 | [评测指南](../evaluation/README.md) | 套件、输入资格、运行、对照与证据保留 |
@@ -109,7 +109,7 @@ ADR 记录决定、理由与代价，功能操作由上面的专题维护。阶�
 
 专题以一份主文档维护：方法计划归入 Idea，任务上下文归入任务观测，PDF 坐标归入阅读导航，Vale 归入写作检查，OSF 政策归入资源。跨专题通过链接引用，具体版本、枚举与资源摘要以链接的源码或锁文件为准。
 
-旧实施日志、逐次验证结果和清理流水不作为维护文档；需要追溯时查看 Git 历史。固定测量数据保留各自来源，解释见[性能测量](research-performance.md)。[Vale 入口](research-prose.md)仅供随包规则引用，正文统一在写作检查。
+历史实施与逐次验收可从专题中的固定提交链接追溯。固定测量数据的解释见[性能测量](research-performance.md)。[Vale 入口](research-prose.md)仅供随包规则引用，正文统一在写作检查。
 
 ## 测试 seam
 
