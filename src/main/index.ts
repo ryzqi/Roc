@@ -392,8 +392,7 @@ async function createWindow(): Promise<void> {
       isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined ? new URL(process.env.ELECTRON_RENDERER_URL).origin : null);
     pdfPreviewProtocolRegistered = true;
   }
-  const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
-  await Promise.all([kernelStarted, rendererLoaded]);
+  await kernelStarted;
   resourceBudget = new MainResourceBudget({
     activity: mainResourceActivity,
     mainRssBudgetBytes: Math.min(2 * 1024 ** 3, totalmem() / 8),
@@ -411,7 +410,6 @@ async function createWindow(): Promise<void> {
   });
   resourceBudget.setHidden(mainWindow === null || getWindowHiddenState(mainWindow).hidden);
   resourceBudget.start();
-  sendToWindow(mainWindow, ipcChannels.windowResourcePressure, { pressure: resourceBudget.snapshot().pressure });
   hostService.syncSettings(kernel.configService.getSettings());
   registerIpc(kernel, mainWindow, {
     openMainPage: showMainPage,
@@ -494,6 +492,10 @@ async function createWindow(): Promise<void> {
         });
     });
   }
+  // The first renderer script invokes IPC while the document is still loading.
+  // Make the kernel, handlers and event forwarding ready before navigation.
+  await kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+  sendToWindow(mainWindow, ipcChannels.windowResourcePressure, { pressure: resourceBudget.snapshot().pressure });
   if (mainWindowShown) {
     kernel.startDatabaseMaintenance();
   }
