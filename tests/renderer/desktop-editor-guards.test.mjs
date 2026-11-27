@@ -25,6 +25,7 @@ before(async () => {
     const meta = slot => ({scope: slot.scope, kind: slot.kind, exists: true, effective: true,
       charCount: 5, charLimit: 20000, absolutePath: slot.virtualPath, updatedAt: null});
     const client = {api: {
+      research: {listDocumentImportBatches: async () => ok([])},
       memory: {
         status: async () => ok({root: '/memory', workspaceHash: 'workspace-a', workspaceLabel: 'Project A',
           files: MEMORY_SLOTS.map(meta), autoMemory: {recent: []}, snapshot: {enabled: true, totalChars: 5, totalLimit: 20000},
@@ -46,16 +47,17 @@ before(async () => {
         if (window.throwImport) throw new Error('Import bridge disconnected');
         return new Promise(resolve => {window.finishImport = resolve;});
       };
+      const pickFile = () => {
+        window.picks++;
+        if (window.throwPick) throw new Error('Native file dialog unavailable');
+        return new Promise(resolve => {window.finishPick = resolve;});
+      };
       return <ImportDialog open={open} onClose={() => setOpen(false)} initialTab="doi"
         client={client} projectId="project-a" selectedItem={null} canAttachToSelection={false} onZoteroImported={() => {}}
         importDoi={doi => imported({doi})} importBibliographyFile={(path, format) => imported({path, format})}
         importRecord={record => imported({record})} addDocumentToNewItem={imported} addDocumentToItem={imported}
         addCandidate={(searchId, candidateId) => imported({searchId, candidateId})}
-        pickFile={() => {
-          window.picks++;
-          if (window.throwPick) throw new Error('Native file dialog unavailable');
-          return new Promise(resolve => {window.finishPick = resolve;});
-        }}
+        pickFile={pickFile} pickFiles={async () => {const path = await pickFile(); return path ? [path] : [];}}
         searchLiterature={(query, sources, limit) => {
           window.searches.push({query, sources, limit});
           if (window.throwSearch) throw new Error('Literature search disconnected');

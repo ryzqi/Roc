@@ -769,7 +769,7 @@ CREATE INDEX idx_performance_samples_sampled
 };
 
 export const researchSchema: RocDatabaseSchema = {
-  version: 77,
+  version: 78,
   sql: `
 CREATE TABLE research_external_experiments (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
@@ -925,6 +925,36 @@ CREATE TABLE research_document_parse_coordinates (
   snapshot_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE research_document_parse_intents (
+  parse_id TEXT PRIMARY KEY REFERENCES research_document_parses(id) ON DELETE CASCADE,
+  tier TEXT NOT NULL CHECK(tier IN ('compact','complete')),
+  origin TEXT NOT NULL CHECK(origin IN ('direct','acquisition','batch'))
+);
+CREATE TABLE research_document_import_batches (
+  id TEXT PRIMARY KEY,
+  project_id TEXT,
+  target_library_item_id TEXT,
+  request_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX research_document_import_batches_scope ON research_document_import_batches(project_id,created_at,id);
+CREATE TABLE research_document_import_entries (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL REFERENCES research_document_import_batches(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  source_path TEXT,
+  source_stamp TEXT,
+  status TEXT NOT NULL CHECK(status IN ('queued','receiving','saved','importing','waiting_parse','parsing','parsed','duplicate','failed')),
+  source_hash TEXT,
+  size INTEGER,
+  document_id TEXT REFERENCES research_documents(id) ON DELETE SET NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  retry_at INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  UNIQUE(batch_id,position)
+);
+CREATE INDEX research_document_import_entries_queue ON research_document_import_entries(status,retry_at,batch_id,position);
 CREATE TABLE research_document_parses (
         id TEXT PRIMARY KEY,
         document_id TEXT NOT NULL REFERENCES research_documents(id) ON DELETE CASCADE,

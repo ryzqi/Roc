@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import {after, before, test} from 'node:test';
 import {build} from 'esbuild';
-import {mkdtemp, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import Database from 'better-sqlite3';
 
 let directory, api;
 before(async () => {
-  directory = await mkdtemp(join(process.cwd(), '.runtime/tmp/p5-acquisition-ipc-'));
+  const fixtures = join(process.cwd(), '.runtime/tmp');
+  await mkdir(fixtures, {recursive: true});
+  directory = await mkdtemp(join(fixtures, 'p5-acquisition-ipc-'));
   const outfile = join(directory, 'fixture.mjs');
   await build({stdin: {contents: `
     import './src/preload/index';
@@ -20,6 +23,8 @@ before(async () => {
     export {CapabilityRegistry} from './src/main/kernel/capability-registry';
     export {literatureAcquisitionCapabilities, registerLiteratureAcquisitionCapabilities}
       from './src/main/plugins/research/literature-acquisition-capabilities';
+    export {researchDocumentImportBatchCapabilities, registerResearchDocumentImportBatches}
+      from './src/main/plugins/research/document-capabilities';
     export {literatureContext} from './src/main/services/literature-context';
     export {RocDomainError} from './src/main/services/errors';
     export {ResearchRepository} from './src/main/plugins/research/repository';
@@ -34,6 +39,7 @@ before(async () => {
       builder.onResolve({filter: /^electron$/}, () => ({path: 'electron', namespace: 'synthetic-electron'}));
       builder.onLoad({filter: /.*/, namespace: 'synthetic-electron'}, () => ({contents: `
         export const transport = {handlers: new Map(), calls: [], exposed: {}, senderId: 71};
+        export const webUtils = {getPathForFile: () => ''};
         export const contextBridge = {exposeInMainWorld: (name, value) => {transport.exposed[name] = value;}};
         export const ipcRenderer = {
           invoke: async (channel, ...args) => {
@@ -61,7 +67,7 @@ const job = (overrides = {}) => ({id: 'job-a', projectId: 'project-a', libraryIt
 const listRequest = {projectId: 'project-a', destination: 'current_project', offset: 0, limit: 20};
 const changeRequest = {projectId: 'project-a', destination: 'current_project', jobId: 'job-a', generation: 'generation-a'};
 
-function scene({list, change, service: realService, config = new Map()} = {}) {
+function scene({list, change, service: realService, config = new Map(), batches} = {}) {
   const calls = [], registry = new api.CapabilityRegistry();
   for (const descriptor of api.literatureAcquisitionCapabilities) registry.declare('research', descriptor);
   const service = {
@@ -77,6 +83,10 @@ function scene({list, change, service: realService, config = new Map()} = {}) {
     }
   };
   api.registerLiteratureAcquisitionCapabilities({pluginId: 'research', capabilities: registry, config}, realService ?? service);
+  if (batches) {
+    for (const descriptor of api.researchDocumentImportBatchCapabilities) registry.declare('research', descriptor);
+    api.registerResearchDocumentImportBatches({pluginId: 'research', capabilities: registry}, batches);
+  }
   api.transport.handlers.clear(); api.transport.calls.length = 0;
   api.registerPluginCapabilityIpc((channel, handler) => {
     assert.equal(api.transport.handlers.has(channel), false, channel);
@@ -207,4 +217,30 @@ test('real repository conflicts, missing jobs and invalid replacement PDFs reach
     await Promise.all([repository.knowledgeJobs.shutdown(), repository.paperCards.shutdown(), repository.wiki.shutdown()]);
     db.close(); agentDb.close();
   }
+});
+
+test('batch document IPC keeps every selected path, validates payloads and requires the trusted window', async () => {
+  const requestId = randomUUID(), calls = [];
+  const receipt = {id: requestId, createdAt: '2026-11-27T00:00:00.000Z', entries: [
+    {id: 'entry-a', filename: 'one.pdf', status: 'queued', documentId: null, error: null},
+    {id: 'entry-b', filename: 'two.pdf', status: 'failed', documentId: null, error: 'ENOENT'}
+  ]};
+  const {client} = scene({batches: {
+    start: async input => {calls.push(input); return receipt;},
+    list: () => [{id: requestId, createdAt: receipt.createdAt, total: 2, pending: 1, failed: 1}],
+    read: () => receipt, retry: () => receipt
+  }});
+  const input = {projectId: null, libraryItemId: null, requestId, sourcePaths: ['/fixture/one.pdf', '/fixture/two.pdf']};
+  assert.deepEqual((await client.api.research.startDocumentImportBatch(input)).data, receipt);
+  assert.deepEqual(calls, [input]);
+  const ref = {projectId: null, batchId: requestId};
+  assert.deepEqual((await client.api.research.readDocumentImportBatch(ref)).data, receipt);
+  assert.deepEqual((await client.api.research.retryDocumentImportBatch(ref)).data, receipt);
+  assert.equal((await client.api.research.listDocumentImportBatches({projectId: null, offset: 0})).data[0].total, 2);
+  assert.equal((await client.api.research.startDocumentImportBatch({...input, sourcePaths: []})).ok, false);
+  assert.equal((await client.api.research.startDocumentImportBatch({...input, windowId: 71})).ok, false);
+  api.transport.senderId = 0;
+  try {assert.equal((await client.api.research.startDocumentImportBatch(input)).ok, false);}
+  finally {api.transport.senderId = 71;}
+  assert.equal(calls.length, 1);
 });

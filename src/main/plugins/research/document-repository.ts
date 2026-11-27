@@ -24,6 +24,9 @@ import {literatureIdentity, literatureSourceIdentity} from './literature-identit
 import type {DocumentImportEntry} from './document-import-metadata';
 import {readResearchDocumentStatuses} from './document-status';
 import type {ResearchDocumentStatusRequest, ResearchDocumentStatusResult} from '../../../shared/schemas/research-document-status';
+import type {ResearchParseTier} from '../../../shared/schemas/research-production';
+
+type ParseIntent = {tier: ResearchParseTier; origin: 'direct' | 'acquisition' | 'batch'};
 
 export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
 export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
@@ -60,7 +63,7 @@ export class ResearchDocumentRepository {
   import(input: { id: string; libraryItemId: string | null; entry: { metadata: ResearchLiterature; bibliography: BibliographyEntry } | null;
     sourceEntries?: readonly DocumentImportEntry[]; automaticCitationKey?: boolean;
     projectId: string | null; filename: string; mediaType: string; sourcePath: string; sourceHash: string; size: number }, notify: boolean): { document: ResearchDocument; created: boolean } {
-    return this.db.transaction(() => {
+    const result = this.db.transaction(() => {
       this.research.library.validateDestination(input.projectId);
       let libraryItemId = input.libraryItemId;
       if (libraryItemId === null) {
@@ -78,7 +81,7 @@ export class ResearchDocumentRepository {
           const citationKey = existing?.bibliography.citationKey ?? betterBibtexKey(primary.metadata, this.research.library.usedCitationKeys());
           entries = entries.map(entry => ({...entry, bibliography: {...entry.bibliography, citationKey}}));
         }
-        const imported = this.research.library.import(entries, input.projectId, {notify, skipArchived: input.automaticCitationKey === true});
+        const imported = this.research.library.import(entries, input.projectId, {notify, flush: false, skipArchived: input.automaticCitationKey === true});
         if (imported.items.length === 0 || imported.items.some(item => item.id !== imported.items[0].id)) {
           throw new Error('research_document_metadata_identity_mismatch');
         }
@@ -97,6 +100,8 @@ export class ResearchDocumentRepository {
         .run(input.id, libraryItemId, input.filename, input.mediaType, input.sourcePath, input.sourceHash, input.size, timestamp, timestamp);
       return { document: this.get(input.id), created: true };
     })();
+    if (!this.db.inTransaction) this.wakePublishedKnowledge();
+    return result;
   }
 
   sourcePath(id: string): string { return this.row(id).source_path; }
@@ -107,11 +112,11 @@ export class ResearchDocumentRepository {
     return this.get(row.document_id);
   }
 
-  importWithReceipt(input: Parameters<ResearchDocumentRepository['import']>[0], record: (document: ResearchDocument) => void): {document: ResearchDocument; created: boolean} {
+  importWithReceipt(input: Parameters<ResearchDocumentRepository['import']>[0], record: (document: ResearchDocument, created: boolean) => void): {document: ResearchDocument; created: boolean} {
     const previous = input.libraryItemId === null ? null : this.research.library.get(input.libraryItemId);
     const result = this.db.transaction(() => {
       const result = this.import(input, false);
-      record(result.document);
+      record(result.document, result.created);
       return result;
     })();
     if (previous === null || (input.projectId !== null && !previous.projectIds.includes(input.projectId))) {
@@ -119,10 +124,11 @@ export class ResearchDocumentRepository {
       try {this.research.library.onChanged?.([this.research.library.get(result.document.libraryItemId)], previous === null ? 'import' : 'link');}
       catch {logWarn('research_document_library_change_notify_failed', {metadata: {documentId: result.document.id}});}
     }
+    this.wakePublishedKnowledge();
     return result;
   }
 
-  begin(documentId: string, parseId: string): void {
+  begin(documentId: string, parseId: string, intent?: ParseIntent): void {
     this.db.transaction(() => {
       const document = this.get(documentId);
       if (this.research.library.get(document.libraryItemId).archived) throw new Error('research_library_item_archived');
@@ -130,12 +136,13 @@ export class ResearchDocumentRepository {
       const timestamp = this.now();
       this.db.prepare(`INSERT INTO research_document_parses (id,document_id,status,data_json,error,created_at,finished_at)
         VALUES (?,?,'running',NULL,NULL,?,NULL)`).run(parseId, documentId, timestamp);
+      if (intent) this.db.prepare('INSERT INTO research_document_parse_intents VALUES (?,?,?)').run(parseId, intent.tier, intent.origin);
       this.db.prepare("UPDATE research_documents SET status = 'parsing', active_parse_id = ?, error = NULL, updated_at = ? WHERE id = ?").run(parseId, timestamp, documentId);
     })();
   }
 
   complete(documentId: string, parseId: string, input: StoredDocumentContent, coordinateInput: ResearchDocumentCoordinateSnapshot | null,
-    trace?: ResearchProcessingTrace, prepared?: PreparedKnowledgeEmbeddings): void {
+    trace?: ResearchProcessingTrace, prepared?: PreparedKnowledgeEmbeddings, deferPaperCard = false): void {
     const data = storedDocumentContentSchema.parse(input);
     if (data.semanticEnrichment) assertPaperSemanticEnrichment(data.semanticEnrichment, data.content.blocks, data.content.structure);
     if (data.scholarlyEnrichment) assertScholarlyEnrichment(data.scholarlyEnrichment, data.content.sourceHash, data.content.blocks);
@@ -166,13 +173,24 @@ export class ResearchDocumentRepository {
       if (document.currentParseId !== null) this.removeIndex(document.currentParseId);
       const indexed = this.index(document, parseId, data, trace);
       this.research.evidence.sourceMigrations.proposeForParse(documentId, parseId);
-      this.research.queueKnowledgeFromSource(indexed);
+      if (deferPaperCard) this.research.knowledgeJobs.enqueue(indexed.id);
+      else this.research.queueKnowledgeFromSource(indexed);
       if (prepared) {
         this.storePrepared(prepared);
         this.research.knowledgeJobs.acceptPrepared(indexed.id, prepared.identity);
       }
     })();
-    this.research.flushKnowledgeFromSource();
+    this.wakePublishedKnowledge();
+  }
+
+  private wakePublishedKnowledge(): void {
+    const wake = (): void => {
+      try {this.research.flushKnowledgeFromSource();}
+      catch {logWarn('research_document_knowledge_wake_failed');}
+    };
+    // A caller can publish inside a larger transaction. Workers only read committed outbox rows.
+    if (this.db.inTransaction) queueMicrotask(wake);
+    else wake();
   }
 
   fail(documentId: string, parseId: string, error: string, cancelled: boolean): void {
@@ -276,9 +294,20 @@ export class ResearchDocumentRepository {
     this.research.flushKnowledgeFromSource();
   }
 
-  recover(): void {
-    const rows = this.db.prepare("SELECT id,active_parse_id FROM research_documents WHERE active_parse_id IS NOT NULL").all() as Array<{ id: string; active_parse_id: string }>;
-    for (const row of rows) this.fail(row.id, row.active_parse_id, 'research_document_parse_interrupted', false);
+  recover(): Array<{id: string; tier: ResearchParseTier | null}> {
+    return this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT id,active_parse_id FROM research_documents WHERE active_parse_id IS NOT NULL')
+        .all() as Array<{id: string; active_parse_id: string}>;
+      for (const row of rows) this.fail(row.id, row.active_parse_id, 'research_document_parse_interrupted', false);
+      return this.db.prepare(`SELECT d.id,i.tier FROM research_documents d JOIN research_library l ON l.id=d.library_item_id
+        LEFT JOIN research_document_parse_intents i ON i.parse_id=(
+          SELECT p.id FROM research_document_parses p WHERE p.document_id=d.id ORDER BY p.created_at DESC,p.rowid DESC LIMIT 1)
+        WHERE d.error='research_document_parse_interrupted' AND l.archived=0
+          AND (i.origin='direct' OR (i.origin IS NULL AND NOT EXISTS (
+            SELECT 1 FROM research_paper_acquisition_jobs a WHERE a.document_id=d.id AND a.stage='parse'
+              AND a.status IN ('queued','running'))))
+        ORDER BY d.updated_at,d.id`).all() as Array<{id: string; tier: ResearchParseTier | null}>;
+    })();
   }
 
   /** 待重解析的文档：有原文、没有当前结果。用于显式批量重解析。 */
@@ -327,9 +356,11 @@ export class ResearchDocumentRepository {
       const document = this.get(documentId);
       if (document.currentParseId !== parseId || document.activeParseId !== null) throw new Error('research_document_parse_stale');
       if (this.research.library.get(document.libraryItemId).archived) throw new Error('research_library_item_archived');
-      this.index(document, parseId, data);
+      const indexed = this.index(document, parseId, data);
       this.storePrepared(prepared);
+      this.research.paperCards.enqueue(indexed.id);
     }).immediate();
+    this.wakePublishedKnowledge();
   }
 
   private storePrepared(prepared: PreparedKnowledgeEmbeddings): void {

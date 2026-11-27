@@ -5,7 +5,9 @@ import type { ZoteroAdapter } from './zotero-adapter';
 import { zoteroCapabilities, registerZoteroCapabilities } from './zotero-capabilities';
 import { pickZoteroAttachment } from './zotero-attachment-dialog';
 import { ResearchDocumentService } from './document-service';
-import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
+import {registerResearchDocumentCapabilities, researchDocumentCapabilities, registerResearchDocumentImportBatches,
+  researchDocumentImportBatchCapabilities} from './document-capabilities';
+import {ResearchDocumentImportBatches} from './document-import-batches';
 import { registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities } from './systematic-review-capabilities';
 import { ResearchReviewSearchService } from './review-search-service';
 import { registerResearchReviewSearchCapabilities, registerResearchOwnedReviewSearchCapabilities } from './review-search-capabilities';
@@ -50,6 +52,7 @@ export function registerResearchReview(
   const { literatureImports } = literature;
   const researchImports = literatureImports;
   let documents: ResearchDocumentService | null = null;
+  let documentBatches: ResearchDocumentImportBatches | null = null;
   const reviewSearches = new ResearchReviewSearchService(db, researchRepository, literatureImports,
     error => context.logger.error('Systematic review search persistence failed.', {error: error instanceof Error ? error.message : String(error)}),
     (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
@@ -59,22 +62,33 @@ export function registerResearchReview(
   registerResearchOwnedReviewSearchCapabilities(context, reviewSearches, options.executionGrantBroker);
   registerLiteratureImportCapabilities(context, literatureImports);
   // Recover durable parser state even when no renderer ever opens a document.
-  researchRepository.documents.recover();
-  const interruptedDocuments = production.scientificLibraryIndex.recover();
-  const documentProvider = lifecycle.provide(context, 'documents', [...researchDocumentCapabilities, ...zoteroCapabilities], child => {
+  const interruptedDocuments = researchRepository.documents.recover();
+  production.scientificLibraryIndex.recover();
+  const hasPendingBatches = db.prepare(`SELECT 1 FROM research_document_import_entries
+    WHERE status IN ('queued','receiving','saved','importing','waiting_parse','parsing')
+      OR (status='duplicate' AND source_hash IS NOT NULL) LIMIT 1`).get() !== undefined;
+  const documentProvider = lifecycle.provide(context, 'documents', [...researchDocumentCapabilities, ...researchDocumentImportBatchCapabilities,
+    ...zoteroCapabilities], child => {
     documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null,
       createPaperSemanticGenerator(options.modelFactory), options.scholarlyParser, production.scientificLibraryIndex, literature.prepareDocumentDoi);
     registerZoteroCapabilities(child, zotero, researchImports, pickZoteroAttachment, documents);
     registerResearchDocumentCapabilities(child, researchRepository.documents, documents);
+    documentBatches = new ResearchDocumentImportBatches(db, researchRepository, documents, options.libraryRoot ?? null);
+    registerResearchDocumentImportBatches(child, documentBatches);
+    documentBatches.recover();
     return documents;
   }, async () => {
-    try { await documents?.shutdown(); } finally { documents = null; }
+    try { await Promise.all([documentBatches?.shutdown(), documents?.shutdown()]); }
+    finally { documents = null; documentBatches = null; }
   });
   literature.configureDocumentPipeline(() => documentProvider.get(), () => documents);
-  if (interruptedDocuments.length) {
+  if (interruptedDocuments.length || hasPendingBatches) {
     void documentProvider.get().then(async service => {
-      await service.parseMany({documentIds: interruptedDocuments, tier: null});
-    }).catch(error => context.logger.error('Interrupted library index recovery failed.', {
+      for (const {id, tier} of interruptedDocuments) {
+        const {failed} = await service.parseMany({documentIds: [id], tier});
+        if (failed.length > 0) context.logger.warn('Interrupted document parse failed.', {documentId: id, error: failed[0].error});
+      }
+    }).catch(error => context.logger.error('Interrupted document processing recovery failed.', {
       error: error instanceof Error ? error.message : String(error)
     }));
   }

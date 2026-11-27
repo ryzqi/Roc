@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, relative } from 'node:path';
+import {pathToFileURL} from 'node:url';
 import type { z } from 'zod';
 import type {
   researchDocumentAssetRequestSchema, researchDocumentImportRequestSchema, researchDocumentParseSchema, researchDocumentSourceRequestSchema
-} from '../../../shared/schemas/research-documents';import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
+} from '../../../shared/schemas/research-documents';
+import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
 import type { ResearchParseTier } from '../../../shared/schemas/research-production';
 import type {ResearchDocumentPreview, ResearchDocumentPreviewRequest} from '../../../shared/schemas/research-document-preview';
 import type {
@@ -29,7 +31,10 @@ import {inspectPdfImportMetadata, type DocumentDoiPreparation, type DocumentImpo
 type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography' | 'defaultParseOptions'>;
 type ImportTask = { libraryItemId?: string; controller: AbortController; promise: Promise<ResearchDocument> };
 type ParseTask = ImportTask & { parseId: string };
-type AcquisitionParse = {signal: AbortSignal; requireCurrent: () => void};
+type BackgroundParse = {origin: 'acquisition' | 'batch'; signal: AbortSignal; requireCurrent: () => void};
+type ImportRequest = z.infer<typeof researchDocumentImportRequestSchema>;
+type StagedDocument = {id: string; root: string; directory: string; sourcePath: string; sourceHash: string; size: number; mediaType: string};
+type ImportReceipt = (document: ResearchDocument, created: boolean) => void;
 
 export class ResearchDocumentService {
   private readonly tasks = new Set<ImportTask>();
@@ -76,19 +81,23 @@ export class ResearchDocumentService {
 
   /** Persist parser artifacts first; the durable knowledge outbox owns embeddings and retries. */
   async parseForAcquisition(documentId: string, signal: AbortSignal, requireCurrent: () => void): Promise<ResearchDocument> {
-    return await this.startParse(documentId, null, {signal, requireCurrent});
+    return await this.startParse(documentId, null, {origin: 'acquisition', signal, requireCurrent});
   }
 
-  private async startParse(documentId: string, tier: ResearchParseTier | null, acquisition?: AcquisitionParse): Promise<ResearchDocument> {
+  async parseForBatch(documentId: string, signal: AbortSignal, requireCurrent: () => void): Promise<ResearchDocument> {
+    return await this.startParse(documentId, null, {origin: 'batch', signal, requireCurrent});
+  }
+
+  private async startParse(documentId: string, tier: ResearchParseTier | null, background?: BackgroundParse): Promise<ResearchDocument> {
     this.requireOpen();
     const active = this.parses.get(documentId);
     if (active !== undefined) return await active.promise;
-    acquisition?.requireCurrent();
+    background?.requireCurrent();
     const parseId = `parse_${randomUUID()}`;
     const controller = new AbortController();
-    const signal = acquisition ? AbortSignal.any([controller.signal, acquisition.signal]) : controller.signal;
+    const signal = background ? AbortSignal.any([controller.signal, background.signal]) : controller.signal;
     const libraryItemId = this.repository.documents.get(documentId).libraryItemId;
-    const task: ParseTask = { libraryItemId, parseId, controller, promise: this.parseFile(documentId, parseId, signal, tier, acquisition) };
+    const task: ParseTask = { libraryItemId, parseId, controller, promise: this.parseFile(documentId, parseId, signal, tier, background) };
     this.parses.set(documentId, task);
     this.tasks.add(task);
     try { return await task.promise; }
@@ -96,22 +105,32 @@ export class ResearchDocumentService {
   }
 
   /**
-   * 批量重解析串行提交，共享计算协调器执行全局解析准入。
-   * 单个文档失败不影响其余文档，失败项连同错误码一起回给调用方。
+   * 限制同时处理的文档数，由共享计算协调器决定各类解析的全局并发。
+   * 单个文档失败不影响其余文档，结果按请求顺序返回。
    */
   async parseMany(input: { documentIds: string[] | null; tier: ResearchParseTier | null }): Promise<{ documents: ResearchDocument[]; failed: Array<{ documentId: string; error: string }> }> {
     this.requireOpen();
     const targets = input.documentIds === null
       ? this.repository.documents.needsReparse().map((document) => document.id)
       : input.documentIds;
-    const documents: ResearchDocument[] = [];
-    const failed: Array<{ documentId: string; error: string }> = [];
-    for (const documentId of targets) {
-      if (this.closed) throw new Error('research_documents_closed');
-      try { documents.push(await this.parse(documentId, input.tier)); }
-      catch (error) { failed.push({ documentId, error: failureCode(error) }); }
-    }
-    return { documents, failed };
+    const entries = [...new Set(targets)].entries();
+    const results: Array<{document: ResearchDocument} | {documentId: string; error: string}> = [];
+    const run = async (): Promise<void> => {
+      for (const [index, documentId] of entries) {
+        this.requireOpen();
+        try {
+          const document = await this.parse(documentId, input.tier);
+          results[index] = document.status === 'ready' ? {document} : {documentId, error: document.error ?? 'research_document_parse_failed'};
+        } catch (error) {
+          results[index] = {documentId, error: failureCode(error)};
+        }
+      }
+    };
+    await Promise.all([run(), run()]);
+    return {
+      documents: results.flatMap(result => 'document' in result ? [result.document] : []),
+      failed: results.flatMap(result => 'error' in result ? [result] : [])
+    };
   }
 
   cancel(documentId: string, parseId: string): ResearchDocument {
@@ -367,7 +386,7 @@ export class ResearchDocumentService {
   }
 
   private async persistFile(request: z.infer<typeof researchDocumentImportRequestSchema>, bytes: Buffer,
-    record: ((document: ResearchDocument) => void) | null, signal: AbortSignal,
+    record: ImportReceipt | null, signal: AbortSignal,
     automaticMetadata = false): Promise<ResearchDocument> {
     this.requireActive(signal);
     const extension = extname(request.sourcePath).toLowerCase();
@@ -384,58 +403,82 @@ export class ResearchDocumentService {
       this.requireActive(signal);
       const sourcePath = join(directory, `source${extension}`);
       await writeFile(sourcePath, bytes, { mode: 0o600, flag: 'wx' });
-      let entry: { metadata: ResearchLiterature; bibliography: ResearchBibliographyEntry } | null = null;
-      const sourceEntries: DocumentImportEntry[] = [];
-      if (request.target === 'new-item') {
-        const extracted = automaticMetadata && mediaType === 'application/pdf' ? await inspectPdfImportMetadata(bytes, signal) : null;
-        this.requireActive(signal);
-        const arxivId = extracted?.arxivId ?? null;
-        const arxivDoiAlias = arxivId === null ? null :
-          literatureIdentityAliases(`arxiv:${normalizeResearchArxiv(arxivId).id}`).find(alias => alias.startsWith('doi:'))?.slice(4) ?? null;
-        const lookupDoi = extracted?.doi ?? arxivDoiAlias;
-        const now = new Date().toISOString();
-        const metadata: ResearchLiterature = { id: `local:document:${sourceHash}`, source: 'local', externalId: `document:${sourceHash}`, doi: extracted?.doi ?? null,
-          title: extracted?.title ?? request.title, authors: extracted?.authors ?? [], abstract: null,
-          publishedYear: extracted?.publishedYear ?? null, citationCount: null, url: arxivId === null ? null : `https://arxiv.org/abs/${arxivId}`,
-          openAccessUrl: null, importedAt: now, updatedAt: now };
-        const job = await createResearchDirectory(directory, 'metadata');
-        const json = join(job, 'source.json');
-        await writeFile(json, JSON.stringify([{ metadata, citationKey: request.citationKey }]), { mode: 0o600, flag: 'wx' });
-        const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: json, outputDir: join(job, 'output'), jobDir: job, signal,
-          admission: { projectId: request.projectId, priority: 'user' } });
-        if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
-        entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors },
-          bibliography: {...entries[0], fields: {...entries[0].fields, ...(arxivId === null ? {} : {eprint: arxivId, archiveprefix: 'arXiv'})}} };
-        if (automaticMetadata && lookupDoi !== null && this.prepareDoi !== null) {
-          try {
-            const prepared = await this.prepareDoi(lookupDoi, request.projectId, signal);
-            if (prepared.metadata.doi === null || prepared.bibliography.doi === null ||
-                normalizeResearchDoi(prepared.metadata.doi) !== lookupDoi ||
-                normalizeResearchDoi(prepared.bibliography.doi) !== lookupDoi) throw new Error('research_doi_response_mismatch');
-            if (metadata.doi === null) {
-              // The registered alias is only a lookup key until an exact provider response confirms its DOI.
-              entry = {metadata: {...entry.metadata, doi: lookupDoi}, bibliography: {...entry.bibliography, doi: lookupDoi,
-                fields: {...entry.bibliography.fields, doi: lookupDoi},
-                csl: entry.bibliography.csl === null ? null : {...entry.bibliography.csl, DOI: lookupDoi}}};
-            }
-            sourceEntries.push(prepared);
-          } catch {this.requireActive(signal);}
-        }
-      }
-      this.requireActive(signal);
-      const input = { id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry, sourceEntries,
-        automaticCitationKey: request.target === 'new-item' && automaticMetadata,
-        projectId: request.projectId, filename: basename(request.sourcePath), mediaType, sourcePath: researchRelativePath(relative(root, sourcePath)), sourceHash, size: bytes.length };
-      const result = record === null ? this.repository.documents.import(input, true) : this.repository.documents.importWithReceipt(input, record);
+      const result = await this.registerStaged(request, {id, root, directory, sourcePath, sourceHash, size: bytes.length, mediaType},
+        bytes, record, signal, automaticMetadata);
       persisted = result.created;
       return result.document;
     } finally { if (!persisted) await rm(directory, { recursive: true, force: true }); }
   }
 
+  /** The batch owns the staged source and removes it only after a duplicate receipt commits. */
+  async importStaged(request: ImportRequest, staged: StagedDocument, record: ImportReceipt, signal: AbortSignal): Promise<void> {
+    await this.registerStaged(request, staged, pathToFileURL(staged.sourcePath), record, signal, request.target === 'new-item');
+  }
+
+  private async registerStaged(request: ImportRequest, staged: StagedDocument, metadataSource: Buffer | URL,
+    record: ImportReceipt | null, signal: AbortSignal, automaticMetadata: boolean) {
+    const {id, root, directory, sourcePath, sourceHash, size, mediaType} = staged;
+    this.requireActive(signal);
+    let entry: { metadata: ResearchLiterature; bibliography: ResearchBibliographyEntry } | null = null;
+    const sourceEntries: DocumentImportEntry[] = [];
+    if (request.target === 'new-item') {
+      const extracted = automaticMetadata && mediaType === 'application/pdf' ? await inspectPdfImportMetadata(metadataSource, signal) : null;
+      this.requireActive(signal);
+      const arxivId = extracted?.arxivId ?? null;
+      const arxivDoiAlias = arxivId === null ? null :
+        literatureIdentityAliases(`arxiv:${normalizeResearchArxiv(arxivId).id}`).find(alias => alias.startsWith('doi:'))?.slice(4) ?? null;
+      const lookupDoi = extracted?.doi ?? arxivDoiAlias;
+      const now = new Date().toISOString();
+      const metadata: ResearchLiterature = { id: `local:document:${sourceHash}`, source: 'local', externalId: `document:${sourceHash}`, doi: extracted?.doi ?? null,
+        title: extracted?.title ?? request.title, authors: extracted?.authors ?? [], abstract: null,
+        publishedYear: extracted?.publishedYear ?? null, citationCount: null, url: arxivId === null ? null : `https://arxiv.org/abs/${arxivId}`,
+        openAccessUrl: null, importedAt: now, updatedAt: now };
+      const job = await createResearchDirectory(directory, `metadata_${randomUUID()}`);
+      let entries: ResearchBibliographyEntry[];
+      try {
+        const json = join(job, 'source.json');
+        await writeFile(json, JSON.stringify([{ metadata, citationKey: request.citationKey }]), { mode: 0o600, flag: 'wx' });
+        entries = await this.tools.normalizeBibliography({projectRoot: root, sourcePath: json, outputDir: join(job, 'output'), jobDir: job, signal,
+          admission: {projectId: request.projectId, priority: 'user'}});
+      } catch (error) {
+        if (!hasUnprovenResearchProcessExit(error)) await rm(job, {recursive: true, force: true});
+        throw error;
+      }
+      await rm(job, {recursive: true, force: true});
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors },
+        bibliography: {...entries[0], fields: {...entries[0].fields, ...(arxivId === null ? {} : {eprint: arxivId, archiveprefix: 'arXiv'})}} };
+      if (automaticMetadata && lookupDoi !== null && this.prepareDoi !== null) {
+        try {
+          const prepared = await this.prepareDoi(lookupDoi, request.projectId, signal);
+          if (prepared.metadata.doi === null || prepared.bibliography.doi === null ||
+              normalizeResearchDoi(prepared.metadata.doi) !== lookupDoi ||
+              normalizeResearchDoi(prepared.bibliography.doi) !== lookupDoi) throw new Error('research_doi_response_mismatch');
+          if (metadata.doi === null) {
+            // The registered alias is only a lookup key until an exact provider response confirms its DOI.
+            entry = {metadata: {...entry.metadata, doi: lookupDoi}, bibliography: {...entry.bibliography, doi: lookupDoi,
+              fields: {...entry.bibliography.fields, doi: lookupDoi},
+              csl: entry.bibliography.csl === null ? null : {...entry.bibliography.csl, DOI: lookupDoi}}};
+          }
+          sourceEntries.push(prepared);
+        } catch {this.requireActive(signal);}
+      }
+    }
+    const storedSource = researchRelativePath(relative(root, sourcePath));
+    if (metadataSource instanceof URL) await verifyDocumentSource(root, storedSource, size, sourceHash, signal);
+    this.requireActive(signal);
+    const input = { id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry, sourceEntries,
+      automaticCitationKey: request.target === 'new-item' && automaticMetadata,
+      projectId: request.projectId, filename: basename(request.sourcePath), mediaType, sourcePath: storedSource, sourceHash, size };
+    return record === null ? this.repository.documents.import(input, true) : this.repository.documents.importWithReceipt(input, record);
+  }
+
   private async parseFile(documentId: string, parseId: string, signal: AbortSignal, tier: ResearchParseTier | null,
-    acquisition?: AcquisitionParse): Promise<ResearchDocument> {
+    background?: BackgroundParse): Promise<ResearchDocument> {
     const document = this.repository.documents.get(documentId);
-    this.repository.documents.begin(documentId, parseId);
+    const defaults = this.tools.defaultParseOptions(document.mediaType);
+    const options = tier === null ? defaults : {...defaults, tier};
+    this.repository.documents.begin(documentId, parseId, {tier: options.tier, origin: background?.origin ?? 'direct'});
     const trace = this.repository.processing.trace({trace_id: `document:${parseId}`, paper_id: document.libraryItemId,
       document_id: documentId, parse_id: parseId, source_hash: document.sourceHash});
     const span = trace.start('document_processing');
@@ -454,10 +497,8 @@ export class ResearchDocumentService {
       directory = job;
       const output = join(job, 'output');
       const sourcePath = await researchPath(root, this.repository.documents.sourcePath(documentId));
-      const options = this.tools.defaultParseOptions(document.mediaType);
       const result = await trace.run('document_parse', async () => await this.tools.parseDocument({ projectRoot: root, sourcePath, outputDir: output, jobDir: job, signal, trace,
-        admission: { projectId: null, priority: 'user' },
-        options: tier === null ? options : { ...options, tier } }), {unit: 'blocks'}, result => result.blocks.length);
+        admission: {projectId: null, priority: background?.origin === 'batch' ? 'background' : 'user'}, options }), {unit: 'blocks'}, result => result.blocks.length);
       trace.bind({parser_fingerprint: result.parserFingerprint});
       this.requireActive(signal);
       const {data, coordinates} = await collectDocumentContent(root, output, result, signal);
@@ -466,19 +507,21 @@ export class ResearchDocumentService {
       if (document.mediaType === 'application/pdf') data.scholarlyEnrichment = await enrichScholarlyFields(
         await readResearchFile(root, this.repository.documents.sourcePath(documentId), maximumDocumentBytes),
         document.sourceHash, data.content.blocks, this.scholarlyParser, signal, trace);
-      if (acquisition) this.validateAcquiredContent(document, data);
+      if (background?.origin === 'acquisition') this.validateAcquiredContent(document, data);
+      else if (background?.origin === 'batch' && !data.content.content.trim()) throw new Error('research_document_body_empty_or_invalid');
       if (data.content.quality) {
         data.paperIR = await new PaperIRRepository(root).publish(
           this.repository.documents.buildPaperIR(documentId, parseId, data));
         data.paperIRVersion = data.paperIR.version;
         retained = true;
       }
-      if (this.scientificIndex && !acquisition) prepared = await this.scientificIndex.prepare(documentId, parseId, data, signal);
+      if (this.scientificIndex && !background) prepared = await this.scientificIndex.prepare(documentId, parseId, data, signal);
       await this.verifySource(root, document, signal);
       this.requireActive(signal);
-      acquisition?.requireCurrent();
+      background?.requireCurrent();
       trace.sync('index_publish', () => {
-        const publish = () => this.repository.documents.complete(documentId, parseId, data, coordinates, trace, prepared?.staged.generic);
+        const deferPaperCard = background?.origin === 'batch' && this.scientificIndex !== null;
+        const publish = () => this.repository.documents.complete(documentId, parseId, data, coordinates, trace, prepared?.staged.generic, deferPaperCard);
         if (prepared) this.scientificIndex!.publish(prepared, publish, () => this.requireActive(signal));
         else publish();
       },
@@ -489,9 +532,11 @@ export class ResearchDocumentService {
     } catch (error) {
       retained ||= hasUnprovenResearchProcessExit(error);
       span.fail(error);
-      const cancelled = signal.aborted || this.closed;
+      const cancelled = signal.aborted && !this.closed;
       if (prepared) this.scientificIndex!.fail(prepared, signal);
-      this.repository.documents.fail(documentId, parseId, cancelled ? 'research_document_parse_cancelled' : failureCode(error), cancelled);
+      const code = this.closed ? 'research_document_parse_interrupted'
+        : cancelled ? 'research_document_parse_cancelled' : failureCode(error);
+      this.repository.documents.fail(documentId, parseId, code, cancelled);
       return this.repository.documents.get(documentId);
     } finally { if (!published && !retained && directory !== null) await rm(directory, { recursive: true, force: true }); }
   }

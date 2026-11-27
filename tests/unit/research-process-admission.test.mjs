@@ -104,3 +104,16 @@ test('admission rejects missing identities and bounds the pending queue without 
   assert.ok((await settled).every(result => result.status === 'rejected' && /research_process_cancelled/.test(result.reason.message)));
   active.release();
 });
+
+test('native parses share two same-scope slots until pressure drops admission to one', async () => {
+  const coordinator = new ToolResourceCoordinator();
+  const native = request(null, {resourceClass: 'native-parse'});
+  const [first, second] = await Promise.all([coordinator.acquireResearchProcess(native), coordinator.acquireResearchProcess(native)]);
+  coordinator.setResearchResourcePolicy({background: false, pressure: true});
+  const pending = coordinator.acquireResearchProcess(native);
+  first.release();
+  assert.equal(coordinator.researchProcesses.queued, 1);
+  second.release();
+  (await pending).release();
+  assert.equal(coordinator.researchProcesses.active, 0);
+});

@@ -5,6 +5,7 @@ import {RocDomainError} from './errors';
 export type ResearchHumanCapability = 'research.library.delete' | 'research.wiki.save' | 'research.wiki.rollback' | 'research.task.diagnostics.export' | 'research.task.facts.save' | 'research.zenodo.saveCredential' | 'research.zenodo.clearCredential' | 'research.zenodo.start' | 'research.zenodo.resume' | 'research.zenodo.approvePublication' | 'research.zenodo.publish' | 'research.zenodo.cancel' | 'research.zenodo.prepare' | 'research.monitors.save' | 'research.monitors.control' | 'research.monitors.check' | 'research.monitors.cancel' | 'research.monitors.acknowledge' | 'research.huggingfaceDownloads.start' | 'research.resourceAssociations.save' | 'research.journalCompliance.save' | 'research.responseMatrix.save' | 'research.figureConsistency.save' | 'research.consistency.save' | 'research.citationReviews.save' | 'research.ideaOutcomes.save' | 'research.ideaPlans.save' | 'research.ideaPlans.freeze' | 'research.experimentResults.review' | 'research.experimentResults.captureEvidence' | 'research.notebooks.import' | 'research.pythonEnvironments.prepare' | 'research.pythonEnvironments.cancel' | 'research.relations.propose' | 'research.relations.review' |
   'research.sourceMigrations.capture' | 'research.sourceMigrations.reject' | 'research.sourceReplacements.replace' |
   'research.annotations.create' | 'research.annotations.capture' |
+  'research.documentImportBatch.start' | 'research.documentImportBatch.list' | 'research.documentImportBatch.read' | 'research.documentImportBatch.retry' |
   'research.reviewProtocol.save' | 'research.reviewProtocol.freeze' |
   'research.reviewSearch.start' | 'research.reviewSearch.cancel' | 'research.reviewCorpus.create' |
   'research.reviewDeduplication.save' | 'research.reviewDeduplication.freeze' |
@@ -17,14 +18,14 @@ export type ResearchHumanCapability = 'research.library.delete' | 'research.wiki
   'research.externalExperiments.create' | 'research.externalExperiments.bind' | 'research.externalExperiments.importResult' | 'research.externalExperiments.captureMetric';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
-  projectId: string;
+  projectId: string | null;
   actor: ResearchRelationReviewer;
 }>;
 const humanContext = new AsyncLocalStorage<HumanContext>();
 
 /** Main IPC binds the validated sender. Wire arguments cannot supply human authority. */
 export function withResearchHumanContext<T>(
-  input: {capability: ResearchHumanCapability; projectId: string; windowId: number},
+  input: {capability: ResearchHumanCapability; projectId: string | null; windowId: number},
   action: () => T
 ): T {
   if (!Number.isInteger(input.windowId) || input.windowId <= 0) {
@@ -37,7 +38,7 @@ export function withResearchHumanContext<T>(
   }), action);
 }
 
-export function requireResearchHuman(capability: ResearchHumanCapability, projectId: string): ResearchRelationReviewer {
+export function requireResearchHuman(capability: ResearchHumanCapability, projectId: string | null): ResearchRelationReviewer {
   const context = humanContext.getStore();
   if (context === undefined || context.capability !== capability) throw new Error('research_human_required');
   if (context.projectId !== projectId) throw new Error('research_human_project_mismatch');

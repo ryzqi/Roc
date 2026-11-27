@@ -167,3 +167,36 @@ test('embedding publication rejects a title or section changed while the provide
     assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
   }finally{f.close();}
 });
+
+test('the library outbox runs two independent jobs and retries only transient provider failures', async () => {
+  const f = createResearchFixture(api, 'reading');
+  try {
+    const {knowledge, knowledgeJobs: jobs} = f.repository;
+    for (const id of ['first', 'second', 'third']) {
+      knowledge.upsertFromSource({...input, id});
+      jobs.enqueue(id);
+    }
+    let running = 0, peak = 0;
+    const calls = new Map();
+    jobs.start(async (id, _signal, requireCurrent) => {
+      running++;
+      peak = Math.max(peak, running);
+      const attempt = (calls.get(id) ?? 0) + 1;
+      calls.set(id, attempt);
+      try {
+        await new Promise(resolve => setImmediate(resolve));
+        requireCurrent();
+        if (id === 'first' && attempt === 1) throw new Error('embedding_provider_http_429');
+        if (id === 'second') throw new Error('embedding_provider_http_401');
+        return {configId: 'test', revision: 1};
+      } finally {running--;}
+    });
+    await jobs.idle();
+    assert.equal(peak, 2);
+    assert.equal(calls.get('first'), 2);
+    assert.equal(calls.get('second'), 1);
+    assert.equal(jobs.get('first').status, 'ready');
+    assert.equal(jobs.get('second').status, 'failed');
+    assert.equal(jobs.get('third').status, 'ready');
+  } finally {await f.close();}
+});

@@ -1,16 +1,22 @@
 import {randomUUID} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
+import {logWarn} from '../../services/errors';
 import type {Database} from 'better-sqlite3';
 import {knowledgeJobSchema, type KnowledgeJob} from '../../../shared/schemas/research-knowledge-jobs';
 import type {ResearchEmbeddingReceipt} from './embedding-service';
 import {mainResourceActivity, type ResourceActivity} from '../../services/resource-activity';
+
+type ActiveJob = {controller: AbortController; settled: Promise<void>};
+const maximumConcurrentJobs = 2;
+const retryableProviderError = /^embedding_provider_(?:http_(?:429|502|503|504)|timeout)$/u;
 
 type Processor = (documentId: string, signal: AbortSignal, requireCurrent: () => void) => Promise<ResearchEmbeddingReceipt>;
 
 /** Transactional outbox: source owners enqueue in their index transaction, then wake after commit. */
 export class ResearchKnowledgeJobs {
   private processor: Processor | null = null;
-  private running: Promise<void> | null = null;
-  private active: {documentId: string; controller: AbortController; settled: Promise<void>} | null = null;
+  private scheduled: Promise<void> | null = null;
+  private readonly active = new Map<string, ActiveJob>();
   private readonly controller = new AbortController();
   private readonly listeners = new Set<() => void>();
   constructor(private readonly db: Database, private readonly now: () => string,
@@ -65,66 +71,102 @@ export class ResearchKnowledgeJobs {
 
   configurationChanged(): void {
     // A changed provider/revision requires fresh receipts, including previously completed jobs.
-    this.db.prepare("UPDATE research_knowledge_jobs SET generation=lower(hex(randomblob(16))),status='queued',error=NULL,updated_at=?").run(this.now());
+    this.db.prepare("UPDATE research_knowledge_jobs SET generation=lower(hex(randomblob(16))),status='queued',attempts=0,error=NULL,updated_at=?").run(this.now());
     this.wake();
   }
 
   wake(): void {
     for (const listener of this.listeners) listener();
-    if (this.processor === null || this.running !== null || this.controller.signal.aborted) return;
+    this.schedule();
+  }
+
+  private schedule(): void {
+    if (this.processor === null || this.scheduled !== null || this.controller.signal.aborted) return;
     // Never run external work inside the source owner's synchronous transaction.
-    this.running = Promise.resolve().then(()=>this.drain()).finally(()=>{this.running=null;});
+    this.scheduled = Promise.resolve().then(() => {
+      this.scheduled = null;
+      this.fill();
+    }).catch(() => logWarn('research_knowledge_job_schedule_failed'));
   }
 
   async releaseSources(documentIds: readonly string[]): Promise<void> {
-    const current = this.active;
-    if (!current || !documentIds.includes(current.documentId)) return;
-    current.controller.abort();
-    await current.settled;
+    const matches = documentIds.flatMap(id => {
+      const current = this.active.get(id);
+      if (!current) return [];
+      current.controller.abort();
+      return [current.settled];
+    });
+    await Promise.all(matches);
   }
 
-  async idle(): Promise<void> { await this.running; }
-  async shutdown(): Promise<void> { this.controller.abort(); await this.running; }
+  async idle(): Promise<void> {
+    while (this.scheduled !== null || this.active.size > 0) {
+      await Promise.all([this.scheduled, ...Array.from(this.active.values(), job => job.settled)]);
+    }
+  }
 
-  private async drain(): Promise<void> {
-    while (!this.controller.signal.aborted && this.processor !== null) {
-      const job = this.db.prepare("SELECT document_id,generation FROM research_knowledge_jobs WHERE status='queued' ORDER BY updated_at,document_id LIMIT 1")
-        .get() as {document_id: string; generation: string} | undefined;
+  async shutdown(): Promise<void> {this.controller.abort(); await this.idle();}
+
+  private fill(): void {
+    const processor = this.processor;
+    if (processor === null || this.controller.signal.aborted) return;
+    while (this.active.size < maximumConcurrentJobs) {
+      const job = this.db.prepare(`SELECT document_id,generation FROM research_knowledge_jobs WHERE status='queued'
+        AND document_id NOT IN (SELECT value FROM json_each(?)) ORDER BY updated_at,document_id LIMIT 1`)
+        .get(JSON.stringify([...this.active.keys()])) as {document_id: string; generation: string} | undefined;
       if (job === undefined) return;
-      const release = this.activity.begin('research');
       const controller = new AbortController();
       const signal = AbortSignal.any([controller.signal, this.controller.signal]);
-      const {promise, resolve} = Promise.withResolvers<void>();
-      this.active = {documentId: job.document_id, controller, settled: promise};
-      try {
-        this.db.prepare("UPDATE research_knowledge_jobs SET status='running',attempts=attempts+1,updated_at=? WHERE document_id=? AND generation=?")
-          .run(this.now(), job.document_id, job.generation);
-        let status: KnowledgeJob['status'] = 'ready', error: string | null = null;
-        try {
-          const requireCurrent = (): void => {
-            const current = this.db.prepare('SELECT generation,status FROM research_knowledge_jobs WHERE document_id=?')
-              .get(job.document_id) as {generation: string; status: string} | undefined;
-            if (signal.aborted || current?.generation !== job.generation || current.status !== 'running') {
-              throw new Error('research_knowledge_job_changed');
-            }
-          };
-          if (await this.processor(job.document_id, signal, requireCurrent) === null) {
-            status='blocked'; error='未配置可用的嵌入模型，请在检索设置中配置后重试。';
-          }
-        } catch {
-          // Provider errors can contain private payloads; persist only a safe actionable message.
-          status='failed'; error='向量索引失败，请检查嵌入模型配置与网络后重试。';
-        }
-        if (this.controller.signal.aborted) {status='queued'; error=null;}
-        // Replaced/deleted sources cannot be resurrected or marked ready by an old worker.
-        this.db.prepare('UPDATE research_knowledge_jobs SET status=?,error=?,updated_at=? WHERE document_id=? AND generation=?')
-          .run(status, error, this.now(), job.document_id, job.generation);
-        for (const listener of this.listeners) listener();
-      } finally {
-        this.active = null;
-        resolve();
-        release();
-      }
+      const settled = this.process(job, processor, signal).catch(() => logWarn('research_knowledge_job_worker_failed')).finally(() => {
+        this.active.delete(job.document_id);
+        this.schedule();
+      });
+      this.active.set(job.document_id, {controller, settled});
     }
+  }
+
+  private async process(job: {document_id: string; generation: string}, processor: Processor, signal: AbortSignal): Promise<void> {
+    const release = this.activity.begin('research');
+    try {
+      const begin = this.db.prepare(`UPDATE research_knowledge_jobs SET status='running',attempts=attempts+1,updated_at=?
+        WHERE document_id=? AND generation=? AND status='queued'`);
+      if (begin.run(this.now(), job.document_id, job.generation).changes !== 1) return;
+      const requireCurrent = (): void => {
+        const current = this.db.prepare('SELECT generation,status FROM research_knowledge_jobs WHERE document_id=?')
+          .get(job.document_id) as {generation: string; status: string} | undefined;
+        if (signal.aborted || current?.generation !== job.generation || current.status !== 'running') {
+          throw new Error('research_knowledge_job_changed');
+        }
+      };
+      let status: KnowledgeJob['status'] = 'ready';
+      let error: string | null = null;
+      try {
+        let receipt: ResearchEmbeddingReceipt;
+        for (let attempt = 0;; attempt++) {
+          requireCurrent();
+          try {
+            receipt = await processor(job.document_id, signal, requireCurrent);
+            break;
+          } catch (failure) {
+            if (attempt >= 2 || !(failure instanceof Error) || !retryableProviderError.test(failure.message)) throw failure;
+            await delay(1000 * 2 ** attempt, undefined, {signal});
+            this.db.prepare(`UPDATE research_knowledge_jobs SET attempts=attempts+1
+              WHERE document_id=? AND generation=? AND status='running'`).run(job.document_id, job.generation);
+          }
+        }
+        if (receipt === null) {
+          status = 'blocked';
+          error = '未配置可用的嵌入模型，请在检索设置中配置后重试。';
+        }
+      } catch {
+        status = 'failed';
+        error = '向量索引失败，请检查嵌入模型配置与网络后重试。';
+      }
+      if (this.controller.signal.aborted) {status = 'queued'; error = null;}
+      // Replaced/deleted sources cannot be resurrected or marked ready by an old worker.
+      this.db.prepare('UPDATE research_knowledge_jobs SET status=?,error=?,updated_at=? WHERE document_id=? AND generation=?')
+        .run(status, error, this.now(), job.document_id, job.generation);
+      for (const listener of this.listeners) listener();
+    } finally {release();}
   }
 }

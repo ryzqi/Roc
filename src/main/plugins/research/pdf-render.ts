@@ -113,9 +113,10 @@ export function measureResearchPdfPage(options: ResearchPdfPageLayoutOptions): R
   }
 }
 
-export async function withResearchPdf<T>(bytes: Uint8Array, operation: (pdf: PDFDocumentProxy) => Promise<T>): Promise<T> {
+export async function withResearchPdf<T>(input: Uint8Array | URL, operation: (pdf: PDFDocumentProxy) => Promise<T>): Promise<T> {
   const loadingTask = getDocument({
-    data: Buffer.isBuffer(bytes) ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) : bytes,
+    ...(input instanceof URL ? {url: input, disableStream: true, disableAutoFetch: true}
+      : {data: Buffer.isBuffer(input) ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength) : input}),
     disableFontFace: true,
     useSystemFonts: true,
     useWorkerFetch: false,

@@ -55,6 +55,8 @@ import {
 import type { IpcResult } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
 import {withTerminalOwner} from '../services/terminal-owner-context';
+import {researchDocumentImportBatchStartSchema, researchDocumentImportBatchListSchema, researchDocumentImportBatchRefSchema}
+  from '../../shared/schemas/research-document-import-batch';
 import type { TimedHandle } from './ipc-common';
 
 export type PluginCapabilityInvoker = {
@@ -397,6 +399,14 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
           return withResearchHumanContext({
             capability: target.capabilityName, projectId: request.projectId, windowId
           }, () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.documentImportBatch.start' || target.capabilityName === 'research.documentImportBatch.list' ||
+            target.capabilityName === 'research.documentImportBatch.read' || target.capabilityName === 'research.documentImportBatch.retry') {
+          const request = (target.capabilityName === 'research.documentImportBatch.start' ? researchDocumentImportBatchStartSchema
+            : target.capabilityName === 'research.documentImportBatch.list' ? researchDocumentImportBatchListSchema
+            : researchDocumentImportBatchRefSchema).parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
         }
         const scoped = ['research.literature.search', 'research.literature.getSearch', 'research.library.addLiterature',
           'research.library.getImportOperation', 'research.library.cancelImportOperation', 'research.library.listAcquisition',

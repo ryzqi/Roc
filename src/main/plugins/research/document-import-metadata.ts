@@ -12,10 +12,10 @@ const emptyMetadata = (): DocumentImportMetadata => ({title: null, authors: [], 
 const maximumMetadataText = 16_384;
 
 /** Read source metadata before creating a library item; PDF.js must never transfer the original source buffer. */
-export async function inspectPdfImportMetadata(bytes: Uint8Array, signal: AbortSignal): Promise<DocumentImportMetadata> {
+export async function inspectPdfImportMetadata(input: Uint8Array | URL, signal: AbortSignal): Promise<DocumentImportMetadata> {
   signal.throwIfAborted();
   try {
-    return await withResearchPdf(Uint8Array.from(bytes), async pdf => {
+    return await withResearchPdf(input instanceof URL ? input : Uint8Array.from(input), async pdf => {
       signal.throwIfAborted();
       const {info, metadata} = await pdf.getMetadata();
       const fields = new Map<string, unknown>();

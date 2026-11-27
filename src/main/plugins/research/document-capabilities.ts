@@ -16,6 +16,37 @@ import {
 } from '../../../shared/schemas/research-document-annotations';
 import {requireResearchHuman} from '../../services/research-human-context';
 import {researchDocumentStatusRequestSchema, researchDocumentStatusResultSchema} from '../../../shared/schemas/research-document-status';
+import {researchDocumentImportBatchStartSchema, researchDocumentImportBatchRefSchema, researchDocumentImportBatchListSchema,
+  researchDocumentImportBatchResultSchema, researchDocumentImportBatchSummarySchema} from '../../../shared/schemas/research-document-import-batch';
+import type {ResearchDocumentImportBatches} from './document-import-batches';
+
+const batchCapabilities = {
+  start: descriptor('research.documentImportBatch.start' as const, researchDocumentImportBatchStartSchema, researchDocumentImportBatchResultSchema),
+  list: descriptor('research.documentImportBatch.list' as const, researchDocumentImportBatchListSchema, researchDocumentImportBatchSummarySchema.array()),
+  read: descriptor('research.documentImportBatch.read' as const, researchDocumentImportBatchRefSchema, researchDocumentImportBatchResultSchema),
+  retry: descriptor('research.documentImportBatch.retry' as const, researchDocumentImportBatchRefSchema, researchDocumentImportBatchResultSchema)
+};
+export const researchDocumentImportBatchCapabilities = Object.values(batchCapabilities);
+
+export function registerResearchDocumentImportBatches(context: RocPluginContext, batches: ResearchDocumentImportBatches): void {
+  const {capabilities: registry, pluginId} = context;
+  registry.register(pluginId, batchCapabilities.start, input => {
+    requireResearchHuman('research.documentImportBatch.start', input.projectId);
+    return batches.start(input);
+  });
+  registry.register(pluginId, batchCapabilities.list, async input => {
+    requireResearchHuman('research.documentImportBatch.list', input.projectId);
+    return batches.list(input.projectId, input.offset);
+  });
+  registry.register(pluginId, batchCapabilities.read, async input => {
+    requireResearchHuman('research.documentImportBatch.read', input.projectId);
+    return batches.read(input);
+  });
+  registry.register(pluginId, batchCapabilities.retry, async input => {
+    requireResearchHuman('research.documentImportBatch.retry', input.projectId);
+    return batches.retry(input);
+  });
+}
 
 const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),

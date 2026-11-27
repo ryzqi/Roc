@@ -1,7 +1,8 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, readFile, writeFile, rm, access} from 'node:fs/promises';
+import {mkdtemp, mkdir, realpath, readFile, writeFile, rm, access} from 'node:fs/promises';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
@@ -9,7 +10,8 @@ let api;
 before(async () => {api = await loadResearchTestApi();});
 after(() => api?.dispose());
 async function fixture(operation) {
-  const root = await mkdtemp('/private/tmp/roc-document-lifecycle-'), f = createResearchFixture(api, 'reading', root);
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-document-lifecycle-')));
+  const f = createResearchFixture(api, 'reading', root);
   let service;
   try {
     const source = Buffer.from('<html><body><h1>Retained source</h1><p>Original published text.</p></body></html>');

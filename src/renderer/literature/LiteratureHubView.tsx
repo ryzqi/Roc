@@ -500,6 +500,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
         importBibliographyFile={store.importBibliographyFile}
         importRecord={store.importRecord}
         pickFile={actions.pickFile}
+        pickFiles={actions.pickFiles}
         searchLiterature={actions.searchLiterature}
         addCandidate={actions.addCandidate}
         addDocumentToNewItem={store.addPdfToNewItem}

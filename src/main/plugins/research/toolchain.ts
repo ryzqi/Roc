@@ -363,14 +363,17 @@ export class ResearchToolchain {
     ];
     const parseOptions = operation.operation === 'parse_document' && operation.options !== null && typeof operation.options === 'object'
       ? operation.options as Partial<ResearchParseOptions> : null;
+    let resourceClass: ResearchProcessAdmissionRequest['resourceClass'] = 'utility';
     let timeoutMs = 60_000;
     let terminationGraceMs = 1000;
     if (operation.operation === 'parse_document') {
+      resourceClass = modelPaths.length === 0 ? 'native-parse' : 'parse';
       // The parser's own timeout aborts its job first; leave time for an active native inference to settle and release sessions.
       timeoutMs = 660_000;
       terminationGraceMs = 60_000;
     }
     else if (operation.operation === 'render_figure') {
+      resourceClass = 'compute';
       const requestedTimeout = typeof operation.timeoutMs === 'number' ? operation.timeoutMs : 60_000;
       timeoutMs = Math.max(1, Math.min(3_600_000, requestedTimeout));
     }
@@ -386,7 +389,7 @@ export class ResearchToolchain {
       writeLimits: [{ path: input.jobDir, ...workerOutputLimits }],
       timeoutMs,
       resourceLimits: { mode: 'monitored', cpuTimeMs: timeoutMs * 4, maxResidentBytes: 4 * 1024 ** 3 },
-      admission: { ...input.admission, resourceClass: operation.operation === 'parse_document' ? 'parse' : operation.operation === 'render_figure' ? 'compute' : 'utility' },
+      admission: { ...input.admission, resourceClass },
       terminationGraceMs,
       signal: input.signal,
       input: JSON.stringify(request),

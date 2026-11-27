@@ -48,7 +48,8 @@ export const researchLegacyChecksums: Readonly<Record<number, string>> = {
   73: 'b790e17f3a05bfc3284c5168a05db0b3fc899d1e94706212999c5e7cd83021ee',
   74: '92df0c54a7ba4deb1e11c4dd7299ac93666e5d528ba00bfd889f39aee94ebb90',
   75: '8beebe3cebc190fff4d75c6dad0d36f8b0d6863ab79e5f1a63e760af8dcdff0d',
-  76: '1241f753c8a2dec38f2829a15e9955f4af5d99556b3f1ec154e09757f1f63f7f'
+  76: '1241f753c8a2dec38f2829a15e9955f4af5d99556b3f1ec154e09757f1f63f7f',
+  77: 'aa0f32e3338880b0da16ea73a33ee2bb11d059e50ff6e89d24059b2425e9b48a'
 };
 
 /**
@@ -76,8 +77,7 @@ export async function migrateDatabasesOnStartup(rootDir: string): Promise<void> 
         throw new Error(`database_migration_newer_database:${definition.dbName}:${metadata.version}`);
       }
       if (definition.dbName !== 'plugin:@roc/plugin-research'
-        || researchLegacyChecksums[metadata.version] === undefined
-        || target.version !== 77) {
+        || researchLegacyChecksums[metadata.version] === undefined) {
         throw new Error(`database_migration_unsupported:${definition.dbName}:${metadata.version}`);
       }
       assertKnownResearchSchema(db, metadata.version, metadata.checksum);

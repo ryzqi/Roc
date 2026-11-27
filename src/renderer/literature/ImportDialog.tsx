@@ -16,6 +16,7 @@ import {LiteratureCandidateReview} from './LiteratureCandidateReview';
 import {ZoteroImportPanel, type ZoteroDraftGuard} from './ZoteroImportPanel';
 import {useZoteroImportJob} from './use-zotero-import-job';
 import {useZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
+import {DocumentImportBatches} from './DocumentImportBatches';
 import type {RocClient} from '../shared/roc-client';
 import {
   DOCUMENT_EXTENSIONS,
@@ -55,6 +56,7 @@ export type ImportDialogProps = {
   importBibliographyFile: (sourcePath: string, format: ResearchBibliographyFormat) => Promise<LiteratureImportOutcome>;
   importRecord: (record: ResearchLiterature, citationKey: string) => Promise<LiteratureImportOutcome>;
   pickFile: () => Promise<string | null>;
+  pickFiles: () => Promise<string[]>;
   searchLiterature: LiteratureImportActions['searchLiterature'];
   addCandidate: LiteratureImportActions['addCandidate'];
   addDocumentToNewItem: (input: {
@@ -154,7 +156,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   };
 
   // Document tab
-  const [documentPath, setDocumentPath] = useState<string | null>(null);
+  const [documentPaths, setDocumentPaths] = useState<string[]>([]);
+  const documentPath = documentPaths[0] ?? null;
+  const multipleDocuments = documentPaths.length > 1;
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const batchIntent = useRef<{key: string; id: string} | null>(null);
   const [documentTarget, setDocumentTarget] = useState<'new-item' | 'library-item'>('new-item');
   const [documentMetadataMode, setDocumentMetadataMode] = useState<'automatic' | 'provided'>('automatic');
   const [documentTitle, setDocumentTitle] = useState('');
@@ -207,7 +213,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     }
     setSavedDrafts({});
     setMessage(null);
-    setDocumentPath(null);
+    setDocumentPaths([]);
+    setActiveBatchId(null);
     setDocumentTitle('');
     setDocumentKeyOverride(null);
     setDocumentMetadataMode('automatic');
@@ -249,7 +256,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const manualFields = [manualTitle, manualAuthors, manualYear, manualDoi, manualUrl, manualAbstract, manualKey];
   const draftSignatures: Partial<Record<ImportTabRequest, string>> = {
     document: documentPath !== null || documentTitle.length > 0 || documentKeyOverride !== null || documentMetadataMode === 'provided'
-      ? JSON.stringify([documentPath, documentTarget, documentMetadataMode, documentTitle, documentKeyOverride]) : '',
+      ? JSON.stringify([documentPaths, documentTarget, documentMetadataMode, documentTitle, documentKeyOverride]) : '',
     doi: doiInput,
     bibliography: bibliographyPath === null ? '' : JSON.stringify([bibliographyPath, bibliographyFormat]),
     manual: manualFields.some(value => value.length > 0) ? JSON.stringify(manualFields) : ''
@@ -305,7 +312,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     const submittedTab = tab;
     // Automatic and attached imports do not consume a retained manual override.
     const signature = tab === 'document' && (documentTarget === 'library-item' || documentMetadataMode === 'automatic')
-      ? JSON.stringify([documentPath, documentTarget, documentMetadataMode, '', null])
+      ? JSON.stringify([documentPaths, documentTarget, documentMetadataMode, '', null])
       : draftSignatures[tab];
     await perform('import', action, outcome => {
       setMessage(outcomeMessage(outcome, submittedTab));
@@ -320,7 +327,30 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     });
   };
 
-  const documentReady =
+  const submitBatch = (): void => {
+    const libraryItemId = documentTarget === 'library-item' ? selectedItemId : null;
+    const key = JSON.stringify([props.projectId, libraryItemId, documentPaths]);
+    if (batchIntent.current?.key !== key) batchIntent.current = {key, id: crypto.randomUUID()};
+    const requestId = batchIntent.current.id;
+    void perform('import', async () => {
+      const result = await props.client.api.research.startDocumentImportBatch({
+        projectId: props.projectId, requestId, libraryItemId, sourcePaths: documentPaths
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data;
+    }, result => {
+      batchIntent.current = null;
+      setDocumentPaths([]);
+      setDocumentMetadataMode('automatic');
+      setDocumentTitle('');
+      setDocumentKeyOverride(null);
+      setActiveBatchId(result.id);
+      setMessage({tone: 'ok', text: `已登记 ${result.entries.length} 份文档，可关闭此窗口。请在文件保存后再移动原件。`});
+    });
+  };
+
+  const documentReady = multipleDocuments ?
+    documentPaths.length <= 500 && (documentTarget === 'new-item' || props.canAttachToSelection && selectedItemId !== null) :
     documentPath !== null &&
     isDocumentPathSupported(documentPath) &&
     (documentTarget === 'library-item'
@@ -413,7 +443,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             </div>
             <div className="flex items-center gap-2">
               <ActionButton
-                onClick={() => void pick(setDocumentPath)}
+                onClick={() => void perform('pick', props.pickFiles, paths => {
+                  if (paths.length > 0 && writableRef.current) setDocumentPaths(paths);
+                })}
                 disabled={!writable}
                 data-testid="literature-import-pick-document"
                 loading={operation === 'pick'}
@@ -422,14 +454,14 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 选择文件…
               </ActionButton>
               <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-document-path">
-                {documentPath === null ? '未选择' : `${documentPath}（${documentKindLabel(documentPath)}）`}
+                {multipleDocuments ? `已选择 ${documentPaths.length} 份文档` : documentPath === null ? '未选择' : `${documentPath}（${documentKindLabel(documentPath)}）`}
               </span>
             </div>
             <details className={labelClass}>
               <summary>支持的文件格式</summary>
               <p>支持 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件最大 512 MB。</p>
             </details>
-            {documentTarget === 'new-item' ? (
+            {documentTarget === 'new-item' && !multipleDocuments ? (
               <details className="literature-import-document-metadata" open={documentMetadataMode === 'provided'}>
                 <summary className={`${formSecondaryButtonClass} literature-import-document-disclosure`}
                   aria-disabled={pending || !writable || undefined}
@@ -485,6 +517,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 </div>
               </details>
             ) : null}
+            {documentPaths.length > 500 && <ActionStatus state="error">一次最多可添加 500 份文档。</ActionStatus>}
             <ActionButton
               variant="primary"
               disabled={!documentReady || pending || !writable}
@@ -492,7 +525,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               loadingLabel="正在添加文档…"
               onClick={() => {
                 const path = documentPath;
-                if (path === null || !documentReady) {
+                if (path === null || !documentReady || !writableRef.current) return;
+                if (multipleDocuments) {
+                  submitBatch();
                   return;
                 }
                 void run(async () => {
@@ -511,8 +546,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-document-submit"
               className="mt-1 self-start"
             >
-              添加文档
+              {multipleDocuments ? `添加 ${documentPaths.length} 份文档` : '添加文档'}
             </ActionButton>
+            {open && <DocumentImportBatches key={JSON.stringify([props.projectId, activeBatchId])}
+              client={props.client} projectId={props.projectId} initialBatchId={activeBatchId}
+              writable={writable} onDocumentsChanged={props.onZoteroImported} />}
           </div>
         ) : null}
 

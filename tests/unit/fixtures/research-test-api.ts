@@ -1,6 +1,7 @@
 export { ResearchRepository } from '../../../src/main/plugins/research/repository';
 export {ResearchProcessingObserver, ResearchProcessingTrace, processingTraceContextSchema,
   processingStageEventSchema, processingTraceWirePrefix} from '../../../src/main/plugins/research/processing-trace';
+export {ScientificLibraryIndexService} from '../../../src/main/plugins/research/scientific-library-index';
 export {ResearchEmbeddingService} from '../../../src/main/plugins/research/embedding-service';
 export {ResearchIndexService} from '../../../src/main/plugins/research/index-service';
 export {parseResearchDocument} from '../../../src/main/plugins/research/document-parser';
@@ -92,6 +93,9 @@ export { ZoteroAdapter } from '../../../src/main/plugins/research/zotero-adapter
 export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../../src/main/plugins/research/search-strategy';
 export { withLiteratureContext } from '../../../src/main/services/literature-context';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
+export {ResearchDocumentImportBatches} from '../../../src/main/plugins/research/document-import-batches';
+export {documentImportLocation, documentImportStamp, receiveDocumentImport} from '../../../src/main/plugins/research/document-import-source';
+export {normalizeResearchBibliography} from '../../../src/main/plugins/research/bibliography';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
 export {withDocumentSourceRequest} from '../../../src/main/plugins/research/document-source-request';
 export {VerifiedDocumentSources, documentSourceLimits, documentSourceRange, verifyDocumentSource} from '../../../src/main/plugins/research/verified-document-source';

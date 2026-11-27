@@ -41,7 +41,7 @@ export type ToolAdmissionObserver = (observation: ToolAdmissionObservation) => v
 export type ResearchProcessAdmissionRequest = Readonly<{
   projectId: string | null;
   priority: 'user' | 'background';
-  resourceClass: 'parse' | 'compute' | 'utility';
+  resourceClass: 'parse' | 'native-parse' | 'compute' | 'utility';
   gpu: boolean;
 }>;
 
@@ -147,7 +147,7 @@ export class ToolResourceCoordinator {
 
   acquireResearchProcess(request: ResearchProcessAdmissionRequest, signal?: AbortSignal, observer?: ResearchProcessAdmissionObserver): Promise<ResearchProcessAdmissionLease> {
     if ((request.projectId !== null && (typeof request.projectId !== 'string' || request.projectId.trim().length === 0)) ||
-        !['user', 'background'].includes(request.priority) || !['parse', 'compute', 'utility'].includes(request.resourceClass) || typeof request.gpu !== 'boolean') {
+        !['user', 'background'].includes(request.priority) || !['parse', 'native-parse', 'compute', 'utility'].includes(request.resourceClass) || typeof request.gpu !== 'boolean') {
       return Promise.reject(new Error('research_process_admission_invalid'));
     }
     if (this.processCleanupUnresolved) return Promise.reject(new Error('research_process_cleanup_unresolved'));
@@ -189,7 +189,8 @@ export class ToolResourceCoordinator {
     const conflicts = new Set<ResearchProcessAdmissionResourceKind>();
     if (this.processActive.size >= this.processLimit) conflicts.add('research_cpu');
     for (const active of this.processActive) {
-      if (active.request.projectId === request.projectId) conflicts.add('research');
+      const independentNativeParses = request.resourceClass === 'native-parse' && active.request.resourceClass === 'native-parse';
+      if (active.request.projectId === request.projectId && !independentNativeParses) conflicts.add('research');
       if (request.resourceClass === 'parse' && active.request.resourceClass === 'parse') conflicts.add('research_parse');
       if (request.gpu && active.request.gpu) conflicts.add('research_gpu');
     }
@@ -333,7 +334,7 @@ export class ToolResourceCoordinator {
 }
 
 function processResourceKinds(request: ResearchProcessAdmissionRequest): ResearchProcessAdmissionResourceKind[] {
-  return ['research', 'research_cpu', ...(request.resourceClass === 'parse' ? ['research_parse' as const] : []),
+  return ['research', 'research_cpu', ...(request.resourceClass === 'parse' || request.resourceClass === 'native-parse' ? ['research_parse' as const] : []),
     ...(request.gpu ? ['research_gpu' as const] : [])];
 }
 

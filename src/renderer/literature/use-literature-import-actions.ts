@@ -15,6 +15,7 @@ import type { LiteratureSearchSource } from './library-store';
 export type LiteratureImportActions = {
   /** Native picker; resolves `null` on cancellation, throws a failure for the dialog to display. */
   pickFile: () => Promise<string | null>;
+  pickFiles: () => Promise<string[]>;
   /** `research.literature.search`, normalized so the dialog never sees `{ok:false}`. */
   searchLiterature: (
     query: string,
@@ -33,18 +34,13 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
   const { projectId, reload } = store;
   const requests = useRef(new Map<string, string>());
 
-  const pickFile = useCallback(async (): Promise<string | null> => {
-    // `files.selectFromDialog` is the *file* dialog; `workspace.selectFromDialog`
-    // is the directory one. Using the workspace one here would let the user pick a
-    // folder and then fail with `research_source_format_unsupported`.
+  const pickFiles = useCallback(async (): Promise<string[]> => {
     const result = await client.api.files.selectFromDialog();
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-    // `{ filePaths: string[] }`; a cancelled dialog is `{ filePaths: [] }`.
-    const first = result.data?.filePaths?.[0];
-    return typeof first === 'string' && first.length > 0 ? first : null;
+    if (!result.ok) throw new Error(result.error.message);
+    return result.data?.filePaths ?? [];
   }, [client]);
+
+  const pickFile = useCallback(async (): Promise<string | null> => (await pickFiles())[0] ?? null, [pickFiles]);
 
   const searchLiterature = useCallback(
     async (query: string, sources: LiteratureSearchSource[], limit: number, filters?: Pick<LiteratureSearchInput, 'yearFrom' | 'yearTo'>,
@@ -100,7 +96,7 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
   }, [addCandidates]);
 
   return useMemo(
-    () => ({ pickFile, searchLiterature, readSearch, addCandidate, addCandidates }),
-    [pickFile, searchLiterature, readSearch, addCandidate, addCandidates]
+    () => ({ pickFile, pickFiles, searchLiterature, readSearch, addCandidate, addCandidates }),
+    [pickFile, pickFiles, searchLiterature, readSearch, addCandidate, addCandidates]
   );
 }

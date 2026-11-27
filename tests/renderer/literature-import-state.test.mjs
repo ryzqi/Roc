@@ -24,6 +24,19 @@ before(async () => {
     window.documentPath = '/fixture/source.pdf';
     window.deferPick = false;
     window.deferImport = false;
+    const batchClient = {api: {research: {
+      listDocumentImportBatches: async () => ({ok: true, data: window.batch
+        ? [{id: window.batch.id, createdAt: window.batch.createdAt, total: 2, pending: 0, failed: 1}] : []}),
+      readDocumentImportBatch: async () => ({ok: true, data: window.batch}),
+      startDocumentImportBatch: async request => {
+        window.batchRequest = request;
+        window.batch = {id: request.requestId, createdAt: new Date().toISOString(), entries: [
+          {id: 'first', filename: 'one.pdf', status: 'parsed', documentId: 'first', error: null},
+          {id: 'second', filename: 'two.pdf', status: 'failed', documentId: null, error: 'ENOENT'}
+        ]};
+        return {ok: true, data: window.batch};
+      }
+    }}};
     function Harness() {
       const [open, setOpen] = useState(true);
       const [item, setItem] = useState({id: 'paper-a', title: 'Paper A'});
@@ -34,11 +47,12 @@ before(async () => {
       window.setImportWritable = value => flushSync(() => setWritable(value));
       window.setImportCanAttach = value => flushSync(() => setCanAttach(value));
       return React.createElement(ImportDialog, {open, onClose: () => setOpen(false),
-        projectId: 'project-fixture', writable, client: {}, onZoteroImported: () => {},
+        projectId: 'project-fixture', writable, client: batchClient, onZoteroImported: () => {},
         selectedItem: {id: item.id, title: item.title}, canAttachToSelection: canAttach,
-        pickFile: () => window.deferPick
+        pickFile: async () => null,
+        pickFiles: async () => window.batchPaths ?? (window.deferPick
           ? new Promise(resolve => {window.finishPick = resolve;})
-          : Promise.resolve(window.documentPath),
+          : Promise.resolve(window.documentPath)).then(path => [path]),
         addDocumentToNewItem: async input => {
           window.documentImports.push(input);
           if (window.deferImport) return new Promise(resolve => {window.finishImport = resolve;});
@@ -367,4 +381,24 @@ test('automatic and disclosed document forms preserve focus and shadows in both 
     await assertShadows(`${theme}:hover-narrow`);
     if (capture) await page.screenshot({path: join(capture, `document-import-provided-${theme}-420.png`)});
   }
+});
+
+test('multi-selection submits every path once and shows the persisted per-file receipt after reopen', async () => {
+  await page.evaluate(() => {
+    window.setImportOpen(false);
+    window.deferPick = false;
+    window.batchPaths = ['/fixture/one.pdf', '/fixture/two.pdf'];
+  });
+  await page.getByTestId('literature-import-dialog').waitFor({state: 'hidden'});
+  await page.evaluate(() => window.setImportOpen(true));
+  await page.getByTestId('literature-import-target-new').check();
+  await page.getByTestId('literature-import-pick-document').click();
+  await expect(page.getByTestId('literature-import-document-submit')).toHaveText('添加 2 份文档');
+  await page.getByTestId('literature-import-document-submit').click();
+  await expect(page.getByRole('region', {name: '文档导入批次'})).toContainText('one.pdf');
+  assert.deepEqual(await page.evaluate(() => window.batchRequest.sourcePaths), ['/fixture/one.pdf', '/fixture/two.pdf']);
+  await page.evaluate(() => window.setImportOpen(false));
+  await page.getByTestId('literature-import-dialog').waitFor({state: 'hidden'});
+  await page.evaluate(() => window.setImportOpen(true));
+  await expect(page.getByRole('region', {name: '文档导入批次'})).toContainText('找不到原件');
 });

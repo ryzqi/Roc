@@ -77,6 +77,7 @@ before(async () => {
         return Promise.resolve(result).then(reply=>new Promise(resolve=>window.pendingActions.push({method,input,reply,resolve})));
       };
       const client = {api:{research:{
+        listDocumentImportBatches: async () => ok([]),
         getZoteroChildren: input => call('children',input,async()=>{
           if(scenario.childrenError) return fail('Synthetic child source disconnected');
           const parent={scope:{serverId:input.serverId,library:input.library},itemKey:input.itemKey,
@@ -282,7 +283,7 @@ before(async () => {
       return <><button id="open" onClick={()=>setOpen(true)}>导入</button>
         <ImportDialog open={open} initialTab="document" onClose={()=>setOpen(false)}
           client={client} projectId={scenario.projectId === undefined ? 'project-a' : scenario.projectId} onZoteroImported={()=>window.reloads++}
-          selectedItem={null} canAttachToSelection={false} pickFile={async()=>null}
+          selectedItem={null} canAttachToSelection={false} pickFile={async()=>null} pickFiles={async()=>[]}
           importDoi={async()=>({ok:true,createdCount:0,duplicateCount:0})}
           importBibliographyFile={async()=>({ok:true,createdCount:0,duplicateCount:0})}
           importRecord={async()=>({ok:true,createdCount:0,duplicateCount:0})}

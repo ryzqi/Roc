@@ -1,6 +1,6 @@
 {
   "dbName": "research",
-  "targetVersion": 77,
+  "targetVersion": 78,
   "snapshots": [
     {
       "version": 71,
@@ -87,6 +87,18 @@
         "src/main/infrastructure/wiki-schema.ts": "a949a2d6aa2fcdb13d5034317c4ed4599bd9935d0183324035f15b620c30966c",
         "src/main/infrastructure/execution-events.ts": "a56e5cf61b6bc50dac9a9cbdee14089ad8dbfb5edefa392f314293a58672d33b",
         "src/shared/schemas/execution-events.ts": "ad33bcc8468aa9175de18f55c003d0e8d750222900a40cd8c4c7f076702d498b"
+      }
+    },
+    {
+      "version": 77,
+      "commit": "8ed3d2ac4b508f47e5b19d120f52194a9124259c",
+      "filename": "research-v77.sql",
+      "sha256": "c5aa863b7b01bc271af81dfede1b096feb3876c8fb8182473da83cf4e4658eb2",
+      "inputs": {
+        "src/main/infrastructure/database-schemas.ts": "eb8c27643fbf3080ffe72a29c3051c9af0675bd1d0874357520465747a9e467d",
+        "src/main/infrastructure/wiki-schema.ts": "a949a2d6aa2fcdb13d5034317c4ed4599bd9935d0183324035f15b620c30966c",
+        "src/main/infrastructure/scientific-index-schema.ts": "c9b8d723aec49b62537a4ae2aff902e6e57647542f8a5cb57042a4b72338c5e4",
+        "src/main/infrastructure/scientific-extraction-schema.ts": "1fd2755e2dd7d8fc4707f4e0885be20c86f3f096443c8f447ab5a292e4694323"
       }
     }
   ]
