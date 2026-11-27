@@ -13,7 +13,7 @@ import type {ResearchDocument} from './document-repository';
 import type {ResearchDocumentService} from './document-service';
 import {readResearchFile, researchAbsolutePath, researchContentHash, researchWorkspace} from './research-files';
 
-const candidateSchema = z.object({url: z.string().url().max(4096), provider: z.enum(['arxiv', 'openalex', 'semantic_scholar', 'europe_pmc', 'openreview', 'acl', 'cvf', 'unpaywall']),
+const candidateSchema = z.object({url: z.string().url().max(4096), provider: z.enum(['arxiv', 'openalex', 'semantic_scholar', 'europe_pmc', 'openreview', 'acl', 'cvf', 'unpaywall', 'cool_papers']),
   version: z.string().nullable(), license: z.string().nullable(), doi: z.string().nullable(), arxivId: z.string().nullable(),
   openAlexId: z.string().nullable()}).strict();
 const persistedSourcesSchema = z.object({version: z.literal(1), candidates: z.array(candidateSchema).max(100),
@@ -25,9 +25,14 @@ function normalized<T>(value: string | null | undefined, convert: (value: string
   try {return convert(value);} catch {return null;}
 }
 
+function arxivIdentifier(value: string): string {
+  const {id, version} = normalizeResearchArxiv(value);
+  return version === null ? id : `${id}v${version}`;
+}
+
 function externalIdentity(item: {metadata: {source: string; externalId: string}}): Partial<PdfSourceInput> {
   const {source, externalId} = item.metadata;
-  if (source === 'arxiv') return {arxivId: normalized(externalId, value => normalizeResearchArxiv(value).id)};
+  if (source === 'arxiv') return {arxivId: normalized(externalId, arxivIdentifier)};
   if (source === 'openalex') return {openAlexId: externalId};
   if (source === 'semantic_scholar') return {semanticScholarId: externalId};
   if (source === 'openreview') return {openReviewId: externalId};
@@ -47,8 +52,9 @@ export function pdfSourceInputForLibraryItem(library: ResearchLibraryRepository,
   const item = library.get(itemId);
   const input: PdfSourceInput = {doi: normalized(item.metadata.doi, normalizeResearchDoi), ...externalIdentity(item)};
   for (const source of item.sources) {
-    if (source.providerRecord === null) continue;
+    if (source.metadata?.source === 'arxiv') input.arxivId ??= normalized(source.metadata.externalId, arxivIdentifier);
     const provider = source.providerRecord;
+    if (provider === null) continue;
     const identity = externalIdentity({metadata: provider});
     input.doi ??= normalized(provider.doi, normalizeResearchDoi);
     input.arxivId ??= identity.arxivId;
@@ -182,6 +188,8 @@ export class LiteraturePdfAcquisition {
           return {stage: 'import', status: 'queued', documentId: existing.id, receipt: pdf.receipt};
         }
         const identity = pdfSourceInputForLibraryItem(this.library, job.libraryItemId);
+        identity.arxivId ??= normalized(job.radarPdfHints?.arxivId, arxivIdentifier);
+        if (job.radarPdfHints?.coolPapersPdfUrl) identity.coolPapersPdfUrl = job.radarPdfHints.coolPapersPdfUrl;
         const candidates = await resolvePdfSources(identity, signal, {...this.resolverOptions(),
           onProviderError: (provider, error) => {
             providerFailed = true;

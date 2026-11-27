@@ -5,7 +5,7 @@ import {readPublicOpenReviewSearch} from './openreview-adapter';
 
 export type PdfSourceCandidate = {
   url: string;
-  provider: 'arxiv' | 'openalex' | 'semantic_scholar' | 'europe_pmc' | 'openreview' | 'acl' | 'cvf' | 'unpaywall';
+  provider: 'arxiv' | 'openalex' | 'semantic_scholar' | 'europe_pmc' | 'openreview' | 'acl' | 'cvf' | 'unpaywall' | 'cool_papers';
   version: string | null;
   license: string | null;
   doi: string | null;
@@ -23,6 +23,8 @@ export type PdfSourceInput = {
   openReviewId?: string | null;
   aclId?: string | null;
   cvfId?: string | null;
+  /** PDF field captured by the main process from a Cool Papers detail page. */
+  coolPapersPdfUrl?: string | null;
 };
 
 /** Balanced preserves discovery order (including arXiv first). Preprint prefers preprints,
@@ -280,7 +282,8 @@ export async function resolvePdfSources(input: PdfSourceInput, signal: AbortSign
   const aclId = checked(input.aclId, /^(?:[A-Z]\d{2}-\d{4}|20\d{2}\.[a-z][a-z0-9-]*-\w+\.\d+)$/u);
   const cvfId = checked(input.cvfId, /^content\/(?:CVPR|ICCV|WACV)20\d{2}\/html\/[A-Za-z0-9_.-]+\.html$/u);
   const arxivId = arxivValue;
-  if ([doi, arxivId, openAlexId, semanticScholarId, pmcid, pmid, openReviewId, aclId, cvfId].every(value => value === null)) {
+  const coolPapersPdf = arxivId === null && !deps.onlyDoiFallback ? pdfDesignatedUrl(input.coolPapersPdfUrl) : null;
+  if ([doi, arxivId, openAlexId, semanticScholarId, pmcid, pmid, openReviewId, aclId, cvfId, coolPapersPdf].every(value => value === null)) {
     throw new Error('research_pdf_identifier_required');
   }
   const effectiveDoi = doi ?? (arxivId === null ? null : `10.48550/arxiv.${arxivId.toLowerCase()}`);
@@ -301,6 +304,8 @@ export async function resolvePdfSources(input: PdfSourceInput, signal: AbortSign
       version: version === null ? null : `v${version}`, license: null, doi: effectiveDoi, arxivId, openAlexId});
   }
   if (!deps.onlyDoiFallback) {
+    if (coolPapersPdf !== null) candidates.push({url: coolPapersPdf, provider: 'cool_papers',
+      version: null, license: null, doi: effectiveDoi, arxivId, openAlexId});
     if (aclId !== null) candidates.push({url: `https://aclanthology.org/${aclId}.pdf`, provider: 'acl',
       version: 'publishedVersion', license: null, doi: effectiveDoi, arxivId, openAlexId});
     if (cvfId !== null) candidates.push({url: `https://openaccess.thecvf.com/${cvfId.replace('/html/', '/papers/').replace(/\.html$/u, '.pdf')}`,

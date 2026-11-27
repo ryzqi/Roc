@@ -23,7 +23,8 @@ const read = (row: unknown): PaperAcquisitionJob => {
     ...(failureJson == null ? {} : {lastFailure: JSON.parse(failureJson)})});
 };
 
-export type AcquisitionClaim = PaperAcquisitionJob & {source: unknown};
+type RadarPdfHints = {arxivId: string | null; coolPapersPdfUrl: string | null};
+export type AcquisitionClaim = PaperAcquisitionJob & {source: unknown; radarPdfHints?: RadarPdfHints};
 export type AcquisitionOutcome = {
   stage?: PaperAcquisitionStage;
   status: Exclude<PaperAcquisitionStatus, 'running'>;
@@ -53,6 +54,20 @@ export class LiteratureAcquisitionRepository {
     const joined = operationId === undefined || this.db.prepare(`INSERT OR IGNORE INTO ${members}(operation_id,job_id) VALUES (?,?)`)
       .run(operationId, job.id).changes === 1;
     return joined && ['queued', 'running'].includes(job.status);
+  }
+
+  /** Repair earlier Radar imports only where the project association still exists. */
+  enqueueMissingRadarImports(): void {
+    this.db.transaction(() => {
+      const missing = this.db.prepare(`SELECT DISTINCT lp.project_id AS projectId,lp.item_id AS itemId
+        FROM research_radar_articles a JOIN research_library_projects lp
+          ON lp.project_id=a.project_id AND lp.item_id=json_extract(a.snapshot_json,'$.importedItemId')
+        JOIN research_projects p ON p.id=lp.project_id AND p.status!='archived'
+        JOIN research_library l ON l.id=lp.item_id AND l.archived=0
+        WHERE NOT EXISTS (SELECT 1 FROM ${jobs} j WHERE j.project_id=lp.project_id AND j.library_item_id=lp.item_id)`)
+        .all() as Array<{projectId: string; itemId: string}>;
+      for (const {projectId, itemId} of missing) this.enqueue(projectId, itemId);
+    })();
   }
 
   list(scope: LiteratureExecutionContext, request: ListPaperAcquisition): ListPaperAcquisitionResult {
@@ -158,11 +173,22 @@ export class LiteratureAcquisitionRepository {
         {id: string; generation: string; source: string | null} | undefined;
       if (row === undefined) return null;
       const {source, ...job} = row;
+      const value = read(job);
+      const radarPdfHints = value.stage === 'resolve' && value.projectId !== null
+        ? this.radarPdfHints(value.projectId, value.libraryItemId) : undefined;
       this.db.prepare(`UPDATE ${jobs} SET status='running',next_retry_at=NULL,updated_at=? WHERE id=? AND generation=?`)
         .run(instant, row.id, row.generation);
-      return Object.assign(read(job), {status: 'running' as const, nextRetryAt: null, updatedAt: instant,
-        source: source === null ? null : JSON.parse(source)});
+      return {...value, status: 'running' as const, nextRetryAt: null, updatedAt: instant,
+        source: source === null ? null : JSON.parse(source), ...(radarPdfHints === undefined ? {} : {radarPdfHints})};
     })();
+  }
+
+  private radarPdfHints(projectId: string, itemId: string): RadarPdfHints | undefined {
+    return this.db.prepare(`SELECT json_extract(snapshot_json,'$.arxivId') AS arxivId,
+      CASE WHEN feed_id='cool:' || project_id THEN json_extract(snapshot_json,'$.pdfUrl') ELSE NULL END AS coolPapersPdfUrl
+      FROM research_radar_articles WHERE project_id=? AND json_extract(snapshot_json,'$.importedItemId')=?
+      AND (json_type(snapshot_json,'$.arxivId')='text' OR (feed_id='cool:' || project_id AND json_type(snapshot_json,'$.pdfUrl')='text'))
+      ORDER BY (arxivId IS NOT NULL) DESC,id LIMIT 1`).get(projectId, itemId) as RadarPdfHints | undefined;
   }
 
   nextRetryAt(): string | null {

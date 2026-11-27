@@ -54,6 +54,34 @@ test('missing embedding configuration blocks index and resumes without another d
   }
 });
 
+test('Cool Papers venue import publishes a PDF, fulltext vectors and its paper Wiki', {timeout: 60_000}, async () => {
+  const fixture = await prepareFulltextFixture();
+  try {
+    await fixture.start();
+    const {itemId} = await fixture.invoke('fixture.importCoolPapers');
+    assert.deepEqual(await fixture.invoke('fixture.importCoolPapers'), {itemId});
+    const deadline = Date.now() + 25_000;
+    let state;
+    do {
+      state = await fixture.invoke('fixture.inspect');
+      if (state.jobs[0]?.status === 'ready') break;
+      await delay(40);
+    } while (Date.now() < deadline);
+    assert.equal(state.jobs.length, 1);
+    const [job] = state.jobs, [document] = state.documents;
+    assert.equal(job.status, 'ready', JSON.stringify(job));
+    assert.equal(job.stage, 'wiki');
+    assert.equal(job.libraryItemId, itemId);
+    assert.equal(job.receipt.provider, 'cool_papers');
+    assert(state.files.some(file => file.path.startsWith('papers/') && file.sha256 === job.receipt.sha256));
+    assert.equal(state.counters.downloads, 1);
+    assert.equal(state.counters.parses, 1);
+    assert.equal(document.allLeafVectors, true);
+    assert.equal(document.wiki.ready, true);
+    assert.deepEqual(state.unexpectedRequests, []);
+  } finally {await fixture.close();}
+});
+
 test('Electron preflight never reports a missing package binary as a passed runtime', async () => {
   const result = await discoverFulltextElectron({});
   assert.equal(typeof result.available, 'boolean');

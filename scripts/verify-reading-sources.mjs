@@ -6,7 +6,8 @@ import {createResearchFixture,loadResearchTestApi} from '../tests/unit/fixtures/
 const api=await loadResearchTestApi(),fixture=createResearchFixture(api,'reading');
 const reading=new api.ReadingRepository(fixture.db,fixture.repository);
 let rssXml='';
-const radar=new api.RadarService(reading,{},{},async(url,options)=>{const text=await api.fetchReadingText(url,options);rssXml=text;return text;});
+const acquisition=new api.LiteratureAcquisitionService(new api.LiteratureAcquisitionRepository(fixture.db));
+const radar=new api.RadarService(reading,{},{},acquisition,async(url,options)=>{const text=await api.fetchReadingText(url,options);rssXml=text;return text;});
 const discovery=new api.ReadingDiscoveryService(reading,radar);
 const results=[],values=new Map(),secrets=new Map();
 const translation=new api.ReadingTranslationService({

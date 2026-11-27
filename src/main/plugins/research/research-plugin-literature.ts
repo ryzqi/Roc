@@ -87,6 +87,7 @@ export async function registerResearchLiterature(
       onProviderError: provider => context.logger.warn('Literature PDF source provider failed.', {provider})});
   const acquisitionWiki = new ResearchLiteratureAcquisitionWiki(researchRepository.wiki, researchRepository.paperCards);
   pdfAcquisition.configureWikiPipeline(new LiteratureWikiAcquisition(acquisitionWiki, acquisitionRepository).process);
+  acquisitionRepository.enqueueMissingRadarImports();
   acquisitionRepository.resumeBlockedWiki();
   acquisition.start(pdfAcquisition.process, () => reconcileAcquisitionReadiness(acquisitionRepository, researchRepository, acquisitionWiki));
   lifecycle.provide(context, 'reference-check', [referenceCheckCapability], child => {
@@ -94,7 +95,7 @@ export async function registerResearchLiterature(
   });
   lifecycle.provide(context, 'reading', researchReadingCapabilities, child => {
     const reading = new ReadingRepository(db, researchRepository);
-    radar = new RadarService(reading, researchEmbeddings, researchLibrary);
+    radar = new RadarService(reading, researchEmbeddings, researchLibrary, acquisition);
     readingTranslation = new ReadingTranslationService(context);
     readingDiscovery = new ReadingDiscoveryService(reading, radar);
     registerResearchReadingCapabilities(child, reading, radar, readingTranslation, readingDiscovery);

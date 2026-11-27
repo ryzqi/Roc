@@ -22,6 +22,7 @@ before(async () => {
     import {LibraryList} from './src/renderer/literature/LibraryList';
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
     import {ViewActivity} from './src/renderer/shared/view-activity';
+    import {literatureAddSchema} from './src/shared/schemas/literature-import';
     import {readingDiscoveryRequestSchema, readingDiscoveryResultSchema, radarArticleSchema,
       radarFeedSchema, radarFeedSaveSchema, radarImportSchema, radarRefreshSchema,radarBrowserRequestSchema,
       radarCapturePageSchema,radarRecommendSchema}
@@ -38,7 +39,7 @@ before(async () => {
       fetchedAt:'2026-11-12',cached:false,nextOffset:null,warnings:[]});
     const schemas = {discoverReadingRelations:readingDiscoveryRequestSchema, importRadarArticle:radarImportSchema,
       saveRadarFeed:radarFeedSaveSchema, refreshRadarFeed:radarRefreshSchema,radarBrowser:radarBrowserRequestSchema,
-      captureRadarPage:radarCapturePageSchema,recommendRadar:radarRecommendSchema};
+      captureRadarPage:radarCapturePageSchema,recommendRadar:radarRecommendSchema,addLiterature:literatureAddSchema};
     function call(method,input,data) {
       schemas[method]?.parse(input);
       calls.push({method,input});
@@ -48,6 +49,7 @@ before(async () => {
     const client = {api:{research:{
       discoverReadingRelations:input => call('discoverReadingRelations',input,discovery),
       importRadarArticle:input => call('importRadarArticle',input,{itemId:'saved-'+input.articleId}),
+      addLiterature:input => call('addLiterature',input,{counts:{created:1,linked:0,alreadyPresent:0,skippedArchived:0},items:[]}),
       listRadarFeeds:input => call('listRadarFeeds',input,[...radarFeeds.values()]),
       listRadarArticles:input => call('listRadarArticles',input,rows),
       saveRadarFeed:input => call('saveRadarFeed',input,{...feed(input.id),title:input.title,url:input.url,
@@ -57,8 +59,9 @@ before(async () => {
       refreshRadarFeed:input => call('refreshRadarFeed',input,{}),
       markRadarArticle:input => call('markRadarArticle',input,{}),
       recommendRadar:input => call('recommendRadar',input,{date:'2026-11-20',cached:false,corpusSize:3,configId:'fixture',articles:[]}),
-      radarBrowser:input => call('radarBrowser',input,{url:'https://papers.cool/arxiv/cs.AI',
-        papers:[{title:'Browser paper',url:'https://papers.cool/arxiv/2601.12345',doi:null,arxivId:'2601.12345'}]}),
+      radarBrowser:input => call('radarBrowser',input,input.source==='modelscope'
+        ?{url:'https://modelscope.cn/papers',papers:[{title:'DOI paper',url:'https://doi.org/10.5555/fixture',doi:'10.5555/fixture',arxivId:null}]}
+        :{url:'https://papers.cool/arxiv/cs.AI',papers:[{title:'Browser paper',url:'https://papers.cool/arxiv/2601.12345',doi:null,arxivId:'2601.12345'}]}),
       captureRadarPage:input => call('captureRadarPage',input,article('captured-paper'))
     }}};
     window.clear = () => flushSync(() => root.render(null));
@@ -371,6 +374,19 @@ test('browser unmount stops the subsequent import stage and refresh callback', a
   await page.getByRole('button',{name:'加入文献库',exact:true}).click();
   await page.evaluate(()=>{clear();resolveNext('captureRadarPage',{ok:true,data:{id:'captured-paper'}});});
   await settle();assert.equal(await count('importRadarArticle'),0);assert.equal(await page.evaluate(()=>imported),0);
+});
+
+test('ModelScope DOI imports request project fulltext processing', async () => {
+  await mount('radar');
+  await page.getByRole('tab',{name:'魔搭论文',exact:true}).click();
+  await page.getByRole('button',{name:'读取当前页论文 / 入库',exact:true}).click();
+  await page.getByRole('button',{name:'加入文献库',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'已入库：DOI paper'})).toContainText('全文处理进度见文献库');
+  const input = await page.evaluate(() => calls.find(call => call.method==='addLiterature').input);
+  assert.equal(input.projectId,'project-a');
+  assert.equal(input.destination,'current_project');
+  assert.equal(input.ingestionPolicy,'fulltext_auto');
+  assert.deepEqual(input.entries,[{kind:'doi',doi:'10.5555/fixture'}]);
 });
 
 test('library citation copy exposes clipboard rejection and clears it after a successful retry', async () => {

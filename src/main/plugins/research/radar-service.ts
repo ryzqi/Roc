@@ -5,6 +5,7 @@ import {radarFeedSchema, radarFeedSaveSchema, radarArticleSchema, radarRecommend
 import type {ReadingRepository} from './reading-repository';
 import type {ResearchEmbeddingService} from './embedding-service';
 import type {ResearchLibraryService} from './library-service';
+import type {LiteratureAcquisitionService} from './literature-acquisition-service';
 import {fetchReadingText, publicReadingUrl, type ReadingFetch} from './reading-network';
 import {parseRadarFeed, parseHuggingFacePapers, cosineSimilarity} from './radar-parser';
 import {RocDomainError} from '../../services/errors';
@@ -15,7 +16,9 @@ export class RadarService {
   private readonly controller = new AbortController();
   private readonly refreshes = new Map<string, Promise<RadarFeed>>();
   constructor(readonly reading: ReadingRepository, private readonly embeddings: ResearchEmbeddingService,
-    private readonly library: ResearchLibraryService, private readonly fetchText: ReadingFetch = fetchReadingText) {}
+    private readonly library: Pick<ResearchLibraryService, 'prepareDoi' | 'prepareRecord'>,
+    private readonly acquisition: Pick<LiteratureAcquisitionService, 'repository' | 'wake'>,
+    private readonly fetchText: ReadingFetch = fetchReadingText) {}
   private readonly jobs=new Set<Promise<unknown>>();
   private track<T>(work:()=>Promise<T>):Promise<T>{this.controller.signal.throwIfAborted();const task=work();this.jobs.add(task);void task.finally(()=>this.jobs.delete(task)).catch(()=>{});return task;}
   async shutdown(): Promise<void> {this.controller.abort();await Promise.allSettled([...this.jobs,...this.refreshes.values()]);}
@@ -54,8 +57,10 @@ export class RadarService {
     if(result.changes!==1)throw new Error('雷达文章 ID 已用于其他项目。');
   }
   private article(projectId: string, id: string): RadarArticle {
-    const value = this.articles(projectId,null).find(article => article.id === id);
-    if (!value) throw new Error('文章不存在或不属于当前项目。'); return value;
+    const row = this.reading.db.prepare('SELECT snapshot_json FROM research_radar_articles WHERE project_id=? AND id=?')
+      .get(projectId, id) as {snapshot_json: string} | undefined;
+    if (!row) throw new Error('文章不存在或不属于当前项目。');
+    return radarArticleSchema.parse(JSON.parse(row.snapshot_json));
   }
   mark(projectId: string, id: string, read: boolean): RadarArticle {
     this.reading.scope(projectId,true); const article = {...this.article(projectId,id),read}; this.store(projectId,article); return article;
@@ -96,20 +101,47 @@ export class RadarService {
   }
   importArticle(projectId:string,articleId:string):Promise<{itemId:string}>{return this.track(()=>this.importOne(projectId,articleId));}
   private async importOne(projectId: string, articleId: string): Promise<{itemId:string}> {
-    this.reading.scope(projectId,true); const article = this.article(projectId,articleId);
-    if (article.importedItemId) {
-      const item = this.reading.research.library.get(article.importedItemId);
-      if (item.archived) throw new Error('此文献已归档，请先在文献库恢复。');
-      if (item.projectIds.includes(projectId)) return {itemId:item.id};
+    this.reading.scope(projectId, true);
+    const article = this.article(projectId, articleId);
+    const signal = this.controller.signal;
+    const prepared = article.importedItemId ? null : await this.prepareArticle(article, projectId, signal);
+    const library = this.reading.research.library;
+    const {item, changed} = this.reading.db.transaction(() => {
+      signal.throwIfAborted();
+      this.reading.scope(projectId, true);
+      const current = this.article(projectId, articleId);
+      const existing = current.importedItemId === null ? null : library.get(current.importedItemId);
+      if (existing?.archived) throw new Error('此文献已归档，请先在文献库恢复。');
+      if (existing?.projectIds.includes(projectId)) return {item: existing, changed: false};
+      let item: ReturnType<typeof library.get>;
+      if (existing === null) {
+        if (prepared === null) throw new Error('文章入库状态已改变，请重试。');
+        item = library.import([prepared], projectId, {flush: false, notify: false, skipArchived: true}).items[0];
+      } else {
+        item = library.link(existing.id, projectId, true, {notify: false});
+      }
+      this.store(projectId, {...current, importedItemId: item.id, read: true});
+      this.acquisition.repository.enqueue(projectId, item.id);
+      return {item, changed: true};
+    })();
+    if (changed) {
+      this.acquisition.wake();
+      library.onChanged?.([item], 'import');
+      try {library.flushIndex();} catch { /* The committed source can be indexed again. */ }
     }
+    return {itemId: item.id};
+  }
+
+  private prepareArticle(article: RadarArticle, projectId: string, signal: AbortSignal) {
+    if (article.doi) return this.library.prepareDoi(article.doi, projectId, signal);
     const now = this.reading.now();
-    const result = article.doi ? await this.library.importDoi({projectId,doi:article.doi}) : await this.library.importRecord({projectId,citationKey:`radar_${article.id.slice(0,12)}`,
-      record:{id:`${article.arxivId ? 'arxiv' : 'rss'}:${article.arxivId ?? article.id}`,source:article.arxivId ? 'arxiv' : 'local',
-        externalId:article.arxivId ?? article.url,doi:null,title:article.title,authors:article.authors,abstract:article.summary || null,
-        publishedYear:article.publishedAt ? new Date(article.publishedAt).getUTCFullYear() : null,citationCount:null,url:article.url,
-        openAccessUrl:article.pdfUrl ?? (article.arxivId ? `https://arxiv.org/pdf/${article.arxivId}` : null),importedAt:now,updatedAt:now}});
-    const item = result.items[0]; if (!item) throw new Error('入库没有返回文献，请重试。');
-    this.store(projectId,{...this.article(projectId,articleId),importedItemId:item.id,read:true}); return {itemId:item.id};
+    const year = article.publishedAt === null ? NaN : new Date(article.publishedAt).getUTCFullYear();
+    return this.library.prepareRecord({id: `${article.arxivId ? 'arxiv' : 'rss'}:${article.arxivId ?? article.id}`,
+      source: article.arxivId ? 'arxiv' : 'local', externalId: article.arxivId ?? article.url, doi: null,
+      title: article.title, authors: article.authors, abstract: article.summary || null,
+      publishedYear: Number.isFinite(year) ? year : null, citationCount: null, url: article.url,
+      openAccessUrl: article.pdfUrl ?? (article.arxivId ? `https://arxiv.org/pdf/${article.arxivId}` : null),
+      importedAt: now, updatedAt: now}, projectId, signal, `radar_${article.id.slice(0, 12)}`);
   }
   recommend(projectId:string,categories:string[],force:boolean):Promise<z.infer<typeof radarRecommendationsSchema>>{return this.track(()=>this.recommendOne(projectId,categories,force));}
   private async recommendOne(projectId: string, categories: string[], force: boolean): Promise<z.infer<typeof radarRecommendationsSchema>> {

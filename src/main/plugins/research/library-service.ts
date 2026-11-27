@@ -61,10 +61,10 @@ export class ResearchLibraryService {
     return this.repository.import([entry], request.projectId);
   }
 
-  async prepareRecord(record: ResearchLiterature, projectId: string | null, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+  async prepareRecord(record: ResearchLiterature, projectId: string | null, signal?: AbortSignal, citationKey = 'candidate'): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
     return this.job(async (root, directory, jobSignal) => {
       const source = join(directory, 'metadata.json');
-      await writeFile(source, JSON.stringify([{ metadata: record, citationKey: 'candidate' }]), { flag: 'wx', mode: 0o600 });
+      await writeFile(source, JSON.stringify([{ metadata: record, citationKey }]), { flag: 'wx', mode: 0o600 });
       const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal: jobSignal,
         admission: { projectId, priority: 'user' } });
       this.requireActive(jobSignal);

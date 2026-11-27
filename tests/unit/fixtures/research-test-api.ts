@@ -257,6 +257,8 @@ export {serializeResearchPublicProjection} from '../../../src/main/plugins/resea
 
 export {ReadingRepository} from '../../../src/main/plugins/research/reading-repository';
 export {RadarService} from '../../../src/main/plugins/research/radar-service';
+export {LiteratureAcquisitionRepository} from '../../../src/main/plugins/research/literature-acquisition-repository';
+export {LiteratureAcquisitionService} from '../../../src/main/plugins/research/literature-acquisition-service';
 export {ReadingDiscoveryService} from '../../../src/main/plugins/research/reading-discovery';
 export {ReadingTranslationService} from '../../../src/main/plugins/research/reading-translation';
 export {parseRadarFeed, cosineSimilarity, plainArticleText} from '../../../src/main/plugins/research/radar-parser';
