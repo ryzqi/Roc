@@ -329,7 +329,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           width: browsing ? undefined : narrow ? '100%' : 240, flex: browsing ? 1 : undefined }}
           data-testid="literature-library-browse" data-mode={readerMode}
           className="literature-library-column min-h-0 min-w-0 shrink-0" aria-label="文献列表">
-          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={browsing ? inspectPaper : selectPaper}
+          <LibraryList writable={scope.writable} onRequestImport={() => openImport('document')} onOpenItem={browsing ? inspectPaper : selectPaper}
             onReadItem={selectPaper} showActionError={false}/>
         </aside>
 

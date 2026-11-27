@@ -150,3 +150,31 @@ Inspector 没有绿色覆盖。单张截图不证明每一帧的 raster damage �
 物理触控板、系统中文输入法、VoiceOver、另一台 Mac 或实际屏幕刷新率验收。
 RAF、输入响应与主线程 trace 分别报告。未改变数据库 schema 或持久化收据，
 本次不涉及真实 `~/.roc` 数据迁移。
+
+## 推送前远程合并验证（2026-11-27）
+
+用户授权推送后，fetch 发现 `origin/main` 已有 `20b7e43`、`25d85cb`、`d10d8ee` 三个新提交，与本地三个 UI 阶段提交分叉。采用普通合并，保留双方历史。
+
+六处冲突集中于 `document-service.ts`、`research-plugin-literature.ts`、`LibraryList.tsx`、`LiteratureHubView.tsx`、`library-list.css`、`use-literature-store.ts`。结果保留固定行高、Inspector、项目解除关联与撤销，并接入远程永久删除、arXiv 精确导入及发现全文处理。永久删除使用菜单和明确确认；菜单回焦结束后再打开确认框，防止抢走取消按钮焦点。旧键盘测试改为定位实际“项目移除”菜单项；删除测试夹具按真实扫描流程绑定 canonical workspace root，保留删除断言。
+
+以下命令均从 `/Users/Apple_501/Desktop/Roc/Roc` 执行：
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm build` | 通过，含类型、技能、Renderer chunks 检查 |
+| `pnpm check:ipc` | 生成接口与源码一致 |
+| `pnpm audit:design` / `pnpm audit:motion` | 295 / 428 文件，已实现规则无违规 |
+| `node --test --test-concurrency=2 tests/unit/renderer-literature.test.mjs tests/unit/literature-import.test.mjs tests/unit/literature-pdf-acquisition.test.mjs tests/unit/research-reading.test.mjs tests/unit/research-document-status.test.mjs` | 153/153 |
+| `node --test --test-concurrency=1 tests/unit/literature-deletion.test.mjs tests/unit/research-document-auto-import.test.mjs` | 21/21 |
+| `node --test --test-concurrency=1 tests/unit/database-schema.test.mjs tests/unit/research-schema-migration.test.mjs tests/unit/database-migrations.test.mjs` | 76/76 |
+| `node --test --test-concurrency=1 tests/unit/research-paper-card-versions.test.mjs tests/unit/research-scientific-generations.test.mjs` | 18/18 |
+| `node --test --test-concurrency=1 tests/integration/literature-auto-ingestion.test.mjs` | 4/4，实际下载、解析、SQLite、索引、Wiki 与服务重启恢复 |
+| `ROC_REDESIGN_SCREENSHOTS=/tmp/roc-push-merge-renderer node --test --test-concurrency=1 tests/renderer/literature-action-guards.test.mjs tests/renderer/literature-automatic-workflow.test.mjs` | 最终 50/50 |
+| `ROC_REDESIGN_SCREENSHOTS=/tmp/roc-push-merge-renderer node --test --test-concurrency=1 tests/renderer/literature-action-guards.test.mjs tests/renderer/literature-automatic-workflow.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/literature-zero-reflow.test.mjs tests/renderer/literature-retention.test.mjs tests/renderer/literature-pagination.test.mjs` | 首轮 66/75；后四套分别 12/12、9/9、2/2、2/2，9 项失败由最终 action/workflow 50/50 复测覆盖 |
+| `git diff --check` / `git diff --cached --check` | 通过 |
+
+去重结果：unit 268/268、integration 4/4、renderer 75/75。永久删除确认框在 1100/420px 明暗主题下裁切审计均 `cut=0`，已查看截图。证据位于 `/tmp/roc-push-merge-*.log`、`/tmp/roc-merge-*-validation.log` 和 `/tmp/roc-push-merge-renderer/`。此前严格帧预算与物理设备验收缺口仍保留。
+
+打包使用 `createPackagingEnvironment()` 环境执行 `pnpm exec electron-builder --mac --dir --arm64 --publish never --config electron-builder.yml --config.directories.output=/tmp/roc-push-merge-package-final-GDXYaP`。原 release 包和默认用户数据未修改。最终包 `app.asar` SHA-256 为 `3b37ce698030fe92a9473c1d809c6cdc83c372e3176dfdc32e4b9a94758f2a3f`。
+
+实际 packaged 历史启动命令：`node /tmp/roc-merge-packaged-history-probe.mjs /tmp/roc-push-merge-package-final-GDXYaP/mac-arm64/Roc.app /tmp/roc-merge-packaged-history-final-20261127`。填充 v76 历史夹具的独立副本成功升级至 v77；20 张业务表指纹、源数据库、PDF 和解析附件保持不变，removedRows=0，备份已验证。真实 `app.isPackaged=true`，1320×860 原生窗口显示历史项目，项目、文献和文档 IPC 读取成功，两处日志无致命启动错误。报告和截图位于 `/tmp/roc-merge-packaged-history-final-20261127/`。合成旧关系仍触发严格证据校验及科学后台警告，报告已保留；本项证明启动、读取与内容保留，不宣称后台科学处理全路径无警告。

@@ -203,6 +203,80 @@ export class ResearchWikiRepository {
       sources: states.map(state => state.receipt), error: failed ? {code: 'wiki_topic_failed', retryable: true} : ready ? null :
         overridden.length ? {code: 'wiki_topic_human_override', retryable: false} : stale ? {code: 'wiki_topic_stale', retryable: true} : null};
   }
+  removePaperSources(sources: ReadonlySet<string>, evidence: ReadonlySet<string>, changedClaims: ReadonlySet<string>): string[] {
+    const sourcePages = this.db.prepare(`SELECT id FROM research_wiki_pages
+      WHERE source_document_id IN (SELECT value FROM json_each(?))`)
+      .pluck().all(JSON.stringify([...sources])) as string[];
+    const removed = new Set([...sourcePages, ...sources, ...evidence]);
+    const ids = JSON.stringify([...removed, ...changedClaims]);
+    const cacheHashes: string[] = [];
+    const hashInputs = (pageId: string): void => {
+      cacheHashes.push(...this.db.prepare('SELECT input_hash FROM research_wiki_sections WHERE page_id=?').pluck().all(pageId) as string[]);
+    };
+    const affectedRevisions = this.db.prepare(`SELECT r.page_id,r.revision,r.snapshot_json
+      FROM research_wiki_revisions r
+      WHERE EXISTS (SELECT 1 FROM json_tree(r.snapshot_json,'$.sections') WHERE type='text'
+        AND value IN (SELECT value FROM json_each(?)))`).all(ids) as Array<{page_id: string; revision: number; snapshot_json: string}>;
+    const affectedPages = new Set<string>();
+    for (const revision of affectedRevisions) {
+      if (sourcePages.includes(revision.page_id)) continue;
+      const snapshot = wikiRevisionSchema.parse(JSON.parse(revision.snapshot_json));
+      const sections = snapshot.sections.flatMap(section => {
+        const dependent = section.evidenceIds.some(id => removed.has(id)) ||
+          section.claimIds.some(id => changedClaims.has(id)) ||
+          section.scientificStatements?.some(statement => statement.kind !== 'unknown' && removed.has(statement.source.documentId)) ||
+          section.dependencies.some(dep => removed.has(dep.id) || changedClaims.has(dep.id)) ||
+          section.paperSources?.some(source => removed.has(source.documentId)) ||
+          section.paperKnowledgeSources?.some(source => removed.has(source.documentId)) ||
+          section.scientificExplanation?.statements.some(statement =>
+            statement.sourceRefs.some(ref => removed.has(ref.documentId)));
+        if (dependent) return [];
+        const links = section.links.filter(id => !removed.has(id));
+        return [links.length === section.links.length ? section : {...section, links}];
+      });
+      if (JSON.stringify(snapshot.sections) === JSON.stringify(sections)) continue;
+      this.db.prepare('UPDATE research_wiki_revisions SET snapshot_json=? WHERE page_id=? AND revision=?')
+        .run(JSON.stringify({...snapshot, sections}), revision.page_id, revision.revision);
+      affectedPages.add(revision.page_id);
+    }
+    const selectedPages = this.db.prepare(`SELECT id FROM research_wiki_pages p
+      WHERE EXISTS (SELECT 1 FROM json_tree(p.selection_json) WHERE type='text'
+        AND value IN (SELECT value FROM json_each(?)))`).pluck().all(ids) as string[];
+    for (const id of selectedPages) affectedPages.add(id);
+    for (const id of sourcePages) {
+      hashInputs(id);
+      this.db.prepare('DELETE FROM research_wiki_pages WHERE id=?').run(id);
+      this.knowledgeInvalidations.delete(id);
+      affectedPages.delete(id);
+    }
+    for (const id of affectedPages) {
+      hashInputs(id);
+      const row = this.db.prepare('SELECT * FROM research_wiki_pages WHERE id=?').get(id) as PageRow;
+      const selection = JSON.parse(row.selection_json) as Selection;
+      selection.evidenceIds = selection.evidenceIds.filter(id => !removed.has(id));
+      selection.paperKnowledgeSources = selection.paperKnowledgeSources?.filter(source => !removed.has(source.documentId));
+      const batch = selection.acquisitionBatch;
+      if (batch) {
+        const remaining = batch.documentIds.filter(id => !removed.has(id));
+        const total = batch.total - (batch.documentIds.length - remaining.length);
+        if (total <= 0) {
+          this.db.prepare('DELETE FROM research_wiki_pages WHERE id=?').run(id);
+          this.knowledgeInvalidations.delete(id);
+          continue;
+        }
+        selection.acquisitionBatch = {...batch, documentIds: remaining, total};
+      }
+      row.selection_json = JSON.stringify(selection);
+      this.db.prepare('UPDATE research_wiki_pages SET selection_json=? WHERE id=?').run(row.selection_json, id);
+      // Bump the revision and compile generation before any in-flight synthesis can publish.
+      const current = row.revision > 0 ? this.revision(row.project_id, id, row.revision).sections : [];
+      this.publish(row, current, 'compile');
+      this.enqueue(id);
+    }
+    if (affectedPages.size) this.wake();
+    return cacheHashes;
+  }
+
   paperChanged(documentId: string): void {
     const pages = this.db.prepare(`SELECT id FROM research_wiki_pages WHERE source_document_id=?
       OR id IN (SELECT page_id FROM research_wiki_dependencies WHERE kind='paper' AND dependency_id=?)`)

@@ -163,6 +163,10 @@ export class VisualIndexService {
     try {await this.releaseProject(projectId); return await action();}
     finally {this.releasing.delete(projectId);}
   }
+  async removeLibraryDocuments(projectId: string, documentIds: string[]): Promise<void> {
+    await this.withProjectReleased(projectId, () => this.storage.removeDocuments(projectId, new Set(documentIds)));
+  }
+
   async shutdown(): Promise<void> {
     this.closed = true;
     for (const job of this.jobs) job.controller.abort(new Error('research_visual_cancelled'));

@@ -24,8 +24,8 @@ export function crossrefReview(item: {type?: string | null;
     updates: (item['update-to'] ?? []).map(update => ({type: update.type, doi: update.DOI, label: update.label, source: update.source}))};
 }
 
-export function arxivReview(externalId: string): LiteratureReview {
+export function arxivReview(externalId: string, field = 'entry.id'): LiteratureReview {
   const {version} = normalizeResearchArxiv(externalId);
-  return {...unknownLiteratureReview(), copies: [{field: 'entry.id', locationUrl: externalId,
+  return {...unknownLiteratureReview(), copies: [{field, locationUrl: externalId,
     version: version === null ? null : `v${version}`, license: null}]};
 }

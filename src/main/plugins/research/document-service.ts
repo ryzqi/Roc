@@ -27,7 +27,7 @@ import type {ScientificLibraryIndexService, PreparedLibraryIndex} from './scient
 import {inspectPdfImportMetadata, type DocumentDoiPreparation, type DocumentImportEntry} from './document-import-metadata';
 
 type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography' | 'defaultParseOptions'>;
-type ImportTask = { controller: AbortController; promise: Promise<ResearchDocument> };
+type ImportTask = { libraryItemId?: string; controller: AbortController; promise: Promise<ResearchDocument> };
 type ParseTask = ImportTask & { parseId: string };
 type AcquisitionParse = {signal: AbortSignal; requireCurrent: () => void};
 
@@ -49,7 +49,8 @@ export class ResearchDocumentService {
     this.repository.library.validateDestination(request.projectId);
     if (request.target === 'library-item' && this.repository.library.get(request.libraryItemId).archived) throw new Error('research_library_item_archived');
     const controller = new AbortController();
-    const task: ImportTask = { controller, promise: this.importFile(request, controller.signal, options.automaticMetadata === true) };
+    const task: ImportTask = { controller, ...(request.target === 'library-item' ? {libraryItemId: request.libraryItemId} : {}),
+      promise: this.importFile(request, controller.signal, options.automaticMetadata === true) };
     this.tasks.add(task);
     try { return await task.promise; }
     finally { this.tasks.delete(task); }
@@ -63,7 +64,7 @@ export class ResearchDocumentService {
     if (this.repository.library.get(request.libraryItemId).archived) throw new Error('research_library_item_archived');
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, parentSignal]);
-    const task: ImportTask = {controller, promise: this.persistFile(request, bytes, record, signal)};
+    const task: ImportTask = {libraryItemId: request.libraryItemId, controller, promise: this.persistFile(request, bytes, record, signal)};
     this.tasks.add(task);
     try {return await task.promise;}
     finally {this.tasks.delete(task);}
@@ -86,7 +87,8 @@ export class ResearchDocumentService {
     const parseId = `parse_${randomUUID()}`;
     const controller = new AbortController();
     const signal = acquisition ? AbortSignal.any([controller.signal, acquisition.signal]) : controller.signal;
-    const task: ParseTask = { parseId, controller, promise: this.parseFile(documentId, parseId, signal, tier, acquisition) };
+    const libraryItemId = this.repository.documents.get(documentId).libraryItemId;
+    const task: ParseTask = { libraryItemId, parseId, controller, promise: this.parseFile(documentId, parseId, signal, tier, acquisition) };
     this.parses.set(documentId, task);
     this.tasks.add(task);
     try { return await task.promise; }
@@ -335,6 +337,14 @@ export class ResearchDocumentService {
       throw new Error('research_document_project_mismatch');
     }
     return document;
+  }
+
+  async releaseItem(libraryItemId: string, documentIds: string[]): Promise<void> {
+    const tasks = [...this.tasks].filter(task => task.libraryItemId === libraryItemId);
+    for (const task of tasks) task.controller.abort();
+    const ids = new Set(documentIds);
+    await Promise.all([Promise.allSettled(tasks.map(task => task.promise)),
+      this.sources?.releaseMatching(key => ids.has((JSON.parse(key) as [string, string])[1]))]);
   }
 
   async shutdown(): Promise<void> {

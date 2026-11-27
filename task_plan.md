@@ -4,10 +4,10 @@
 执行《界面优化.md》三个阶段，沿用现有桌面壳、语义 Tokens 与 Motion 预设；每阶段完成必要运行验证并独立 Git 提交。
 
 ## Next Step
-三阶段实现和定向自动化交付记录已完成，阶段一 `05cf648`、阶段二 `e85d64a`，阶段三与本计划一并本地提交。严格帧预算与实机验收缺口见下方及 docs/ui-library-refinement-2026-11-27.md；不将它们计为通过。
+用户已授权推送。远程 main 新增 3 个提交，与本地三阶段提交分叉；合并远程改动，解决冲突并验证后推送，核对远程 SHA。原有严格帧预算与实机验收缺口继续保留。
 
 ## Current Phase
-Delivery
+Remote integration and push
 
 ## Phases
 
@@ -41,6 +41,13 @@ Delivery
 - [x] 汇总阶段提交、改动文件、验证结果与剩余缺口至交付记录
 - **Status:** complete
 
+### Phase 6: 合并远程并推送
+- [x] 核对远程、分支及本地三阶段提交
+- [x] 合并远程 arXiv、发现全文导入、永久删除改动并解决冲突
+- [ ] 完成合并相关检查与回归，提交合并结果
+- [ ] 推送 main 并核对远程 SHA
+- **Status:** in_progress
+
 ## Remaining Acceptance
 - [ ] 4x CPU 严格 8/16ms 帧预算：RAF P95 32.5ms，当前结果未达
 - [ ] 物理 60/120fps 与逐帧 raster damage：当前工具证据不足
@@ -50,7 +57,7 @@ Delivery
 | Decision | Rationale |
 |----------|-----------|
 | 沿用 tokens.css、shared/motion.ts、React Virtuoso | 已有成熟系统；不新增第二套设计系统、动效入口或虚拟滚动库 |
-| 只本地提交、不推送 | 用户已授权每阶段提交，未请求远程发布 |
+| 推送 main 至 origin/main | 用户本轮明确授权推送；保留双方提交，常规合并后推送 |
 | 原始界面优化.md 单独保护 | 起始为用户新增的未跟踪需求文件；不混入自动暂存 |
 | 保留后台权限与科学数据严格校验 | 自动化 UI 流程不能绕过已有授权和模型/索引配置 |
 | 文件计划及必要并行只用于本任务 | 用户 AGENTS 要求复杂任务使用计划与 subagents |
@@ -59,6 +66,8 @@ Delivery
 ## Errors Encountered
 | Error | Resolution |
 |-------|------------|
+| 拉取后 main 与 origin/main 各有 3 个独有提交，合并有 6 个文件冲突 | 按前后端文件分工解决，保留本地 UI 与远程文献能力，验证后正常推送 |
+| 推送计划 patch 段落不匹配 | 缩小精确锚点后重试，未影响代码 |
 | CodeGraph 提示旧提取版本 | 不刷新索引；已有源码仍为当前磁盘内容，缺失上下文使用精确查询或 scoped reads |
 | 初次计划 patch 使用错误标题 | 修正 progress.md 的三级标题，重新执行；未改动业务源码 |
 | 恢复时引用不存在的 CSS / 测试名 | 通过实际文件列表与 Hub 的样式选择器定位，避免推测文件名 |

@@ -102,3 +102,12 @@
 - LayerTree 无 layerPainted 事件，不能把空数组当零重绘；改用真实 Paint / invalidation 对照 Inspector 的 124 个 backend node IDs，明暗均 0 命中。Paint Flashing 截图已查看，绿色限于悬停行及附近控件。节点追踪和截图不等于逐帧光栅损伤证明。
 - 最终构建 eager JS 621105 bytes / 17 files，设计 295 文件、动效 428 文件 / 0 违规。最终代码只读复核与文档收尾；按显式文件清单提交阶段三，保护未跟踪的界面优化.md。
 - 收尾核对发现此前浮层 13/13 缺少完整命令日志，独占 Electron 补跑 `node --test --test-concurrency=1 tests/renderer/surface-motion.test.mjs`：13/13、11.40s，日志 `/tmp/roc-ui-phase3-surface-final.log`。已更新验收文档、Motion 合同和计划，将代码 / 自动化完成与性能目标缺口分别记录；本记录随阶段三本地提交交付。
+
+- 用户授权推送远程。起始工作区干净，main 本地提交为 05cf648 / e85d64a / 3c52fa8；fetch 后发现远程新增 20b7e43 / 25d85cb / d10d8ee。常规 merge --no-commit 出现 6 个文件冲突；分工处理前后端，保留双方行为，随后验证与正常推送。
+- 后端两处冲突已解决：同时保留导入任务 libraryItemId 跟踪、automaticMetadata，以及删除用 peekDocuments 和元数据补全 prepareDocumentDoi。后端针对性单测运行中。
+- 合并首轮 pnpm build / pnpm check:ipc 通过。导入、PDF、阅读、文献状态与格式测试 153/153；schema/migration 76/76、历史卡片与科学代际恢复 18/18。独立临时输出目录打包中，准备验证实际 packaged build 对填充历史 v76 数据的启动兼容。
+- 后端合并回归 21/21；删除测试曾因夹具未按真实索引流程绑定 canonical root 而留下索引文件，已补齐 bindRoot，保留全部删除断言，生产删除逻辑未改。真实下载/解析/SQLite/索引/Wiki 集成 4/4。
+- pnpm audit:design（295 文件）、pnpm audit:motion（428 文件、0 违规）、git diff --check 通过。合并构建临时包 /tmp/roc-push-merge-package-cdA6A7/mac-arm64/Roc.app 已完成；原 release 安装包与实际用户数据未动。
+- Electron 合并首轮 66/75：3 项新永久删除检查暴露菜单关闭回焦覆盖确认框初始焦点；6 项旧工作流检查仍用 End 定位旧菜单尾项“移除”。列表布局、零重排、保留与分页均通过。局部修复菜单到确认框的焦点交接；键盘用例改为 End 定位删除后 ArrowUp 定位移除，保留目标身份断言，待复测。
+- 最终 Renderer 去重 75/75（action/workflow 50/50 复测 + 未受影响四套 25/25），1100/420px 明暗删除确认框 cut=0；最终 build / IPC / design / motion 通过。
+- 最终独立安装包历史启动通过：/tmp/roc-push-merge-package-final-GDXYaP/mac-arm64/Roc.app；v76→77，20 张表指纹与源文件/附件保留，removedRows=0，历史项目/文献/文档真实读取及可见窗口确认。合成旧关系科学后台警告保留，无 fatal。完整命令和范围已写入 docs/ui-library-refinement-2026-11-27.md。

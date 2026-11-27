@@ -305,6 +305,16 @@ test('library metadata, provider records and identifier observations rebuild all
   assert.equal(pages, 2, 'identifier observations are read to the end of their bounded pages');
 });
 
+test('a versioned arXiv record keeps its PDF revision when grouped under DOI metadata', () => {
+  const library = {
+    get: () => ({metadata: {source: 'doi', externalId: '10.5555/fixture', doi: '10.5555/fixture'}, sources: [
+      {metadata: {source: 'arxiv', externalId: '2301.01234v2'}, providerRecord: null}
+    ]}),
+    getIdentifiers: () => ({records: [], nextOffset: null})
+  };
+  assert.equal(acquisition.pdfSourceInputForLibraryItem(library, 'paper').arxivId, '2301.01234v2');
+});
+
 test('an import-stage retry never invokes the PDF downloader again', async () => {
   let downloads = 0;
   const worker = new acquisition.LiteraturePdfAcquisition({getProject: () => ({workspacePath: '/tmp/project'})},

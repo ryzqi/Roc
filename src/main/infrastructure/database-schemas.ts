@@ -769,7 +769,7 @@ CREATE INDEX idx_performance_samples_sampled
 };
 
 export const researchSchema: RocDatabaseSchema = {
-  version: 76,
+  version: 77,
   sql: `
 CREATE TABLE research_external_experiments (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
@@ -1268,6 +1268,18 @@ CREATE TABLE "research_library" (
   metadata_json TEXT NOT NULL, bibliography_json TEXT NOT NULL, sources_json TEXT NOT NULL,
   revision INTEGER NOT NULL, archived INTEGER NOT NULL CHECK(archived IN (0,1)),
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE research_library_deletions (
+  item_id TEXT PRIMARY KEY,
+  cleanup_json TEXT NOT NULL CHECK(json_valid(cleanup_json))
+);
+CREATE TABLE research_library_pdf_publications (
+  item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+  job_id TEXT NOT NULL, generation TEXT NOT NULL,
+  workspace_path TEXT NOT NULL, relative_path TEXT NOT NULL, temporary_path TEXT NOT NULL,
+  device TEXT NOT NULL, inode TEXT NOT NULL,
+  sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
+  PRIMARY KEY(item_id,job_id,temporary_path)
 );
 CREATE TABLE research_library_aliases (
   item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,

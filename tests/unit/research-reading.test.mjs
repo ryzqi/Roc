@@ -6,6 +6,17 @@ before(async()=>{api=await loadResearchTestApi();});after(()=>api.dispose());
 const rss=(title='First')=>`<rss version="2.0"><channel><title>Feed</title><item><guid>paper-1</guid><title>${title}</title><link>https://arxiv.org/abs/2611.00001</link><description><![CDATA[<p>Abstract</p><script>bad()</script>]]></description><pubDate>Fri, 06 Nov 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
 function scene(){const f=createResearchFixture(api,'reading');f.reading=new api.ReadingRepository(f.db,f.repository,()=> '2026-11-07T00:00:00.000Z');return f;}
 function paper(f){const record={id:'crossref:10.1234/seed',source:'crossref',externalId:'10.1234/seed',doi:'10.1234/seed',title:'Seed paper',authors:['Author'],abstract:'Seed abstract',publishedYear:2026,citationCount:null,url:null,openAccessUrl:null,importedAt:'2026-11-07T00:00:00.000Z',updatedAt:'2026-11-07T00:00:00.000Z'};return f.repository.library.import([{metadata:record,bibliography:api.bibliographyFromRecord(record,new Set())}],f.project.id).items[0];}
+function radarFixture(f, embeddings = {}, fetchText, onPrepare = () => {}) {
+  const jobs = new api.LiteratureAcquisitionRepository(f.db, f.reading.now);
+  const acquisition = new api.LiteratureAcquisitionService(jobs);
+  const radar = new api.RadarService(f.reading, embeddings, {
+    async prepareRecord(record, _projectId, _signal, citationKey) {
+      onPrepare();
+      return {metadata: record, bibliography: {...api.bibliographyFromRecord(record, new Set()), citationKey}};
+    }
+  }, acquisition, fetchText);
+  return {radar, jobs};
+}
 
 test('notes preserve revisions, linked titles, archive recovery and project isolation',()=>{
  const f=scene();try{const item=paper(f),request={id:'note',projectId:f.project.id,itemId:item.id,title:'Method',markdown:'[[Baseline]] and [[Baseline]] $x^2$',archived:false,expectedRevision:0};
@@ -56,7 +67,7 @@ test('RSS and Atom parsing sanitize markup and reject malformed or entity docume
 });
 test('refresh coalesces requests and preserves read/import state and prior data on failure',async()=>{
  const f=scene();let calls=0,invalid=false;
- const radar=new api.RadarService(f.reading,{}, {importRecord:async()=>({items:[paper(f)]})},async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,5));return invalid?'<html/>':rss();});
+ const {radar}=radarFixture(f,{},async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,5));return invalid?'<html/>':rss();});
  try{const feed=radar.saveFeed({id:'feed',projectId:f.project.id,title:'Feed',url:'https://example.org/rss',pinned:false,archived:false,expectedRevision:0});
  await Promise.all([radar.refresh(f.project.id,feed.id),radar.refresh(f.project.id,feed.id)]);assert.equal(calls,1);
  const article=radar.articles(f.project.id,feed.id)[0];radar.mark(f.project.id,article.id,true);const imported=await radar.importArticle(f.project.id,article.id);
@@ -66,7 +77,7 @@ test('refresh coalesces requests and preserves read/import state and prior data 
 });
 test('existing Hugging Face subscription refreshes daily papers and preserves its identity and article state',async()=>{
  const f=scene();let renamed=false,invalid=false;const requests=[];
- const radar=new api.RadarService(f.reading,{}, {importRecord:async()=>({items:[paper(f)]})},async(url,options)=>{
+ const {radar}=radarFixture(f,{},async(url,options)=>{
    requests.push(url);assert.equal(options.signal.aborted,false);
    assert.equal(url,'https://huggingface.co/api/daily_papers');
    return invalid?JSON.stringify({error:'provider response changed'}):JSON.stringify([{paper:{
@@ -103,7 +114,7 @@ test('existing Hugging Face subscription refreshes daily papers and preserves it
 });
 test('Hugging Face source aliases retain queries while other sites and official blog feeds use RSS',async()=>{
  const f=scene(),requests=[];
- const radar=new api.RadarService(f.reading,{}, {},async url=>{
+ const {radar}=radarFixture(f,{},async url=>{
    requests.push(url);return url.startsWith('https://huggingface.co/api/daily_papers')?'[]':rss();
  });
  try{
@@ -129,7 +140,7 @@ test('Hugging Face source aliases retain queries while other sites and official 
  }finally{await radar.shutdown();await f.close();}
 });
 test('citation discovery caches pages, preserves marks, validates membership and falls back to Crossref',async()=>{
- const f=scene(),item=paper(f),radar=new api.RadarService(f.reading,{},{});let calls=0,fail=false;
+ const f=scene(),item=paper(f),{radar}=radarFixture(f);let calls=0,fail=false;
  const discovery=new api.ReadingDiscoveryService(f.reading,radar,async url=>{calls++;if(url.includes('semanticscholar')){if(fail)throw new Error('HTTP 429');return JSON.stringify({data:[{citedPaper:{paperId:'s2',title:'Reference',externalIds:{DOI:'10.1234/ref'},authors:[{name:'A'}]}}],next:100});}return JSON.stringify({message:{reference:[{DOI:'10.1234/fallback','article-title':'Fallback'}]}});});
  try{const request={projectId:f.project.id,itemId:item.id,direction:'references',offset:0,force:false};const result=await discovery.discover(request);assert.equal(result.nextOffset,100);assert.equal(result.articles.length,1);
  radar.mark(f.project.id,result.articles[0].id,true);assert.equal((await discovery.discover(request)).articles[0].read,true);assert.equal(calls,1);
@@ -138,7 +149,7 @@ test('citation discovery caches pages, preserves marks, validates membership and
  }finally{await discovery.shutdown();await radar.shutdown();f.close();}
 });
 test('Cool venue capture retains PDF metadata and rejects unsupported hosts',async()=>{
- const f=scene(),radar=new api.RadarService(f.reading,{},{}),discovery=new api.ReadingDiscoveryService(f.reading,radar,async()=>'<meta name="citation_title" content="Venue paper"><meta name="citation_authors" content="A; B"><meta name="citation_pdf_url" content="https://example.org/paper.pdf">');
+ const f=scene(),{radar}=radarFixture(f),discovery=new api.ReadingDiscoveryService(f.reading,radar,async()=>'<meta name="citation_title" content="Venue paper"><meta name="citation_authors" content="A; B"><meta name="citation_pdf_url" content="https://example.org/paper.pdf">');
  try{const value=await discovery.capturePage(f.project.id,'https://papers.cool/venue/123');assert.equal(value.pdfUrl,'https://example.org/paper.pdf');assert.deepEqual(value.authors,['A','B']);await assert.rejects(()=>discovery.capturePage(f.project.id,'https://evil.test/venue/123'),/详情页/);}finally{await discovery.shutdown();await radar.shutdown();f.close();}
 });
 test('translation stores secrets outside config, validates providers, and surfaces empty results',async()=>{
@@ -160,7 +171,7 @@ test('daily recommendations rank corpus similarity, cache identities and preserv
  const f=scene();paper(f);let fetched=0,embedded=0,revision=1,drift=false,broken=false;
  const feed=`<rss><channel>${[['2611.00001','Related'],['2611.00002','Unrelated']].map(([id,title])=>`<item><guid>${id}</guid><title>${title}</title><link>https://arxiv.org/abs/${id}</link><description>Source abstract</description></item>`).join('')}</channel></rss>`;
  const embeddings={embedTexts:async texts=>{embedded++;if(broken)throw new Error('Embedding unavailable');return {configId:'embedding-fixture',revision:revision+(drift&&texts.length>1?1:0),vectors:texts.map(text=>text.startsWith('Unrelated')?[0,1]:[1,0])};}};
- const radar=new api.RadarService(f.reading,embeddings,{},async()=>{fetched++;return feed;});
+ const {radar}=radarFixture(f,embeddings,async()=>{fetched++;return feed;});
  try{
    const first=await radar.recommend(f.project.id,['cs.AI'],false);
    assert.equal(first.cached,false);assert.equal(first.corpusSize,1);assert.deepEqual(first.articles.map(row=>row.title),['Related','Unrelated']);
@@ -176,13 +187,50 @@ test('daily recommendations rank corpus similarity, cache identities and preserv
 
 test('bulk discovery imports persist original scholarly metadata and avoid duplicate library records',async()=>{
  const f=scene(),item=paper(f);let imports=0;
- const radar=new api.RadarService(f.reading,{}, {importRecord:async({projectId,record})=>{imports++;return f.repository.library.import([{metadata:record,bibliography:api.bibliographyFromRecord(record,new Set())}],projectId);}});
+ const {radar,jobs}=radarFixture(f,{},undefined,()=>imports++);
  const discovery=new api.ReadingDiscoveryService(f.reading,radar,async()=>JSON.stringify({data:['2611.00003','2611.00004'].map(id=>({citingPaper:{paperId:id,title:`Citing ${id}`,abstract:'Citing abstract',year:2026,externalIds:{ArXiv:id},authors:[{name:'Fixture author'}]}}))}));
  try{
    const result=await discovery.discover({projectId:f.project.id,itemId:item.id,direction:'citations',offset:0,force:false});
    for(const article of result.articles){const added=await radar.importArticle(f.project.id,article.id);const stored=f.repository.library.get(added.itemId);assert.equal(stored.metadata.source,'arxiv');assert.equal(stored.metadata.externalId,article.arxivId);assert.equal(stored.metadata.abstract,'Citing abstract');assert.deepEqual(stored.metadata.authors,['Fixture author']);await radar.importArticle(f.project.id,article.id);}
    assert.equal(imports,2);assert.equal(f.repository.library.list({projectId:f.project.id,includeArchived:false,query:'',limit:100}).length,3);
+   assert.equal(jobs.list({owner:'reading-fixture',projectId:f.project.id},{offset:0,limit:20}).total,2);
  }finally{await discovery.shutdown();await radar.shutdown();f.close();}
+});
+
+test('Radar metadata, article receipt and acquisition queue commit together', async () => {
+  const f = scene(), {radar, jobs} = radarFixture(f);
+  const article = api.parseRadarFeed(rss(), 'feed', 'https://example.org/rss')[0];
+  const projectId = f.project.id, scope = {owner: 'reading-fixture', projectId};
+  try {
+    radar.captureArticles(projectId, [article]);
+    f.db.exec(`CREATE TEMP TRIGGER reject_radar_job BEFORE INSERT ON research_paper_acquisition_jobs
+      BEGIN SELECT RAISE(ABORT, 'fixture_acquisition_insert_failed'); END;`);
+    await assert.rejects(radar.importArticle(projectId, article.id), /fixture_acquisition_insert_failed/u);
+    assert.equal(radar.articles(projectId, null)[0].importedItemId, null);
+    assert.equal(f.repository.library.list({projectId, includeArchived: false, query: '', limit: 10}).length, 0);
+    f.db.exec('DROP TRIGGER reject_radar_job');
+    const [first, second] = await Promise.all([radar.importArticle(projectId, article.id), radar.importArticle(projectId, article.id)]);
+    assert.deepEqual(first, second);
+    const list = () => jobs.list(scope, {offset: 0, limit: 20}).jobs;
+    const [job] = list();
+    assert.equal(job.libraryItemId, first.itemId);
+    assert.equal(list().length, 1);
+
+    // Simulate the pre-fix database, where the Radar receipt exists without a job.
+    f.db.prepare('DELETE FROM research_paper_acquisition_jobs WHERE id=?').run(job.id);
+    jobs.enqueueMissingRadarImports();
+    const [repaired] = list();
+    assert.equal(repaired.libraryItemId, first.itemId);
+    assert.equal(repaired.status, 'queued');
+    jobs.change(repaired, repaired.generation, 'cancel');
+    jobs.enqueueMissingRadarImports();
+    assert.equal(list().length, 1);
+    assert.equal(list()[0].status, 'cancelled');
+    f.db.prepare('DELETE FROM research_paper_acquisition_jobs WHERE id=?').run(repaired.id);
+    f.repository.library.link(first.itemId, projectId, false, {notify: false});
+    jobs.enqueueMissingRadarImports();
+    assert.equal(list().length, 0);
+  } finally {await radar.shutdown(); await f.close();}
 });
 
 test('daily recommendation timeouts identify probe, feed and ranking stages without leaking provider details',async()=>{
@@ -193,7 +241,7 @@ test('daily recommendation timeouts identify probe, feed and ranking stages with
      throw normalized ? new Error('embedding_provider_timeout') : timeout();
    return {configId:'fixture',revision:1,vectors:texts.map(()=>[1,0])};
  }};
- const radar=new api.RadarService(f.reading,embeddings,{},async()=>{fetches++;if(failure==='feed')throw timeout();return rss();});
+ const {radar}=radarFixture(f,embeddings,async()=>{fetches++;if(failure==='feed')throw timeout();return rss();});
  try{
    for(const [stage,label] of [['probe','嵌入模型连接探测'],['feed','arXiv 订阅读取（cs.AI）'],['embedding','推荐内容向量计算']]){
      failure=stage;
@@ -215,7 +263,7 @@ test('daily recommendation shutdown preserves cancellation instead of reporting 
  const f=scene();paper(f);let started;
  const running=new Promise(resolve=>{started=resolve;});
  const embeddings={embedTexts:async (_texts,_version,signal)=>{started();return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));}};
- const radar=new api.RadarService(f.reading,embeddings,{},async()=>rss());
+ const {radar}=radarFixture(f,embeddings,async()=>rss());
  try{
    const pending=radar.recommend(f.project.id,['cs.AI'],true);await running;const stopped=radar.shutdown();
    await assert.rejects(()=>pending,error=>error.name==='AbortError'&&error.code!=='research_radar_probe_timeout');await stopped;
@@ -228,7 +276,7 @@ test('daily recommendations preserve safe embedding domain errors and their non-
    if(failedStage==='probe'&&texts.length===1||failedStage==='embedding'&&texts.length>1)throw domainError;
    return {configId:'fixture',revision:1,vectors:texts.map(()=>[1,0])};
  }};
- const radar=new api.RadarService(f.reading,embeddings,{},async()=>rss());
+ const {radar}=radarFixture(f,embeddings,async()=>rss());
  try{
    for(const [code,category,message] of [
      ['research_embedding_config_changed','conflict','嵌入配置已变化，请重试。'],

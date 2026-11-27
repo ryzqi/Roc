@@ -299,6 +299,40 @@ export class ResearchEvidenceRepository {
     })();
   }
 
+  detachDeletedPaperEvidence(evidenceIds: ReadonlySet<string>): Set<string> {
+    const affected = new Set<string>();
+    const remaining = (claim: ResearchClaim): ResearchClaim | null => {
+      const ids = claim.evidenceIds.filter(id => !evidenceIds.has(id));
+      if (ids.length === claim.evidenceIds.length) return null;
+      return {...claim, evidenceIds: ids, status: claim.status === 'supported' ? 'pending' : claim.status};
+    };
+    if (evidenceIds.size === 0) return affected;
+    const deleted = JSON.stringify([...evidenceIds]);
+    const revisions = this.db.prepare(`SELECT claim_id,version,snapshot_json FROM research_claim_revisions r
+      WHERE EXISTS (SELECT 1 FROM json_each(r.snapshot_json,'$.evidenceIds')
+        WHERE value IN (SELECT value FROM json_each(?)))`).all(deleted) as Array<{claim_id: string; version: number; snapshot_json: string}>;
+    for (const row of revisions) {
+      const redacted = remaining(researchClaimSchema.parse(JSON.parse(row.snapshot_json)));
+      if (redacted) {
+        this.db.prepare('UPDATE research_claim_revisions SET snapshot_json=? WHERE claim_id=? AND version=?')
+          .run(JSON.stringify(redacted), row.claim_id, row.version);
+      }
+    }
+    const rows = this.db.prepare(`SELECT ${claimColumns} FROM research_claims
+      WHERE EXISTS (SELECT 1 FROM json_each(evidence_ids_json) WHERE value IN (SELECT value FROM json_each(?)))`).all(deleted);
+    for (const row of rows) {
+      const prior = parseClaimRow(row);
+      const redacted = remaining(prior)!;
+      const current = {...redacted, updatedAt: this.now(), version: prior.version + 1};
+      this.db.prepare('UPDATE research_claims SET status=?,evidence_ids_json=?,version=?,updated_at=? WHERE id=?')
+        .run(current.status, JSON.stringify(current.evidenceIds), current.version, current.updatedAt, current.id);
+      this.relations.invalidateClaim(current.id);
+      this.recordClaimRevision(current);
+      affected.add(current.id);
+    }
+    return affected;
+  }
+
   private validateSupport(claim: Pick<ResearchClaim, 'projectId' | 'status' | 'evidenceIds'>): void {
     if (claim.status === 'supported' && claim.evidenceIds.length === 0) throw new Error('research_claim_evidence_required');
     for (const id of claim.evidenceIds) this.getEvidence(id, claim.projectId);

@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {AnimatePresence, useIsPresent} from 'motion/react';
-import {AlertCircle, BookOpen, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal, Sparkles, Unlink, X} from 'lucide-react';
+import {AlertCircle, BookOpen, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal, Sparkles, Trash2, Unlink, X} from 'lucide-react';
 import type {ResearchLibraryItem} from '../../shared/types';
 import type {LibraryVirtualizedRowsHandle} from './LibraryVirtualizedRows';
 import type {LiteratureStore} from './use-literature-store';
 import {EmptyState} from '../shell/EmptyState';
 import {ErrorBar} from '../shell/ErrorBar';
+import {ConfirmDialog} from '../shell/ConfirmDialog';
 import {AnchoredPopover} from '../shell/AnchoredPopover';
 import {ContextMenu, type ContextMenuAction} from '../shell/ContextMenu';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
@@ -26,6 +27,7 @@ import './library-list.css';
 
 export type LibraryListProps = {
   compact?: boolean;
+  writable?: boolean;
   entryType?: string | null;
   onOpenItem?: (id: string, direction: -1 | 0 | 1) => void;
   onReadItem?: (id: string) => void;
@@ -37,6 +39,7 @@ type SortOrder = 'updated' | 'year' | 'title';
 type ListScope = {client: LiteratureStore['client']; projectId: string | null; writable: boolean};
 type RowMenu = {scope: ListScope; item: ResearchLibraryItem; anchor: {x: number; y: number}};
 type IngestionState = {scope: ListScope; pending: boolean; error: string | null};
+type DeleteTarget = {scope: ListScope; item: ResearchLibraryItem; cleanupPending: boolean};
 type UndoFocus = {
   scope: ListScope;
   key: string;
@@ -57,9 +60,9 @@ const LazyLibraryVirtualizedRows = retryableLazy(async () => {
  * The sidebar and canvas share the same store and backend search. Status filters
  * explicitly describe the loaded window; they never hide matches on later pages.
  */
-export function LibraryList({compact = false, entryType = null, onOpenItem, onReadItem, showActionError = true, onRequestImport}: LibraryListProps): React.JSX.Element {
+export function LibraryList({compact = false, writable: writableOverride, entryType = null, onOpenItem, onReadItem, showActionError = true, onRequestImport}: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
-  const writable = literature.writable ?? true;
+  const writable = (writableOverride ?? true) && (literature.writable ?? true);
   const scopeRef = useRef<ListScope>({client: literature.client, projectId: literature.projectId, writable});
   if (scopeRef.current.client !== literature.client || scopeRef.current.projectId !== literature.projectId || scopeRef.current.writable !== writable) {
     scopeRef.current = {client: literature.client, projectId: literature.projectId, writable};
@@ -68,6 +71,33 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
   const mountedRef = useRef(false);
   useEffect(() => {mountedRef.current = true; return () => {mountedRef.current = false;};}, []);
   const isCurrent = useCallback(() => mountedRef.current && scopeRef.current === scope, [scope]);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<{scope: ListScope; message: string} | null>(null);
+  const deletionBusy = useRef(false);
+  const deletionOpenFrame = useRef<number | undefined>(undefined);
+  useEffect(() => () => {
+    if (deletionOpenFrame.current !== undefined) cancelAnimationFrame(deletionOpenFrame.current);
+    deletionOpenFrame.current = undefined;
+  }, [scope]);
+  const currentDelete = deleteTarget?.scope === scope ? deleteTarget : null;
+  const deletion = useAsyncAction((target: DeleteTarget) => target.scope.client.api.research.deleteLibraryItem({
+    id: target.item.id, expectedRevision: target.item.revision
+  }), {label: '永久删除文献'});
+  const confirmDelete = async (): Promise<void> => {
+    if (currentDelete === null || !isCurrent() || !writable || deletionBusy.current) return;
+    deletionBusy.current = true;
+    try {
+      const result = await deletion.run(currentDelete);
+      if (!result.ok || !isCurrent()) return;
+      literature.forgetDeletedItems([currentDelete.item.id]);
+      if (result.data.cleanupPending) setDeleteTarget({...currentDelete, cleanupPending: true});
+      else {
+        setDeleteTarget(null);
+        setDeleteNotice({scope, message: result.data.preservedFiles === 0 ? '文献已永久删除。'
+          : `文献已删除，保留了 ${result.data.preservedFiles} 个已被修改或无法确认归 Roc 所有的文件。`});
+      }
+    } finally {deletionBusy.current = false;}
+  };
   const removal = useLibraryRemoval(literature);
   const copy = useCopyFeedback();
   const [searchDraft, setSearchDraft] = useState(literature.query);
@@ -327,7 +357,19 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
       onSelect: () => {if (isCurrent()) void literature.askAssistantAboutItem(currentMenu.item);}},
     {id: 'remove', label: '从当前项目移除', icon: <Unlink size={14}/>, danger: true,
       disabled: !canRemove || removal.pending || !currentMenu.item.projectIds.includes(literature.projectId!),
-      onSelect: () => {if (isCurrent()) removal.remove([currentMenu.item]);}}
+      onSelect: () => {if (isCurrent()) removal.remove([currentMenu.item]);}},
+    ...(writable ? [{id: 'delete', label: '永久删除文献', icon: <Trash2 size={14}/>, danger: true,
+      disabled: deletion.pending || removal.pending,
+      onSelect: () => {
+        if (!isCurrent() || deletionBusy.current || deletionOpenFrame.current !== undefined) return;
+        deletion.reset(); setDeleteNotice(null);
+        // The closing menu returns focus in a microtask. Open the modal after
+        // that handoff so cancel owns focus and its opener is the stable row.
+        deletionOpenFrame.current = requestAnimationFrame(() => {
+          deletionOpenFrame.current = undefined;
+          if (isCurrent()) setDeleteTarget({scope, item: currentMenu.item, cleanupPending: false});
+        });
+      }}] : [])
   ];
   const ingestFiles = async (files: File[]): Promise<void> => {
     if (!isCurrent() || !writable || literature.projectId === null || ingestionBusy.current === scope) return;
@@ -516,6 +558,7 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
         ? <div data-testid="literature-status-error"><ErrorBar error={{level: 'page', message: literature.documentStatusesError,
           retry: literature.reloadDocumentStatuses}}/></div> : null}
       {copy.copied ? <p className="library-ingestion-status" role="status">已复制引用键</p> : null}
+      {deleteNotice?.scope === scope ? <p className="library-ingestion-status" role="status">{deleteNotice.message}</p> : null}
       {currentIngestion?.pending ? <p className="library-ingestion-status" role="status"><Loader2 size={14} aria-hidden="true"/>正在导入 PDF / DOI…</p> : null}
     </div>
     {dropActive ? <div className="library-drop-overlay" data-testid="literature-drop-overlay" aria-hidden="true">
@@ -524,6 +567,13 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
     <ContextMenu open={currentMenu !== null} onOpenChange={open => {if (!open) setMenu(null);}}
       label="文献操作" anchor={currentMenu?.anchor ?? {x: 0, y: 0}} returnFocusRef={menuFocusRef}
       actions={menuActions} testId="literature-row-menu"/>
+    <ConfirmDialog open={currentDelete !== null} title={currentDelete?.cleanupPending ? '文献文件仍待清理' : '永久删除文献'}
+      message={currentDelete?.cleanupPending ? '文献已从文献库移除。剩余文件将自动重试清理，也可以立即重试。'
+        : `永久删除“${currentDelete ? libraryItemTitle(currentDelete.item) : ''}”${currentDelete?.item.projectIds.length ? `及其在 ${currentDelete.item.projectIds.length} 个项目中的关联` : ''}？`}
+      detail={currentDelete?.cleanupPending ? undefined : '此操作会清理 Roc 管理的全文、解析结果、索引、衍生 Wiki 内容及关联阅读笔记和批注，无法撤销。'}
+      confirmLabel={currentDelete?.cleanupPending ? '重试清理' : '永久删除'} cancelLabel={currentDelete?.cleanupPending ? '关闭' : '取消'}
+      tone={currentDelete?.cleanupPending ? 'default' : 'destructive'} pending={deletion.pending} error={deletion.error}
+      onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)} testId="literature-delete-confirm"/>
   </div>;
 }
 

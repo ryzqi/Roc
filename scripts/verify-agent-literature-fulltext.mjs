@@ -55,6 +55,9 @@ import {ScientificLibraryIndexService} from './src/main/plugins/research/scienti
 import {loadResearchVectorExtension} from './src/main/plugins/research/research-vector-extension';
 import {ResearchLiteratureAcquisitionWiki} from './src/main/plugins/research/literature-acquisition-wiki';
 import {LiteratureWikiAcquisition, reconcileAcquisitionReadiness} from './src/main/plugins/research/literature-wiki-acquisition';
+import {RadarService} from './src/main/plugins/research/radar-service';
+import {ReadingRepository} from './src/main/plugins/research/reading-repository';
+import {ReadingDiscoveryService} from './src/main/plugins/research/reading-discovery';
 `;
 
 // Serialized into an isolated bundle so Electron and Node exercise identical
@@ -184,6 +187,11 @@ async function createRuntimeFixture(root, options = {}) {
   cleanup.push(() => library.shutdown());
   const acquisitionRepository = new LiteratureAcquisitionRepository(db);
   const acquisition = new LiteratureAcquisitionService(acquisitionRepository);
+  const reading = new ReadingRepository(db, repo);
+  const radar = new RadarService(reading, embeddings, library, acquisition);
+  const discovery = new ReadingDiscoveryService(reading, radar, async () =>
+    '<meta name="citation_title" content="Synthetic acquisition study"><meta name="citation_pdf_url" content="https://pdf-1.fixture.invalid/download">');
+  cleanup.push(() => radar.shutdown(), () => discovery.shutdown());
   const downloader = new PdfDownloadService(root, {lookup: async host => {
     if (!/^pdf-[12]\.fixture\.invalid$/u.test(host)) throw new Error('fixture_dns_route_denied');
     return [{address: '93.184.216.34', family: 4}];
@@ -260,6 +268,10 @@ async function createRuntimeFixture(root, options = {}) {
     if (tools.has(name)) {toolCalls.push(name); return await tools.get(name).invoke(input);}
     if (allowed.has(name)) return await withLiteratureContext(scope, () => registry.invoke(name, input));
     if (name === 'fixture.inspect') return await inspect();
+    if (name === 'fixture.importCoolPapers') {
+      const article = await discovery.capturePage(project.id, 'https://papers.cool/venue/fixture');
+      return await radar.importArticle(project.id, article.id);
+    }
     if (name === 'fixture.searchBody') return await embeddings.search({query: input.marker, projectId: project.id, limit: 10, embeddingConfigId: null});
     if (name === 'fixture.wikiBatch') {
       const ids = db.prepare("SELECT id FROM research_documents WHERE current_parse_id IS NOT NULL").all().map(row => row.id);

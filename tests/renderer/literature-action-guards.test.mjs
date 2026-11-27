@@ -22,6 +22,8 @@ before(async () => {
     import {LibraryList} from './src/renderer/literature/LibraryList';
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
     import {ViewActivity} from './src/renderer/shared/view-activity';
+    import {literatureAddSchema} from './src/shared/schemas/literature-import';
+    import {researchLibraryDeleteRequestSchema} from './src/shared/schemas/research-library';
     import {readingDiscoveryRequestSchema, readingDiscoveryResultSchema, radarArticleSchema,
       radarFeedSchema, radarFeedSaveSchema, radarImportSchema, radarRefreshSchema,radarBrowserRequestSchema,
       radarCapturePageSchema,radarRecommendSchema}
@@ -38,7 +40,8 @@ before(async () => {
       fetchedAt:'2026-11-12',cached:false,nextOffset:null,warnings:[]});
     const schemas = {discoverReadingRelations:readingDiscoveryRequestSchema, importRadarArticle:radarImportSchema,
       saveRadarFeed:radarFeedSaveSchema, refreshRadarFeed:radarRefreshSchema,radarBrowser:radarBrowserRequestSchema,
-      captureRadarPage:radarCapturePageSchema,recommendRadar:radarRecommendSchema};
+      captureRadarPage:radarCapturePageSchema,recommendRadar:radarRecommendSchema,addLiterature:literatureAddSchema,
+      deleteLibraryItem:researchLibraryDeleteRequestSchema};
     function call(method,input,data) {
       schemas[method]?.parse(input);
       calls.push({method,input});
@@ -48,6 +51,8 @@ before(async () => {
     const client = {api:{research:{
       discoverReadingRelations:input => call('discoverReadingRelations',input,discovery),
       importRadarArticle:input => call('importRadarArticle',input,{itemId:'saved-'+input.articleId}),
+      addLiterature:input => call('addLiterature',input,{counts:{created:1,linked:0,alreadyPresent:0,skippedArchived:0},items:[]}),
+      deleteLibraryItem:input => call('deleteLibraryItem',input,{cleanupPending:false,preservedFiles:0}),
       listRadarFeeds:input => call('listRadarFeeds',input,[...radarFeeds.values()]),
       listRadarArticles:input => call('listRadarArticles',input,rows),
       saveRadarFeed:input => call('saveRadarFeed',input,{...feed(input.id),title:input.title,url:input.url,
@@ -57,8 +62,9 @@ before(async () => {
       refreshRadarFeed:input => call('refreshRadarFeed',input,{}),
       markRadarArticle:input => call('markRadarArticle',input,{}),
       recommendRadar:input => call('recommendRadar',input,{date:'2026-11-20',cached:false,corpusSize:3,configId:'fixture',articles:[]}),
-      radarBrowser:input => call('radarBrowser',input,{url:'https://papers.cool/arxiv/cs.AI',
-        papers:[{title:'Browser paper',url:'https://papers.cool/arxiv/2601.12345',doi:null,arxivId:'2601.12345'}]}),
+      radarBrowser:input => call('radarBrowser',input,input.source==='modelscope'
+        ?{url:'https://modelscope.cn/papers',papers:[{title:'DOI paper',url:'https://doi.org/10.5555/fixture',doi:'10.5555/fixture',arxivId:null}]}
+        :{url:'https://papers.cool/arxiv/cs.AI',papers:[{title:'Browser paper',url:'https://papers.cool/arxiv/2601.12345',doi:null,arxivId:'2601.12345'}]}),
       captureRadarPage:input => call('captureRadarPage',input,article('captured-paper'))
     }}};
     window.clear = () => flushSync(() => root.render(null));
@@ -68,19 +74,28 @@ before(async () => {
         <ViewActivity active={active}><div hidden={!active} style={{height:700}}>{children}</div></ViewActivity></>;
     }
     window.navigateAway=()=>requestNavigation({page:'project',projectId:'project-b'},()=>window.navigations++);
+    function LibraryFixture() {
+      const [options,setOptions]=useState({projectId:'project-a',writable:true,renderWritable:true});
+      const [items,setItems]=useState([{id:'paper-copy',revision:7,updatedAt:'2026-11-27',
+        metadata:{title:'Citation paper',authors:[],publishedYear:2026,citationCount:null,source:'doi'},
+        bibliography:{citationKey:'author2026paper',entryType:'article',fields:{}},projectIds:['project-a','project-b'],archived:false}]);
+      window.updateLibraryOptions=patch=>flushSync(()=>setOptions(current=>({...current,...patch})));
+      const library={...options,client,items,status:'ready',
+        total:items.length,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},
+        query:'',selectedId:null,includeArchived:false,action:{error:null},
+        setQuery:()=>{},reload:()=>{},setIncludeArchived:()=>{},select:()=>{},
+        forgetDeletedItems:ids=>{window.forgotten.push(...ids);setItems(current=>current.filter(item=>!ids.includes(item.id)));}};
+      return <LiteratureScopeProvider value={library}><LibraryList writable={options.renderWritable} onRequestImport={()=>{}}/></LiteratureScopeProvider>;
+    }
     window.mountPanels = kind => {
       clear(); window.calls=[]; window.pending=[]; window.held=new Set(); window.imported=0;
+      window.forgotten=[];
       window.navigations=0; window.radarFeeds=new Map(['feed-a','feed-b'].map(id=>[id,feed(id)]));
       const onImported = () => window.imported++;
-      const library={items:[{id:'paper-copy',metadata:{title:'Citation paper',authors:[],publishedYear:2026,citationCount:null,source:'doi'},
-        bibliography:{citationKey:'author2026paper',fields:{}},projectIds:['project-a'],archived:false}],status:'ready',
-        total:1,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},
-        query:'',selectedId:null,projectId:'project-a',includeArchived:false,action:{error:null},
-        setQuery:()=>{},reload:()=>{},setIncludeArchived:()=>{},select:()=>{}};
       flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><Retained>
         {kind==='discovery'
           ? <ReadingDiscoveryPanel client={client} projectId="project-a" itemId="item-a" writable onImported={onImported}/>
-          :kind==='library'?<LiteratureScopeProvider value={library}><LibraryList onRequestImport={()=>{}}/></LiteratureScopeProvider>
+          :kind==='library'?<LibraryFixture/>
           : <AcademicRadarPanel client={client} projectId="project-a" writable active onImported={onImported}/>}
       </Retained></LazyMotion></MotionConfig>));
     };
@@ -373,6 +388,19 @@ test('browser unmount stops the subsequent import stage and refresh callback', a
   await settle();assert.equal(await count('importRadarArticle'),0);assert.equal(await page.evaluate(()=>imported),0);
 });
 
+test('ModelScope DOI imports request project fulltext processing', async () => {
+  await mount('radar');
+  await page.getByRole('tab',{name:'魔搭论文',exact:true}).click();
+  await page.getByRole('button',{name:'读取当前页论文 / 入库',exact:true}).click();
+  await page.getByRole('button',{name:'加入文献库',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'已入库：DOI paper'})).toContainText('全文处理进度见文献库');
+  const input = await page.evaluate(() => calls.find(call => call.method==='addLiterature').input);
+  assert.equal(input.projectId,'project-a');
+  assert.equal(input.destination,'current_project');
+  assert.equal(input.ingestionPolicy,'fulltext_auto');
+  assert.deepEqual(input.entries,[{kind:'doi',doi:'10.5555/fixture'}]);
+});
+
 test('library citation copy exposes clipboard rejection and clears it after a successful retry', async () => {
   await mount('library');
   await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic clipboard rejection');};});
@@ -383,6 +411,104 @@ test('library citation copy exposes clipboard rejection and clears it after a su
   await page.getByRole('button',{name:'复制引用键 author2026paper',exact:true}).click();
   await expect(page.getByRole('button',{name:'已复制引用键 author2026paper',exact:true})).toBeVisible();
   assert.equal(await page.evaluate(()=>copiedKey),'author2026paper');await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+async function openLibraryDelete() {
+  await page.getByTestId('literature-row-paper-copy').focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem',{name:'永久删除文献',exact:true}).click();
+  await expect(page.getByTestId('literature-delete-confirm-cancel')).toBeFocused();
+}
+
+test('library permanent deletion requires confirmation, serializes requests and preserves failed revision for retry', async () => {
+  await mount('library');
+  await openLibraryDelete();
+  const dialog=page.getByTestId('literature-delete-confirm');
+  await expect(dialog).toContainText('Citation paper');
+  await expect(dialog).toContainText('2 个项目中的关联');
+  await expect(dialog).toContainText('无法撤销');
+  assert.equal(await count('deleteLibraryItem'),0);
+  const source=await readFile(join(process.cwd(),'scripts/ui-audit/clip-audit.js'),'utf8');
+  for(const theme of ['light','dark']) for(const width of [1100,420]) {
+    await page.setViewportSize({width,height:850});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await expect(page.getByTestId('literature-delete-confirm-confirm')).toBeVisible();
+    await page.waitForTimeout(350);
+    const audit=await page.evaluate(source=>(0,eval)(`(${source})`)({root:'body',viewport:true}),source);
+    assert.equal(audit.cut,0,JSON.stringify(audit));
+    if(process.env.ROC_REDESIGN_SCREENSHOTS) await page.screenshot({path:join(process.env.ROC_REDESIGN_SCREENSHOTS,`library-delete-${theme}-${width}.png`)});
+  }
+  await page.setViewportSize({width:1100,height:850});
+  await page.getByTestId('literature-delete-confirm-cancel').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('literature-row-paper-copy')).toBeFocused();
+  assert.equal(await count('deleteLibraryItem'),0);
+  await openLibraryDelete();
+  await page.evaluate(()=>{
+    held.add('deleteLibraryItem');
+    const button=document.querySelector('[data-testid="literature-delete-confirm-confirm"]');
+    button.click();button.click();
+  });
+  assert.equal(await count('deleteLibraryItem'),1);
+  await expect(page.getByTestId('literature-delete-confirm-cancel')).toBeDisabled();
+  await page.evaluate(()=>resolveNext('deleteLibraryItem',{ok:false,error:{message:'Synthetic deletion rejected'}}));
+  await expect(dialog.getByRole('alert')).toContainText('Synthetic deletion rejected');
+  await expect(page.getByTestId('literature-row-paper-copy')).toHaveCount(1);
+  await page.getByTestId('literature-delete-confirm-confirm').click();
+  assert.deepEqual(await page.evaluate(()=>calls.filter(call=>call.method==='deleteLibraryItem').map(call=>call.input)),
+    [{id:'paper-copy',expectedRevision:7},{id:'paper-copy',expectedRevision:7}]);
+  await page.evaluate(()=>resolveNext('deleteLibraryItem',{ok:true,data:{cleanupPending:false,preservedFiles:1}}));
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('literature-row-paper-copy')).toHaveCount(0);
+  await expect(page.getByRole('status').filter({hasText:'文献已删除，保留了 1 个'})).toBeVisible();
+});
+
+test('library deletion retains a cleanup retry after the paper is removed', async () => {
+  await mount('library');
+  await openLibraryDelete();
+  await page.evaluate(()=>held.add('deleteLibraryItem'));
+  await page.getByTestId('literature-delete-confirm-confirm').click();
+  await page.evaluate(()=>resolveNext('deleteLibraryItem',{ok:true,data:{cleanupPending:true,preservedFiles:0}}));
+  await expect(page.getByTestId('literature-row-paper-copy')).toHaveCount(0);
+  await expect(page.getByTestId('literature-delete-confirm')).toContainText('文献文件仍待清理');
+  await page.getByRole('button',{name:'重试清理',exact:true}).click();
+  assert.deepEqual(await page.evaluate(()=>calls.filter(call=>call.method==='deleteLibraryItem').map(call=>call.input)),
+    [{id:'paper-copy',expectedRevision:7},{id:'paper-copy',expectedRevision:7}]);
+  await page.evaluate(()=>resolveNext('deleteLibraryItem',{ok:true,data:{cleanupPending:false,preservedFiles:0}}));
+  await expect(page.getByTestId('literature-delete-confirm')).toHaveCount(0);
+  await expect(page.getByRole('status').filter({hasText:'文献已永久删除。'})).toBeVisible();
+});
+
+test('library deletion ignores a previous scope receipt and respects both read-only boundaries', async () => {
+  await mount('library');
+  await openLibraryDelete();
+  await page.evaluate(()=>held.add('deleteLibraryItem'));
+  await page.getByTestId('literature-delete-confirm-confirm').click();
+  await page.evaluate(()=>updateLibraryOptions({projectId:'project-b'}));
+  await expect(page.getByTestId('literature-delete-confirm')).toHaveCount(0);
+  await page.evaluate(()=>resolveNext('deleteLibraryItem',{ok:true,data:{cleanupPending:false,preservedFiles:0}}));
+  await settle();
+  assert.deepEqual(await page.evaluate(()=>forgotten),[]);
+  await expect(page.getByTestId('literature-row-paper-copy')).toHaveCount(1);
+  for(const options of [{renderWritable:false,writable:true},{renderWritable:true,writable:false}]) {
+    await page.evaluate(options=>updateLibraryOptions(options),options);
+    await page.getByTestId('literature-row-paper-copy').focus();
+    await page.keyboard.press('Shift+F10');
+    await expect(page.getByRole('menu',{name:'文献操作',exact:true})).toBeVisible();
+    await expect(page.getByRole('menuitem',{name:'永久删除文献',exact:true})).toHaveCount(0);
+    await page.keyboard.press('Escape');
+  }
+  assert.equal(await count('deleteLibraryItem'),1);
+  await page.evaluate(()=>updateLibraryOptions({writable:true,projectId:'project-a'}));
+  await page.getByTestId('literature-row-paper-copy').focus();
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem',{name:'永久删除文献',exact:true}).evaluate(button=>{
+    button.click();button.click();
+    updateLibraryOptions({projectId:'project-b'});
+  });
+  await settle();
+  await expect(page.getByTestId('literature-delete-confirm')).toHaveCount(0);
+  assert.equal(await count('deleteLibraryItem'),1);
 });
 
 

@@ -121,6 +121,8 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'research_knowledge_chunks_fts',
       'research_knowledge_chunks',
       'research_knowledge_embeddings',
+      'research_library_deletions',
+      'research_library_pdf_publications',
       'schema_metadata'
     ],
     open: (pool) => pool.getConnection('@roc/plugin-research'),

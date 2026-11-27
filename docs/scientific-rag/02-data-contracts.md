@@ -1,6 +1,6 @@
 # Scientific RAG 当前数据合同
 
-下表描述已接入生产的合同；字段、上限与 strict 校验以链接源码为准。版本表见[当前实现](00-current-state.md)，当前 Research schema 为 76，经过验证的 v71～v75 启动升级及不安全历史的离线处理见[数据库存储](../database-storage.md)。完整人工 gold 与公开组件资格见[评测](evaluation.md)。
+下表描述已接入生产的合同；字段、上限与 strict 校验以链接源码为准。版本表见[当前实现](00-current-state.md)，当前 Research schema 为 77，经过验证的 v71～v76 启动升级及不安全历史的离线处理见[数据库存储](../database-storage.md)。完整人工 gold 与公开组件资格见[评测](evaluation.md)。
 
 ## 来源与科研对象
 

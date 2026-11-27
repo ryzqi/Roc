@@ -49,6 +49,12 @@ export const researchLibraryExportRequestSchema = z.object({
 }).strict();
 export const researchLibraryExportSchema = z.object({ format: researchBibliographyFormatSchema, filename: z.string(), content: z.string() }).strict();
 export const researchLibraryLinkRequestSchema = z.object({ id: z.string().min(1), projectId: z.string().min(1), linked: z.boolean() }).strict();
+export const researchLibraryDeleteRequestSchema = z.strictObject({
+  id: z.string().min(1).max(500), expectedRevision: z.number().int().positive()
+});
+export const researchLibraryDeleteResultSchema = z.strictObject({
+  cleanupPending: z.boolean(), preservedFiles: z.number().int().nonnegative()
+});
 export const researchLibraryArchiveRequestSchema = z.object({ id: z.string().min(1), expectedRevision: z.number().int().positive(), archived: z.boolean() }).strict();
 export const researchLibraryCitationKeyRequestSchema = z.object({
   id: z.string().min(1), expectedRevision: z.number().int().positive(), citationKey: researchCitationKeySchema

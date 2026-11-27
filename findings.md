@@ -7,6 +7,7 @@
 - Drawer/Popover 必须脱离列表流；输入和 Agent 状态必须保留真实权限、焦点与 IME 契约。
 
 ## Research Findings
+- 2026-11-27 推送前 fetch：origin/main 已到 d10d8ee，新增 arXiv 精确导入、发现全文处理、永久文献删除（research schema 76 → 77）。与本地 UI 三阶段各 3 个独有提交；需整合文献列表/Store、document-service 与插件注册。
 - 起始分支 main，只有用户提供的未跟踪界面优化.md；无已有代码修改。
 - 已有 React 19.3.1、Electron 45.3.4、TypeScript 7.0.2、motion 14.14.0、react-virtuoso 4.18.23。
 - 已有 useLiteratureStore、LibraryVirtualizedRows、LiteratureProcessingPanel 与 durable acquisition retry/cancel。

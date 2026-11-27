@@ -58,7 +58,9 @@ export class ResearchWikiSearch {
         if (!rows.length) {this.failed = false; return;}
         const release = this.activity.begin('research');
         try {
-          await this.embeddings!.embedTexts(rows.map(row => row.input_text), inputVersion, this.controller.signal);
+          const exists = this.db.prepare('SELECT 1 FROM research_wiki_sections WHERE input_hash=? LIMIT 1');
+          await this.embeddings!.embedTexts(rows.map(row => row.input_text), inputVersion, this.controller.signal,
+            hash => exists.get(hash) !== undefined);
         } finally {
           release();
         }

@@ -6,7 +6,7 @@ import type {LookupAddress} from 'node:dns';
 import {isIP} from 'node:net';
 import {request as httpsRequest} from 'node:https';
 import type {IncomingHttpHeaders, IncomingMessage} from 'node:http';
-import {join} from 'node:path';
+import {join, posix} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ToolResourceCoordinator} from '../../services/deep-agent/tool-resource-coordinator';
 import type {PaperAcquisitionReceipt} from '../../../shared/schemas/literature-acquisition';
@@ -21,6 +21,9 @@ export type PdfDownloadDependencies = {lookup?: PdfDnsLookup; request?: PdfReque
   connectTimeoutMs?: number; now?: () => number};
 export type PublishedPdf = {sha256: string; bytes: number; relativePath: string;
   receipt: Omit<PaperAcquisitionReceipt, 'id' | 'generation' | 'acquiredAt'>; created: boolean};
+
+export type PdfPublication = { workspacePath: string; relativePath: string; temporaryPath: string; device: string; inode: string; sha256: string; bytes: number };
+type RecordPublication = (file: PdfPublication) => void;
 
 type InspectedPdf = {sha256: string; bytes: number};
 export type PdfDownloadFailure = Error & {
@@ -262,7 +265,7 @@ export class PdfDownloadService {
 
   async publishExisting(input: {jobId: string; generation: string; libraryItemId: string; title: string; year: number | null;
     workspacePath: string; bytes: Buffer; signal: AbortSignal; requireCurrent: () => void;
-    notifyWorkspaceChanged: (workspacePath: string, reason: string) => void}): Promise<PublishedPdf> {
+    notifyWorkspaceChanged: (workspacePath: string, reason: string) => void; recordPublication?: RecordPublication}): Promise<PublishedPdf> {
     input.signal.throwIfAborted(); input.requireCurrent();
     if (input.bytes.length > this.maxBytes) throw new Error('research_pdf_size_invalid');
     const stablePath = pdfFilename(input.title, input.year, input.libraryItemId);
@@ -275,7 +278,7 @@ export class PdfDownloadService {
       const inspected = await inspectFile(stagedPdf, this.maxBytes);
       input.signal.throwIfAborted(); input.requireCurrent();
       const {created, relativePath} = await this.publishVersioned(destinationDirectory, stablePath, stagedPdf, inspected,
-        input.signal, input.requireCurrent);
+        input.signal, input.requireCurrent, root, input.recordPublication);
       if (created) input.notifyWorkspaceChanged(root, 'literature-pdf-published');
       return {...inspected, relativePath, created, receipt: {...inspected, relativePath, sourceUrl: null,
         provider: 'library', version: 'unknown', license: null, doi: null, arxivId: null}};
@@ -284,7 +287,7 @@ export class PdfDownloadService {
 
   async acquire(input: {jobId: string; generation: string; libraryItemId: string; title: string; year: number | null;
     workspacePath: string; candidates: readonly PdfSourceCandidate[]; signal: AbortSignal; requireCurrent: () => void;
-    notifyWorkspaceChanged: (workspacePath: string, reason: string) => void}): Promise<PublishedPdf> {
+    notifyWorkspaceChanged: (workspacePath: string, reason: string) => void; recordPublication?: RecordPublication}): Promise<PublishedPdf> {
     input.signal.throwIfAborted();
     input.requireCurrent();
     if (input.candidates.length === 0) throw new Error('research_pdf_sources_unavailable');
@@ -305,7 +308,7 @@ export class PdfDownloadService {
           const downloaded = await this.downloadCandidate(candidate.url, stagedPdf, input.signal);
           input.requireCurrent();
           const {created, relativePath} = await this.publishVersioned(destinationDirectory, stablePath, stagedPdf, downloaded,
-            input.signal, input.requireCurrent);
+            input.signal, input.requireCurrent, root, input.recordPublication);
           if (created) input.notifyWorkspaceChanged(root, 'literature-pdf-published');
           const receipt = {sha256: downloaded.sha256, bytes: downloaded.bytes, sourceUrl: sanitizedUrl(candidate.url),
             provider: candidate.provider, version: mapVersion(candidate), license: candidate.license,
@@ -447,12 +450,12 @@ export class PdfDownloadService {
   }
 
   private async publishVersioned(directory: string, stablePath: string, stagedPdf: string, inspected: InspectedPdf,
-    signal: AbortSignal, requireCurrent: () => void): Promise<{relativePath: string; created: boolean}> {
+    signal: AbortSignal, requireCurrent: () => void, workspacePath: string, recordPublication?: RecordPublication): Promise<{relativePath: string; created: boolean}> {
     let relativePath = stablePath;
     const publish = async (): Promise<boolean> => {
       signal.throwIfAborted(); requireCurrent();
-      return this.publish(directory, relativePath.slice(relativePath.lastIndexOf('/') + 1), stagedPdf,
-        inspected.sha256, inspected.bytes, signal, requireCurrent);
+      return this.publish(directory, relativePath, stagedPdf,
+        inspected.sha256, inspected.bytes, signal, requireCurrent, workspacePath, recordPublication);
     };
     try {return {relativePath, created: await publish()};}
     catch (error) {
@@ -463,14 +466,23 @@ export class PdfDownloadService {
     }
   }
 
-  private async publish(directory: string, filename: string, stagedPdf: string, sha256: string, bytes: number,
-    signal: AbortSignal, requireCurrent: () => void): Promise<boolean> {
-    const destination = join(directory, filename);
-    const temporary = join(directory, `.roc-${randomUUID()}.part`);
+  private async publish(directory: string, relativePath: string, stagedPdf: string, sha256: string, bytes: number,
+    signal: AbortSignal, requireCurrent: () => void, workspacePath: string, recordPublication?: RecordPublication): Promise<boolean> {
+    const destination = join(directory, posix.basename(relativePath));
+    const temporaryName = `.roc-${randomUUID()}.part`;
+    const temporary = join(directory, temporaryName);
     const source = await open(stagedPdf, constants.O_RDONLY | constants.O_NOFOLLOW);
     const target = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
     let temporaryExists = true, sourceClosed = false, targetClosed = false;
     try {
+      if (recordPublication) {
+        const info = await target.stat({bigint: true});
+        signal.throwIfAborted(); requireCurrent();
+        // The inode is known before the final name exists. A pre-existing file reused
+        // by the download has a different inode and never becomes a deletion target.
+        recordPublication({workspacePath, relativePath, temporaryPath: posix.join(posix.dirname(relativePath), temporaryName),
+          device: String(info.dev), inode: String(info.ino), sha256, bytes});
+      }
       const sourceInfo = await source.stat();
       if (!sourceInfo.isFile() || sourceInfo.size !== bytes) throw new Error('research_pdf_staged_file_invalid');
       const hash = createHash('sha256'), buffer = Buffer.alloc(256 * 1024);

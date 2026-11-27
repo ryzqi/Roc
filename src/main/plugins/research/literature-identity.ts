@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { ResearchBibliographyEntry } from '../../../shared/types';
+import { normalizeResearchArxiv } from '../../../shared/arxiv-identifier';
+
+export { normalizeResearchArxiv } from '../../../shared/arxiv-identifier';
 
 export function normalizeResearchDoi(value: string): string {
   if (/[\u0000-\u001f\u007f]/u.test(value.trim())) throw new Error('research_doi_invalid');
@@ -16,35 +19,6 @@ export function normalizeResearchDoi(value: string): string {
   }
   if (!/^10\.\d{4,9}\/[^\s]+$/iu.test(doi) || /[\u0000-\u001f]/u.test(doi)) throw new Error('research_doi_invalid');
   return doi.toLowerCase();
-}
-
-export function normalizeResearchArxiv(value: string): {id: string; version: number | null} {
-  let identifier = value.trim().replace(/^arxiv:\s*/iu, '');
-  if (/^https?:\/\//iu.test(identifier)) {
-    let url: URL;
-    try { url = new URL(identifier); } catch (cause) { throw new Error('research_arxiv_identifier_invalid', {cause}); }
-    if (!['arxiv.org', 'www.arxiv.org'].includes(url.hostname.toLowerCase()) || url.username || url.password || url.search || url.hash ||
-        !url.pathname.startsWith('/abs/')) throw new Error('research_arxiv_identifier_invalid');
-    identifier = url.pathname.slice(5);
-  }
-  const match = /^(?<id>(?:\d{2}(?:0[1-9]|1[0-2])\.\d{4,5}|[a-z][a-z-]*(?:\.[a-z]{2})?\/\d{2}(?:0[1-9]|1[0-2])\d{3}))(?:(?:v)(?<version>[1-9]\d*))?$/iu.exec(identifier);
-  if (match?.groups === undefined) throw new Error('research_arxiv_identifier_invalid');
-  const version = match.groups.version === undefined ? null : Number(match.groups.version);
-  if (version !== null && !Number.isSafeInteger(version)) throw new Error('research_arxiv_identifier_invalid');
-  const id = match.groups.id;
-  if (id.includes('/')) {
-    const [archive, number] = id.split('/');
-    const [group, subject] = archive.split('.');
-    const month = Number(number.slice(0, 4));
-    if (!(month >= 9107 || month <= 703) || Number(number.slice(4)) === 0) throw new Error('research_arxiv_identifier_invalid');
-    return {id: `${group.toLowerCase()}${subject === undefined ? '' : `.${subject.toUpperCase()}`}/${number}`, version};
-  }
-  const [monthText, sequence] = id.split('.');
-  const month = Number(monthText);
-  if (month < 704 || sequence.length !== (month <= 1412 ? 4 : 5) || Number(sequence) === 0) {
-    throw new Error('research_arxiv_identifier_invalid');
-  }
-  return {id, version};
 }
 
 export function normalizeResearchPmid(value: string): string {

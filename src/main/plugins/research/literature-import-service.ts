@@ -765,6 +765,19 @@ export class LiteratureImportService {
   }
   private result(row: OperationRow): LiteratureImportResult { return decode(row.result_json, literatureImportResultSchema); }
   private save(result: LiteratureImportResult): void {
+    // Deletion can commit while an import is notifying observers. Preserve the
+    // redaction when its in-memory result later writes the rest of the batch.
+    const row = this.db.prepare('SELECT result_json FROM research_literature_imports WHERE id=?').get(result.operationId) as
+      Pick<OperationRow, 'result_json'>;
+    const stored = decode(row.result_json, literatureImportResultSchema);
+    for (const [index, item] of stored.items.entries()) {
+      if (item.entryKey !== 'deleted') continue;
+      const current = result.items[index];
+      current.entryKey = 'deleted';
+      current.libraryItemId = null;
+      current.citationKey = null;
+      delete current.citationKeyMapping;
+    }
     this.db.prepare('UPDATE research_literature_imports SET result_json = ?, updated_at = ? WHERE id = ?')
       .run(JSON.stringify(result), this.now(), result.operationId);
   }

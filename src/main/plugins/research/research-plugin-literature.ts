@@ -11,7 +11,9 @@ import { LiteratureImportService } from './literature-import-service';
 import type { RocPluginContext } from '../../kernel/types';
 import type { LiteratureSearchService } from './literature-service';
 import { ResearchLibraryService } from './library-service';
-import { registerResearchLibraryCapabilities } from './library-capabilities';
+import {LibraryDeletionRepository} from './library-deletion-repository';
+import {LibraryDeletionService} from './library-deletion-service';
+import { registerResearchLibraryCapabilities, registerResearchLibraryDeletion } from './library-capabilities';
 import { referenceCheckCapability, registerReferenceCheckCapability } from './reference-check-capabilities';
 import { ReferenceCheckService } from './reference-check-service';
 import { ScholarlyRelationsRepository } from './scholarly-relations-repository';
@@ -51,7 +53,7 @@ import type {DocumentDoiPreparation} from './document-import-metadata';
 export type ResearchLiteratureServices = {
   literatureImports: LiteratureImportService;
   releaseDownloads(projectId: string): Promise<void>;
-  configureDocumentPipeline(getDocuments: () => Promise<ResearchDocumentService>): void;
+  configureDocumentPipeline(getDocuments: () => Promise<ResearchDocumentService>, peekDocuments: () => ResearchDocumentService | null): void;
   prepareDocumentDoi: DocumentDoiPreparation;
 };
 
@@ -75,6 +77,7 @@ export async function registerResearchLiterature(
   lifecycle.own('library', library);
   registerResearchLibraryCapabilities(context, researchRepository.library, library);
   const researchLibrary = library;
+  const deletionRepository = new LibraryDeletionRepository(db, researchRepository);
   const acquisitionRepository = new LiteratureAcquisitionRepository(db);
   const acquisition = new LiteratureAcquisitionService(acquisitionRepository, () => {
     context.logger.error('Literature acquisition worker failed.');
@@ -86,9 +89,11 @@ export async function registerResearchLiterature(
   const pdfAcquisition = new LiteraturePdfAcquisition(researchRepository, researchRepository.library,
     new PdfDownloadService(options.resourceRoot), production.notifyWorkspacePathStructureChanged, providerGovernor,
     {getSettings: () => readAcquisitionSettings(context),
+      recordPublication: (job, file) => deletionRepository.recordPublication(job, file),
       onProviderError: provider => context.logger.warn('Literature PDF source provider failed.', {provider})});
   const acquisitionWiki = new ResearchLiteratureAcquisitionWiki(researchRepository.wiki, researchRepository.paperCards);
   pdfAcquisition.configureWikiPipeline(new LiteratureWikiAcquisition(acquisitionWiki, acquisitionRepository).process);
+  acquisitionRepository.enqueueMissingRadarImports();
   acquisitionRepository.resumeBlockedWiki();
   acquisition.start(pdfAcquisition.process, () => reconcileAcquisitionReadiness(acquisitionRepository, researchRepository, acquisitionWiki));
   lifecycle.provide(context, 'reference-check', [referenceCheckCapability], child => {
@@ -96,7 +101,7 @@ export async function registerResearchLiterature(
   });
   lifecycle.provide(context, 'reading', researchReadingCapabilities, child => {
     const reading = new ReadingRepository(db, researchRepository);
-    radar = new RadarService(reading, researchEmbeddings, researchLibrary);
+    radar = new RadarService(reading, researchEmbeddings, researchLibrary, acquisition);
     readingTranslation = new ReadingTranslationService(context);
     readingDiscovery = new ReadingDiscoveryService(reading, radar);
     registerResearchReadingCapabilities(child, reading, radar, readingTranslation, readingDiscovery);
@@ -151,7 +156,7 @@ export async function registerResearchLiterature(
   }, async () => {
     try { await resources?.shutdown(); } finally { resources = null; }
   });
-  const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key', operationId: string | null = null) => {
+  const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key' | 'delete', operationId: string | null = null) => {
     await context.eventBus.publish({ type: 'research.library.changed', source: pluginId, createdAt: new Date().toISOString(),
       payload: { eventId: randomUUID(), operationId, affectedItemIds: items.map((item) => item.id),
         affectedProjectIds: [...new Set(items.flatMap((item) => item.projectIds))], changeKind, occurredAt: new Date().toISOString() } });
@@ -159,8 +164,23 @@ export async function registerResearchLiterature(
   researchRepository.library.onChanged = (items, kind) => {
     void publishLibraryChange(items, kind).catch(() => context.logger.warn('research_library_change_publish_failed'));
   };
+  const deletion = new LibraryDeletionService(deletionRepository, acquisition,
+    {library: options.libraryRoot ?? null, index: options.indexRoot, resource: options.resourceRoot},
+    item => {void publishLibraryChange([item], 'delete').catch(() => context.logger.warn('research_library_change_publish_failed'));},
+    production.notifyWorkspacePathStructureChanged,
+    documentIds => researchRepository.knowledgeJobs.releaseSources(documentIds),
+    (projectId, action) => production.researchIndexer.withProjectReleased(projectId, action),
+    async (projectId, documentIds) => {
+      if (db.prepare('SELECT 1 FROM research_projects WHERE id=?').get(projectId)) {
+        await production.visual.removeLibraryDocuments(projectId, documentIds);
+      }
+    }, itemId => context.logger.warn('Literature deletion has pending file cleanup.', {itemId}));
+  lifecycle.ownBackgroundServices([deletion]);
+  registerResearchLibraryDeletion(context, deletion);
+  deletion.start();
   const literatureImports = new LiteratureImportService(db, researchRepository.library, literatureService, library, async (result) => {
-    const items = result.items.flatMap((item) => item.libraryItemId === null ? [] : [researchRepository.library.get(item.libraryItemId)]);
+    const items = result.items.flatMap((item) => item.libraryItemId === null || !db.prepare('SELECT 1 FROM research_library WHERE id=?').get(item.libraryItemId)
+      ? [] : [researchRepository.library.get(item.libraryItemId)]);
     await publishLibraryChange(items, 'import', result.operationId);
   }, undefined, acquisition);
   lifecycle.own('literatureImports', literatureImports);
@@ -184,7 +204,8 @@ export async function registerResearchLiterature(
     literatureImports,
     prepareDocumentDoi: (doi, projectId, signal) => library.prepareDoi(doi, projectId, signal),
     releaseDownloads: async projectId => { await huggingfaceDownloads?.releaseProject(projectId); },
-    configureDocumentPipeline: getDocuments => {
+    configureDocumentPipeline: (getDocuments, peekDocuments) => {
+      deletion.setDocumentService(peekDocuments);
       pdfAcquisition.configureDocumentPipeline(getDocuments);
       acquisition.resumeDocumentPipeline();
     }

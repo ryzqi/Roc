@@ -1,5 +1,7 @@
+import {arxivQueryFromInput} from '../../shared/arxiv-identifier';
 import {useEffect,useRef,useState} from 'react';
 import type {z} from 'zod';
+import type {LiteratureAdd} from '../../shared/schemas/literature-import';
 import type {radarBrowserPaperSchema} from '../../shared/schemas/research-reading';
 import type {RocClient} from '../shared/roc-client';
 import {useViewSelected} from '../shared/view-activity';
@@ -64,21 +66,29 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
         if(!captured.ok)throw new Error(captured.error.message);
         const imported=await client.api.research.importRadarArticle({projectId,articleId:captured.data.id});if(!mounted.current)return;
         if(!imported.ok)throw new Error(imported.error.message);
-      }
-      else if(paper.doi){const result=await client.api.research.importLibraryDoi({projectId,doi:paper.doi});if(!mounted.current)return;if(!result.ok)throw new Error(result.error.message);}
-      else if(paper.arxivId){
-        const search=await client.api.research.searchLiterature({projectId,query:`id:${paper.arxivId}`,sources:['arxiv'],limit:10,maxPages:1});
-        if(!mounted.current)return;
-        if(!search.ok)throw new Error(search.error.message);
-        const candidate=search.data.candidates.find(value=>value.record.externalId.replace(/v\d+$/u,'')===paper.arxivId!.replace(/v\d+$/u,''));
-        if(!candidate)throw new Error('arXiv 未返回匹配的论文，请稍后重试。');
-        const result=await client.api.research.addLiterature({projectId,destination:'current_project',requestId:crypto.randomUUID(),ingestionPolicy:'fulltext_auto',entries:[{kind:'candidate',searchId:search.data.searchId,candidateId:candidate.candidateId}]});
+      } else {
+        let entry: LiteratureAdd['entries'][number];
+        if(paper.doi) entry={kind:'doi',doi:paper.doi};
+        else if(paper.arxivId){
+          const query=arxivQueryFromInput(paper.arxivId);
+          if(query===null)throw new Error('arXiv 论文编号无效。');
+          const search=await client.api.research.searchLiterature({projectId,query,sources:['arxiv'],limit:1,maxPages:1});
+          if(!mounted.current)return;
+          if(!search.ok)throw new Error(search.error.message);
+          if(search.data.status==='failed')throw new Error('暂时无法读取 arXiv 论文，请检查网络或稍后重试。');
+          const candidate=search.data.candidates[0];
+          if(!candidate)throw new Error(`arXiv 未找到论文 ${paper.arxivId}，请检查论文编号或版本。`);
+          entry={kind:'candidate',searchId:search.data.searchId,candidateId:candidate.candidateId};
+        } else throw new Error('论文缺少可导入的标识。');
+        const result=await client.api.research.addLiterature({projectId,destination:'current_project',requestId:crypto.randomUUID(),
+          ingestionPolicy:'fulltext_auto',entries:[entry]});
         if(!mounted.current)return;
         if(!result.ok)throw new Error(result.error.message);
-        if(result.data.counts.failed)throw new Error(result.data.items.find(item=>item.errorCode)?.errorCode??'入库未完成');
+        const {counts,items}=result.data;
+        if(counts.skippedArchived>0)throw new Error('此文献已归档，请先在文献库恢复。');
+        if(counts.created+counts.linked+counts.alreadyPresent===0)throw new Error(items.find(item=>item.errorCode)?.errorCode??'入库未完成');
       }
-      else throw new Error('论文缺少可导入的标识。');
-      setStatus(`已入库：${paper.title}`);onImported();
+      setStatus(`已入库：${paper.title}。全文处理进度见文献库。`);onImported();
     }catch(error){if(mounted.current){setStatus('');setError(String(error));}}finally{finish();}
   };
   return <ReadingViewBoundary selected={selected} identity={papers} containerRef={readingRoot} scrollSelectors={['[data-radar-papers]']}>

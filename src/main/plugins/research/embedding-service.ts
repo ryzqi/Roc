@@ -169,7 +169,7 @@ export class ResearchEmbeddingService {
   }
 
   /** Derived consumers share the provider, versioned cache and credential boundary without becoming raw evidence. */
-  async embedTexts(texts: string[], inputVersion: string | null, signal?: AbortSignal): Promise<{configId: string; revision: number; vectors: number[][]}> {
+  async embedTexts(texts: string[], inputVersion: string | null, signal?: AbortSignal, cacheCurrent?: (inputHash: string) => boolean): Promise<{configId: string; revision: number; vectors: number[][]}> {
     this.requireOpen();
     const row = this.select(null);
     if (row === null) throw new Error('请先在检索设置中配置并启用嵌入模型。');
@@ -184,8 +184,9 @@ export class ResearchEmbeddingService {
       });
       const inputs = [...missing];
       const values=await this.embedMissing(inputs.map(([,text])=>text),row,active,cacheVersion===null ? undefined : completed=>{
+        const current = completed.filter(value => cacheCurrent?.(inputs[value.index]![0]) ?? true);
         this.knowledge.cacheEmbeddings(row.id,row.revision,cacheVersion,
-          completed.map(value=>inputs[value.index]![0]),completed.map(value=>value.vector));
+          current.map(value=>inputs[value.index]![0]),current.map(value=>value.vector));
       });
       inputs.forEach(([hash],index)=>blobs.set(hash,values[index]!));
       this.requireActive(active);

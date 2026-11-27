@@ -82,10 +82,12 @@ test('normalizeDoi refuses non-DOIs rather than sending them to the backend', ()
 test('arxivQueryFromInput accepts ids, prefixes, and URLs', () => {
   assert.equal(format.arxivQueryFromInput('2301.12345'), '2301.12345');
   assert.equal(format.arxivQueryFromInput('  arXiv:2301.12345  '), '2301.12345');
-  assert.equal(format.arxivQueryFromInput('2301.12345v2'), '2301.12345');
+  assert.equal(format.arxivQueryFromInput('2301.12345v2'), '2301.12345v2');
   assert.equal(format.arxivQueryFromInput('https://arxiv.org/abs/2301.12345'), '2301.12345');
-  assert.equal(format.arxivQueryFromInput('https://arxiv.org/pdf/2301.12345v1.pdf'), '2301.12345');
-  assert.equal(format.arxivQueryFromInput('math.GT/0309136'), 'math.GT/0309136');
+  assert.equal(format.arxivQueryFromInput('https://arxiv.org/pdf/2301.12345v1.pdf?download=1#page=2'), '2301.12345v1');
+  assert.equal(format.arxivQueryFromInput('https://arxiv.org/abs/math.GT/0309136v2'), 'math/0309136v2');
+  assert.equal(format.arxivQueryFromInput('id:2611.34841'), '2611.34841');
+  assert.equal(format.arxivQueryFromInput('https://example.org/arxiv.org/abs/2611.34841'), null);
 });
 
 test('arxivQueryFromInput returns null for a free-text query', () => {

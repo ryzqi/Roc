@@ -186,7 +186,7 @@ export const literatureImportResultSchema = z.object({
   items: z.array(literatureImportItemSchema), nextOffset: z.number().int().nullable()
 }).strict();
 export const literatureLibraryChangedSchema = z.object({ eventId: z.string(), operationId: z.string().nullable(), affectedItemIds: z.array(z.string()),
-  affectedProjectIds: z.array(z.string()), changeKind: z.enum(['import', 'link', 'archive', 'citation_key']), occurredAt: z.string() }).strict();
+  affectedProjectIds: z.array(z.string()), changeKind: z.enum(['import', 'link', 'archive', 'citation_key', 'delete']), occurredAt: z.string() }).strict();
 export type LiteratureLibraryChanged = z.infer<typeof literatureLibraryChangedSchema>;
 export type LiteratureSearchInput = z.infer<typeof literatureSearchInputSchema>;
 export type LiteraturePagePosition = z.infer<typeof literaturePagePositionSchema>;

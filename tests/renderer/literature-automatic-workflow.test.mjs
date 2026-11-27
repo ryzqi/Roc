@@ -565,6 +565,8 @@ async function removeFromCurrentProject(id) {
   await expect(remove).toHaveAccessibleName('从当前项目移除');
   await expect(remove).toBeEnabled();
   await page.keyboard.press('End');
+  await expect(page.getByTestId('literature-row-menu-delete')).toBeFocused();
+  await page.keyboard.press('ArrowUp');
   await expect(remove).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('literature-row-menu')).toBeHidden();

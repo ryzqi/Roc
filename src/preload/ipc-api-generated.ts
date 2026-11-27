@@ -536,6 +536,7 @@ export const rocApi: RocPreloadApi = {
     importBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryImportFile, ...args),
     exportBibliography: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryExport, ...args),
     linkLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryLink, ...args),
+    deleteLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryDelete, ...args),
     archiveLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryArchive, ...args),
     setLibraryCitationKey: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryCitationKey, ...args),
     importDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentImport, ...args),

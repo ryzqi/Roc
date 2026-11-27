@@ -191,6 +191,10 @@ export class ResearchIndexRepository {
     return row === undefined ? null : this.job(row.id);
   }
 
+  isRunning(jobId: string): boolean {
+    return this.db.prepare("SELECT 1 FROM research_index_jobs WHERE id=? AND status='running'").get(jobId) !== undefined;
+  }
+
   job(id: string): IndexJob {
     const row = this.db.prepare('SELECT * FROM research_index_jobs WHERE id = ?').get(id) as JobRow | undefined;
     if (row === undefined) throw new Error('research_index_job_not_found');

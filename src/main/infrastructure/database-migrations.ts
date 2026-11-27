@@ -47,7 +47,8 @@ export const researchLegacyChecksums: Readonly<Record<number, string>> = {
   72: 'e3248f5dad091b600713f0e3645a1e01e608a33435ac0bd2c7b6c4d9f91d0365',
   73: 'b790e17f3a05bfc3284c5168a05db0b3fc899d1e94706212999c5e7cd83021ee',
   74: '92df0c54a7ba4deb1e11c4dd7299ac93666e5d528ba00bfd889f39aee94ebb90',
-  75: '8beebe3cebc190fff4d75c6dad0d36f8b0d6863ab79e5f1a63e760af8dcdff0d'
+  75: '8beebe3cebc190fff4d75c6dad0d36f8b0d6863ab79e5f1a63e760af8dcdff0d',
+  76: '1241f753c8a2dec38f2829a15e9955f4af5d99556b3f1ec154e09757f1f63f7f'
 };
 
 /**
@@ -76,11 +77,11 @@ export async function migrateDatabasesOnStartup(rootDir: string): Promise<void> 
       }
       if (definition.dbName !== 'plugin:@roc/plugin-research'
         || researchLegacyChecksums[metadata.version] === undefined
-        || target.version !== 76) {
+        || target.version !== 77) {
         throw new Error(`database_migration_unsupported:${definition.dbName}:${metadata.version}`);
       }
       assertKnownResearchSchema(db, metadata.version, metadata.checksum);
-      assertResearchHistoryCanBePreserved(db);
+      if (metadata.version < 76) assertResearchHistoryCanBePreserved(db);
       plans.push({ dbName: definition.dbName, filePath, fromVersion: metadata.version, toVersion: target.version });
     } finally {
       db.close();
@@ -101,7 +102,7 @@ export async function migrateDatabasesOnStartup(rootDir: string): Promise<void> 
       db.pragma('busy_timeout = 5000');
       db.pragma('synchronous = FULL');
       if (plan.dbName === 'plugin:@roc/plugin-research') {
-        migrateResearchToV76(db, plan.fromVersion);
+        migrateResearchToCurrent(db, plan.fromVersion);
       }
     } finally {
       db.close();
@@ -184,7 +185,7 @@ function isHistoryObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void {
+function migrateResearchToCurrent(db: DatabaseConnection, fromVersion: number): void {
   const dbName = 'plugin:@roc/plugin-research';
   const target = researchSchema;
   const current = expectedSchemaObjects(target.sql);
@@ -204,7 +205,7 @@ function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void
     const metadata = readMetadata(db);
     if (metadata?.version !== fromVersion) throw new Error('database_migration_source_version_changed');
     assertKnownResearchSchema(db, fromVersion, metadata.checksum);
-    assertResearchHistoryCanBePreserved(db);
+    if (fromVersion < 76) assertResearchHistoryCanBePreserved(db);
     const before = readSchemaObjects(db);
     const obsolete = 'research_python_environment_selections';
     for (const [name, sql] of before) {
@@ -212,7 +213,7 @@ function migrateResearchToV76(db: DatabaseConnection, fromVersion: number): void
         throw new Error(`database_migration_unexpected_schema_object:${name}`);
       }
     }
-    db.exec('DROP TABLE research_python_environment_selections');
+    if (fromVersion < 76) db.exec('DROP TABLE research_python_environment_selections');
     for (const { name, sql } of creationOrder) {
       if (current.has(name) && !before.has(name)) db.exec(sql);
     }

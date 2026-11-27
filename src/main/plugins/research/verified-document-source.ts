@@ -69,7 +69,7 @@ export async function verifyDocumentSource(root: string, path: string, size: num
 export class VerifiedDocumentSources {
   private readonly entries = new Map<string, Entry>();
   private readonly creating = new Set<Promise<Entry>>();
-  private readonly acquisitions = new Set<Promise<string>>();
+  private readonly acquisitions = new Map<Promise<string>, {key: string; controller: AbortController}>();
   private readonly controller = new AbortController();
   private readonly timer: ReturnType<typeof setInterval>;
   private reservedBytes = 0;
@@ -90,8 +90,9 @@ export class VerifiedDocumentSources {
   }
 
   acquire(root: string, path: string, source: Source, parentSignal: AbortSignal): Promise<string> {
-    const operation = this.openLease(root, path, source, parentSignal);
-    this.acquisitions.add(operation);
+    const controller = new AbortController();
+    const operation = this.openLease(root, path, source, AbortSignal.any([parentSignal, controller.signal]));
+    this.acquisitions.set(operation, {key: source.key, controller});
     void operation.then(() => this.acquisitions.delete(operation), () => this.acquisitions.delete(operation));
     return operation;
   }
@@ -182,6 +183,13 @@ export class VerifiedDocumentSources {
     await this.retire(entry);
   }
 
+  async releaseMatching(matches: (key: string) => boolean): Promise<void> {
+    const pending = [...this.acquisitions].filter(([, task]) => matches(task.key));
+    for (const [, task] of pending) task.controller.abort();
+    await Promise.allSettled(pending.map(([promise]) => promise));
+    await Promise.all([...this.entries.values()].filter(entry => matches(entry.key)).map(entry => this.retire(entry)));
+  }
+
   stream(id: string, key: string, begin: number, end: number, parentSignal: AbortSignal,
     authorize: () => void, releaseAfter = false): ReadableStream<Uint8Array> {
     this.requireOpen();
@@ -262,7 +270,7 @@ export class VerifiedDocumentSources {
 
   async shutdown(): Promise<void> {
     this.closed = true; clearInterval(this.timer); this.controller.abort();
-    await Promise.allSettled([...this.acquisitions]);
+    await Promise.allSettled(this.acquisitions.keys());
     await Promise.all([...this.entries.values()].map(entry => this.retire(entry)));
   }
 

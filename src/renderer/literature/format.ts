@@ -106,24 +106,7 @@ export function normalizeDoi(input: string): string | null {
   return value;
 }
 
-/**
- * Extracts the query to send for "import by arXiv".
- *
- * The contract has no arXiv-specific import: an arXiv paper arrives via
- * `research.literature.search({ sources: ['arxiv'] })` followed by
- * `importRecord`. So this only has to turn whatever the user pasted — a bare id,
- * an `arXiv:…` prefix, or an abs/pdf URL — into the token worth searching.
- */
-export function arxivQueryFromInput(input: string): string | null {
-  const value = input.trim();
-  if (value.length === 0) {
-    return null;
-  }
-  const urlMatch = /arxiv\.org\/(?:abs|pdf)\/([^/?#]+)/iu.exec(value);
-  const candidate = urlMatch?.[1] ?? value.replace(/^arxiv:\s*/iu, '');
-  const withoutVersion = candidate.replace(/\.pdf$/iu, '').replace(/v\d+$/u, '');
-  return /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})$/iu.test(withoutVersion) ? withoutVersion : null;
-}
+export { arxivQueryFromInput } from '../../shared/arxiv-identifier';
 
 /** Lowercased ASCII-ish surname, used only to seed a citation key. */
 function asciiSurname(author: string): string {
