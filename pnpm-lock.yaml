@@ -233,6 +233,9 @@ importers:
       onnxruntime-node:
         specifier: 1.31.1
         version: 1.31.1
+      opencc-js:
+        specifier: 1.4.2
+        version: 1.4.2
       p-retry:
         specifier: 9.0.0
         version: 9.0.0
@@ -248,6 +251,9 @@ importers:
       pino:
         specifier: 10.4.0
         version: 10.4.0
+      pinyin-pro:
+        specifier: 3.29.5
+        version: 3.29.5
       shell-env:
         specifier: 4.0.3
         version: 4.0.3
@@ -3118,6 +3124,9 @@ packages:
       zod:
         optional: true
 
+  opencc-js@1.4.2:
+    resolution: {integrity: sha512-EdcspgdROiCCZDM+jZR6Pa670xW+EW2QhctPBQ8gRjg6lrx4IHEl+2s+kt5izk/TkxVRgdWuFgaGkaEdIUfdaw==}
+
   orderedmap@2.1.1:
     resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
 
@@ -3221,6 +3230,9 @@ packages:
   pino@10.4.0:
     resolution: {integrity: sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==}
     hasBin: true
+
+  pinyin-pro@3.29.5:
+    resolution: {integrity: sha512-Fk5YoRmtdHqJWqAuzYVG/NzvzeCbaG+ZEwbY6Nbps3QAIrvQQEtcm49frcyCM8i2b5najnzPDtYqrHRYTTiuwQ==}
 
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
@@ -7211,6 +7223,8 @@ snapshots:
       undici: 7.30.2
       zod: 4.6.7
 
+  opencc-js@1.4.2: {}
+
   orderedmap@2.1.1: {}
 
   p-cancelable@2.1.1: {}
@@ -7313,6 +7327,8 @@ snapshots:
       safe-stable-stringify: 2.5.0
       sonic-boom: 4.2.1
       thread-stream: 4.2.1
+
+  pinyin-pro@3.29.5: {}
 
   pkce-challenge@5.0.1: {}
 

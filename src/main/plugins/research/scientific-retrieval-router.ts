@@ -24,6 +24,7 @@ import {scientificEvidenceRequestSchema, type ScientificEvidenceRequest,
   type ScientificEvidenceResult} from '../../../shared/schemas/research-scientific-evidence';
 import {assertScientificSearchSources, validateScientificStatements} from './research-scientific-evidence';
 import {scientificMetadataCandidate, scientificCitationCandidate} from './scientific-search-candidate';
+import {searchMatchScore, searchTermsScore} from './search-normalization';
 
 type Candidate = Omit<ScientificCandidate, 'signals' | 'score'>;
 type Signal = ScientificCandidate['signals'][number];
@@ -46,7 +47,7 @@ export function scientificQueryTerms(query: string): string[] {
   return [...new Set([...useful, ...bigrams])].slice(0, 32);
 }
 const lexicalScore = (text: string, terms: readonly string[]): number =>
-  terms.reduce((score, term) => score + Number(text.toLowerCase().includes(term.toLowerCase())), 0);
+  terms.reduce((score, term) => score + Number(searchMatchScore(text, term) > 0), 0);
 const numbered = (value: string | null): string | null => value?.trim().replace(/^\(|\)$/gu, '').toUpperCase() ?? null;
 function ranked(rows: Array<{candidate: Candidate; score: number; exact?: boolean}>,
   channel: ScientificRetrievalChannel, method: Signal['method'], limit: number): ScientificCandidate[] {
@@ -175,8 +176,11 @@ export class ScientificRetrievalRouter {
     request: ScientificSearchRequest, signal: AbortSignal): Promise<ChannelResult> {
     if (!papers.length) return {candidates: [], degradation: []};
     const ids = papers.map(p => p.generation.id), terms = scientificQueryTerms(plan.query), han = /\p{Script=Han}/u.test(plan.query);
-    const rows = han ? this.repository.scientificIndex.lexicalHits(ids, terms, request.candidateLimit) :
+    const primary = han ? this.repository.scientificIndex.lexicalHits(ids, terms, request.candidateLimit) :
       this.repository.scientificIndex.textHits(ids, terms.map(term => `"${term}"`).join(' OR '), request.candidateLimit);
+    const extra = this.repository.scientificIndex.normalizedLexicalHits(ids, [plan.query, ...terms],
+      request.candidateLimit - primary.length, primary);
+    const rows = [...primary, ...extra];
     const project = (generationId: string, chunkId: string): Candidate => {
       const paper = papers.find(p => p.generation.id === generationId)!;
       const chunk = paper.chunks.find(c => c.id === chunkId);
@@ -184,7 +188,8 @@ export class ScientificRetrievalRouter {
       return scientificChunkCandidate(paper, chunk);
     };
     const lexical = rows.map((r, i) => ({...project(r.generationId, r.chunkId), score: 1 / (61 + i),
-      signals: [{channel: 'text' as const, method: han ? 'lexical' as const : 'fts' as const, rank: i + 1, score: r.score}]}));
+      signals: [{channel: 'text' as const, method: han || i >= primary.length ? 'lexical' as const : 'fts' as const,
+        rank: i + 1, score: r.score}]}));
     const identity = this.embeddings.selectedIdentity(request.embeddingConfigId);
     if (identity === null) return {candidates: lexical, degradation: ['dense_not_configured']};
     const denseIds = papers.filter(p => hash(p.generation.snapshot.embedding) === hash(identity)).map(p => p.generation.id);
@@ -208,7 +213,7 @@ export class ScientificRetrievalRouter {
       const m = p.ir.metadata, exact = plan.scope.selection === 'selected' || Boolean(m.doi && plan.filters.dois.includes(normalizeResearchDoi(m.doi)));
       if (plan.filters.years.length && !plan.filters.years.includes(m.year!)) continue;
       if (plan.filters.dois.length && (!m.doi || !plan.filters.dois.includes(normalizeResearchDoi(m.doi)))) continue;
-      const score = lexicalScore(JSON.stringify(m), terms);
+      const score = lexicalScore(JSON.stringify(m), terms) || Number(searchTermsScore(JSON.stringify(m), [plan.query]) > 0);
       if (!exact && !score && !plan.filters.years.length) continue;
       rows.push({candidate: scientificMetadataCandidate(p), score, exact});
     }

@@ -15,10 +15,12 @@ import {
   researchDocumentAnnotationListRequestSchema, researchDocumentAnnotationGetRequestSchema, researchDocumentAnnotationInspectionSchema
 } from '../../../shared/schemas/research-document-annotations';
 import {requireResearchHuman} from '../../services/research-human-context';
+import {researchDocumentStatusRequestSchema, researchDocumentStatusResultSchema} from '../../../shared/schemas/research-document-status';
 
 const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),
   list: descriptor('research.document.list', researchDocumentListRequestSchema, researchDocumentSchema.array()),
+  statusMany: descriptor('research.document.statusMany', researchDocumentStatusRequestSchema, researchDocumentStatusResultSchema),
   get: descriptor('research.document.get', researchDocumentIdRequestSchema, researchDocumentSchema),
   parse: descriptor('research.document.parse', researchDocumentStartParseRequestSchema, researchDocumentSchema),
   parseMany: descriptor('research.document.parseMany', researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema),
@@ -69,8 +71,11 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
       }
     });
   }
-  register(capabilities.import, (input) => service.import(input));
+  register(capabilities.import, (input) => service.import(input, {
+    automaticMetadata: input.target === 'new-item' && input.metadataMode === 'automatic'
+  }));
   register(capabilities.list, (input) => repository.list(input.libraryItemId));
+  register(capabilities.statusMany, (input) => repository.statusMany(input));
   register(capabilities.get, (input) => repository.get(input.documentId));
   register(capabilities.parse, (input) => service.parse(input.documentId, input.tier));
   register(capabilities.parseMany, (input) => service.parseMany(input));

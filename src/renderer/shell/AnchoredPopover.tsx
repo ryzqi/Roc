@@ -123,6 +123,7 @@ export function AnchoredPopover({
           })}
           className="anchored-popover-position"
           aria-label={label}
+          aria-labelledby={undefined}
           aria-hidden={!open || undefined}
           inert={!open}
           data-testid={testId}

@@ -31,16 +31,17 @@ before(async()=>{
         const [category,setCategory]=useState(null),[selectedId,setSelected]=useState(initialSelection),[query,setQuery]=useState(''),[includeArchived,setIncludeArchived]=useState(false),[status,setStatus]=useState('ready');
         const [projectId,setProjectId]=useState('project-layout'),[shown,setShown]=useState(true);
         const items=useMemo(()=>all.filter(item=>item.metadata.title.includes(query)),[all,query]);
+        const client=useMemo(()=>({api:{research:{exportBibliography:async()=>({ok:true,data:{content:'bibtex'}})}}}),[]);
         window.setCategory=setCategory;window.selectExternally=setSelected;
         window.setLibraryStatus=setStatus;
         window.showNavigation=setShown;window.setLibraryQuery=setQuery;window.setLibraryProject=setProjectId;
         window.appendLibraryItem=()=>setAll(current=>[...current,record('paper-added',current.length,'book','zotero')]);
         window.replaceLibraryResults=removedId=>flushSync(()=>{setAll(current=>current.filter(item=>item.id!==removedId));setQuery('Agent');});
-        const store={items,status,error:status==='error'?'Library unavailable':null,query,selectedId,projectId,includeArchived,
+        const store={items,status,error:status==='error'?'Library unavailable':null,query,selectedId,projectId,includeArchived,writable:true,
           total:items.length,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},requestImport:()=>{window.importRequested=true;},
           documentsStatus:'ready',documents:[{libraryItemId:selectedId,currentParseId:'parse',status:'ready'}],
-          action:{error:null},setQuery,reload:()=>{window.reloads++;setStatus('ready');},setIncludeArchived,select:id=>{window.opened.push(id);setSelected(id);},
-          client:{api:{research:{exportBibliography:async()=>({ok:true,data:{content:'bibtex'}})}}}};
+          action:{error:null},assistant:{pending:false,error:null},setQuery,reload:()=>{window.reloads++;setStatus('ready');},setIncludeArchived,select:id=>{window.opened.push(id);setSelected(id);},
+          askAssistantAboutItem:async item=>{window.asked.push(item.id);return true;},client};
         return <LiteratureScopeProvider value={store}>
           <div className="flex h-full" style={{width:650}}>
             <aside data-testid="navigation" className="flex shrink-0" style={{width:240}} hidden={!shown} inert={!shown}>
@@ -54,7 +55,7 @@ before(async()=>{
         </LiteratureScopeProvider>;
       }
       const root=createRoot(document.getElementById('root'));let key=0;
-      window.mount=(count=1,initialSelection='paper-layout',context=false)=>{window.opened=[];window.reloads=0;window.importRequested=false;window.categoryReads=0;
+      window.mount=(count=1,initialSelection='paper-layout',context=false)=>{window.opened=[];window.asked=[];window.reloads=0;window.importRequested=false;window.categoryReads=0;
         flushSync(()=>root.render(<Harness key={++key} count={count} initialSelection={initialSelection} context={context}/>));};
     `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
@@ -65,6 +66,19 @@ before(async()=>{
   await page.waitForFunction(()=>typeof window.mount==='function');
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
+
+async function openFilters() {
+  const popover=page.getByTestId('literature-filter-popover');
+  await page.getByTestId('literature-filter-toggle').click();
+  await expect(popover).toBeVisible();
+  return popover;
+}
+
+async function closeFilters() {
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('literature-filter-popover')).toBeHidden();
+  await expect(page.getByTestId('literature-filter-toggle')).toBeFocused();
+}
 
 async function settledLibraryScroll() {
   return page.locator('.library-virtual-list').evaluate(element=>new Promise((resolve,reject)=>{
@@ -131,10 +145,10 @@ test('literature search shows one outer focus ring for mouse and keyboard focus'
   await expect(search).toHaveCSS('outline-style','none');
   await expect(frame).toHaveCSS('outline-style','solid');
 
-  const refresh=page.getByTestId('literature-refresh');
+  const filter=page.getByTestId('literature-filter-toggle');
   await page.keyboard.press('Tab');
-  await expect(refresh).toBeFocused();
-  await expect(refresh).toHaveCSS('outline-style','solid');
+  await expect(filter).toBeFocused();
+  await expect(filter).toHaveCSS('outline-style','solid');
   await expect(frame).toHaveCSS('outline-style','none');
   await page.keyboard.press('Shift+Tab');
   await expect(search).toBeFocused();
@@ -281,7 +295,8 @@ test('large result sets window their rows and preserve selected items and keyboa
   assert.ok(mounted>0 && mounted<40,`Expected bounded DOM for 200 results, received ${mounted}`);
   t.diagnostic(`${mounted} mounted rows for 200 literature results`);
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 200 条');
-  await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveText('全文已解析');
+  await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveText('已解析');
+  await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveAttribute('data-tone','neutral');
   await page.getByTestId('literature-row-paper-150').focus();
   await settledLibraryScroll();
   await page.locator('.library-virtual-list').evaluate(element=>element.scrollTo({top:0}));
@@ -299,23 +314,42 @@ test('large result sets window their rows and preserve selected items and keyboa
   await page.evaluate(()=>window.selectExternally('paper-120'));
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('tabindex','0');
+  await page.evaluate(()=>{
+    window.copiedKeys=[];
+    Object.defineProperty(navigator.clipboard,'writeText',{configurable:true,value:async value=>{window.copiedKeys.push(value);}});
+  });
   await page.getByTestId('literature-row-paper-120').focus();
+  await page.keyboard.press('c');
+  assert.deepEqual(await page.evaluate(()=>window.copiedKeys),['chen2024120']);
+  await page.keyboard.press('a');
+  assert.deepEqual(await page.evaluate(()=>window.asked),['paper-120']);
+  await expect(page.getByTestId('literature-citekey-copy-paper-120')).toBeHidden();
+  await expect(page.getByTestId('literature-ask-paper-120')).toBeHidden();
   await page.keyboard.press('Tab');
-  await expect(page.getByTestId('literature-citekey-copy-paper-120')).toBeFocused();
+  await expect(page.getByTestId('literature-more-paper-120')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('literature-row-menu')).toBeVisible();
+  await expect(page.getByTestId('literature-row-menu-copy')).toBeEnabled();
+  await expect(page.getByTestId('literature-row-menu-ask')).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('literature-row-menu')).toBeHidden();
+  await expect(page.getByTestId('literature-more-paper-120')).toBeFocused();
   await settledLibraryScroll();
   await page.locator('.library-virtual-list').evaluate(element=>element.scrollTo({top:0}));
   await expect(page.getByTestId('literature-row-paper-120')).toHaveCount(0);
   await expect(page.getByTestId('literature-list-body')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(page.getByTestId('literature-row-paper-121')).toBeFocused();
+  await openFilters();
   await page.getByTestId('literature-sort').selectOption('title');
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
   await page.getByTestId('literature-multiselect').click();
-  await page.getByTestId('literature-filter-toggle').click();
+  await expect(page.getByTestId('literature-filter-popover')).toBeHidden();
+  await openFilters();
   await page.getByRole('checkbox',{name:'选择已加载结果'}).check();
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 200 篇');
-  await page.getByTestId('literature-filter-toggle').click();
+  await closeFilters();
   await page.getByTestId('literature-search').fill('120 Agent');
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 1 / 1 条');
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
@@ -351,8 +385,8 @@ test('hidden context navigation retains reading state while query and project ch
   await categories.locator('summary').click();
   await categories.getByRole('button',{name:'期刊论文 200 条'}).click();
   await page.getByTestId('literature-search').fill('Agent');
+  await openFilters();
   await page.getByTestId('literature-sort').selectOption('title');
-  await page.getByTestId('literature-filter-toggle').click();
   await page.getByTestId('literature-archived-toggle').check();
   await page.getByTestId('literature-multiselect').click();
   await page.getByTestId('literature-row-paper-150').locator('..').getByRole('checkbox').check();
@@ -364,18 +398,23 @@ test('hidden context navigation retains reading state while query and project ch
   await page.evaluate(()=>window.showNavigation(false));
   await expect(page.getByTestId('navigation')).toBeHidden();
   await page.evaluate(()=>window.setLibraryStatus('loading'));
-  await expect(page.getByTestId('literature-refresh')).toBeDisabled();
-  await page.evaluate(()=>window.setLibraryStatus('ready'));
-  await expect(page.getByTestId('literature-refresh')).toBeEnabled();
   await page.evaluate(()=>window.showNavigation(true));
   await expect(page.getByTestId('navigation')).toBeVisible();
   await expect(page.getByTestId('adjacent-control')).toBeFocused();
   await expect(page.getByTestId('literature-search')).toHaveValue('Agent');
-  await expect(page.getByTestId('literature-sort')).toHaveValue('title');
   await expect(page.getByTestId('literature-filter-toggle')).toHaveAttribute('aria-pressed','true');
   await expect(categories).toHaveAttribute('open','');
   await expect(categories.getByRole('button',{name:'期刊论文 200 条'})).toHaveAttribute('aria-pressed','true');
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 1 篇');
+  await expect.poll(async()=>Math.abs(await page.locator('.library-virtual-list').evaluate(element=>element.scrollTop)-before)).toBeLessThan(2);
+  await openFilters();
+  await expect(page.getByTestId('literature-sort')).toHaveValue('title');
+  await expect(page.getByTestId('literature-multiselect')).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByTestId('literature-refresh')).toBeDisabled();
+  await page.evaluate(()=>window.setLibraryStatus('ready'));
+  await expect(page.getByTestId('literature-refresh')).toBeEnabled();
+  await closeFilters();
+  await page.getByTestId('adjacent-control').focus();
   await expect.poll(async()=>Math.abs(await page.locator('.library-virtual-list').evaluate(element=>element.scrollTop)-before)).toBeLessThan(2);
 
   await page.evaluate(()=>window.showNavigation(false));
@@ -385,7 +424,11 @@ test('hidden context navigation retains reading state while query and project ch
   await page.evaluate(()=>window.setLibraryQuery('Agent'));
   await expect(page.getByTestId('literature-search')).toHaveValue('Agent');
   await page.evaluate(()=>window.showNavigation(true));
+  await expect(page.getByTestId('adjacent-control')).toBeFocused();
+  await openFilters();
   await expect(page.getByTestId('literature-multiselect')).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByTestId('literature-sort')).toHaveValue('title');
+  await closeFilters();
   await expect(page.getByTestId('literature-bulk-actions')).toHaveCount(0);
   await expect(page.getByTestId('literature-row-paper-150')).toBeVisible();
   await page.getByTestId('literature-row-paper-150').locator('..').getByRole('checkbox').check();

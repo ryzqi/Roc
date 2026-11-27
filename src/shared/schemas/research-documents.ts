@@ -14,7 +14,8 @@ export const researchDocumentSchema = z.object({
 }).strict();
 export const researchDocumentImportRequestSchema = z.discriminatedUnion('target', [
   z.object({ target: z.literal('new-item'), sourcePath: z.string().min(1), title: z.string().trim().min(1).max(1000),
-    citationKey: researchCitationKeySchema, projectId: z.string().min(1).nullable() }).strict(),
+    citationKey: researchCitationKeySchema, projectId: z.string().min(1).nullable(),
+    metadataMode: z.enum(['automatic', 'provided']).optional() }).strict(),
   z.object({ target: z.literal('library-item'), sourcePath: z.string().min(1), libraryItemId: z.string().min(1),
     projectId: z.string().min(1).nullable() }).strict()
 ]);

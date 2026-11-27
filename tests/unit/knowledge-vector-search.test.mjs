@@ -48,6 +48,49 @@ test('Chinese phrase retrieval finds unsegmented text, short terms, mixed querie
   } finally {db.close();}
 });
 
+test('lexical tolerance retains raw chunks and current receipts without dense embeddings or foreign-project access', async () => {
+  const {applyResearchDatabaseSchema} = await importTypeScriptModule('src/main/infrastructure/database-schemas.ts', {
+    platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime')
+  });
+  const db = new Database(':memory:'), now = () => '2026-11-23T00:00:00.000Z';
+  try {
+    applyResearchDatabaseSchema(db);
+    for (const id of ['a', 'b']) db.prepare(`INSERT INTO research_projects
+      (id,title,description,status,current_stage,created_at,updated_at) VALUES (?,?,'','active','reading',?,?)`).run(id,id,now(),now());
+    const repo = new ResearchKnowledgeRepository(db, () => {}, now);
+    const content = 'Multi‑Agent 注意力機制处理重慶绿色网络。';
+    const source = {id:'tolerant',projectId:'a',sourceType:'file',sourceId:'original.md',title:'Immutable title',content,
+      chunks:[{content,locator:'original:page:7'}],embeddingPolicy:'none'};
+    repo.upsertFromSource(source);
+    repo.upsertFromSource({...source,id:'foreign',projectId:'b'});
+    repo.upsertFromSource({...source,id:'wrong-document',projectId:'b'});
+    db.prepare("UPDATE research_knowledge_chunks SET project_id='a' WHERE document_id='wrong-document'").run();
+    repo.upsertFromSource({...source,id:'title-only',content:'Original body',title:'长序列注意力機制',
+      chunks:[{content:'Original body',locator:'original:page:8'}]});
+    const original = db.prepare('SELECT id,content,content_hash,locator FROM research_knowledge_chunks ORDER BY id').all();
+    const search = query => repo.searchKnowledge({request:{query,projectId:'a',limit:20},vector:null});
+    for (const query of ['MULTI-AGENT', 'multi agent', 'multiagent', '注意力机制', 'zhuyili', 'zhu yi li', 'zyl', 'chongqing', 'lǜ sè']) {
+      const result = search(query);
+      const hit = result.hits.find(hit => hit.documentId === 'tolerant');
+      assert.ok(hit, query);
+      assert.equal(hit.content, content, query);
+      assert.equal(hit.locator, 'original:page:7', query);
+      assert.equal(hit.sourceId, 'original.md', query);
+      assert.ok(result.hits.every(hit => !['foreign','wrong-document'].includes(hit.documentId)), query);
+      assert.equal(result.ranking.embedding, null);
+      assert.equal(result.vectorCount, 0);
+      repo.assertSearchCurrent(result);
+    }
+    assert.equal(search('长序列').hits[0].documentId, 'title-only');
+    assert.deepEqual(db.prepare('SELECT id,content,content_hash,locator FROM research_knowledge_chunks ORDER BY id').all(), original);
+    const receipt = search('zhuyili');
+    repo.upsertFromSource({...source,content:'New original body',chunks:[{content:'New original body',locator:'replacement:page:9'}]});
+    assert.throws(() => repo.assertSearchCurrent(receipt), /research_knowledge_source_changed/);
+    assert.ok(search('zhuyili').hits.every(hit => hit.documentId !== 'tolerant'));
+    assert.equal(search('new original').hits[0].locator, 'replacement:page:9');
+  } finally {db.close();}
+});
+
 test('fusion recalls beyond the display limit and records semantic reranking receipts',async()=>{
   const {applyResearchDatabaseSchema}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{
     platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});

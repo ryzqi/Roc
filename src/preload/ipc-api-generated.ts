@@ -540,6 +540,7 @@ export const rocApi: RocPreloadApi = {
     setLibraryCitationKey: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryCitationKey, ...args),
     importDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentImport, ...args),
     listDocuments: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentList, ...args),
+    getDocumentStatuses: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentStatusMany, ...args),
     getDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentGet, ...args),
     parseDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentParse, ...args),
     parseDocuments: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentParseMany, ...args),

@@ -1,6 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import {performance} from 'node:perf_hooks';
 import { mkdtempSync, realpathSync, statSync, rmSync, renameSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -173,6 +174,32 @@ test('production readonly WAL search preserves complete vector/FTS/DOI/project/r
     await service.search(input('needle'));
     assert.equal(Number(f.db.prepare('SELECT total_changes()').pluck().get()), count, 'readonly search must not persist writes');
   } finally { await f.close(); }
+});
+
+test('real readonly Worker shares tolerant lexical functions and original receipt bytes across 10000 chunks', async t => {
+  const f = corpus(), service = f.service({idleMs:10_000});
+  try {
+    const original = 'Multi‑Agent 注意力機制与重慶绿色网络。';
+    const source = {id:'tolerant',projectId:'a',sourceType:'file',sourceId:'original.md',title:'Original tolerant source',
+      content:original,chunks:[{content:original,locator:'original:page:8'}],embeddingPolicy:'none'};
+    f.knowledge.upsertFromSource(source);
+    f.knowledge.upsertFromSource({...source,id:'foreign-tolerant',projectId:'b'});
+    const before = Number(f.db.prepare('SELECT total_changes()').pluck().get());
+    const started = performance.now();
+    for (const query of ['multiagent', '注意力机制', 'zhu yi li', 'chongqing']) {
+      const value = {request:request(query,'a'),vector:null};
+      const expected = f.knowledge.searchKnowledge(value), actual = await service.search(value);
+      assert.equal(JSON.stringify(actual), JSON.stringify(expected), query);
+      assert.ok(actual.hits.some(hit => hit.documentId === 'tolerant' && hit.content === original && hit.locator === 'original:page:8'), query);
+      assert.ok(actual.hits.every(hit => hit.documentId !== 'foreign-tolerant'), query);
+      f.knowledge.assertSearchCurrent(actual);
+    }
+    const elapsed = performance.now() - started;
+    assert.equal(service.snapshot().starts, 1);
+    assert.equal(Number(f.db.prepare('SELECT total_changes()').pluck().get()), before);
+    assert.ok(elapsed < 15_000, `10000-chunk Main/Worker tolerance parity took ${elapsed.toFixed(1)}ms`);
+    t.diagnostic(`10002 original chunks; four Main/readonly Worker tolerance pairs: ${elapsed.toFixed(1)}ms`);
+  } finally {await f.close();}
 });
 
 test('fresh Main validation rejects source/configuration changes at the Worker return boundary', async () => {

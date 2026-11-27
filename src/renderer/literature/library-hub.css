@@ -1,3 +1,5 @@
+.literature-hub-container { position: relative; }
+.literature-action-feedback { position: absolute; inset-inline: var(--space-3); bottom: var(--space-3); z-index: 4; }
 .literature-toolbar {
   block-size: 48px;
   grid-template-rows: 32px;

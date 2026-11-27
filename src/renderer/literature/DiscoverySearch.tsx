@@ -12,6 +12,7 @@ import type { LiteratureImportActions } from './use-literature-import-actions';
 import {DiscoveryCandidatePreview} from './DiscoveryCandidatePreview';
 import {useViewSelected} from '../shared/view-activity';
 import {ReadingViewBoundary} from './ReadingViewBoundary';
+import {StatusBadge, type StatusBadgeTone} from '../shared/StatusBadge';
 import './discovery-search.css';
 
 const SOURCES: { id: LiteratureSearchSource; label: string }[] = [
@@ -23,9 +24,16 @@ const SOURCES: { id: LiteratureSearchSource; label: string }[] = [
 const SOURCE_STATUS: Record<LiteratureSearchResult['sources'][number]['status'], string> = {
   ok: '已返回', empty: '无结果', partial: '部分结果', timeout: '超时', rate_limited: '请求受限', error: '失败'
 };
+const SOURCE_TONE: Record<LiteratureSearchResult['sources'][number]['status'], StatusBadgeTone> = {
+  ok: 'ready', empty: 'neutral', partial: 'warning', timeout: 'warning', rate_limited: 'warning', error: 'danger'
+};
 const DISPOSITION: Record<LiteratureImportResult['items'][number]['disposition'], string> = {
   created: '已收录', linked: '已关联', already_present: '已在文献库', skipped_archived: '已归档，未加入',
   failed: '添加失败', cancelled: '已取消', not_processed: '尚未处理'
+};
+const DISPOSITION_TONE: Record<LiteratureImportResult['items'][number]['disposition'], StatusBadgeTone> = {
+  created: 'neutral', linked: 'neutral', already_present: 'neutral', skipped_archived: 'warning',
+  failed: 'danger', cancelled: 'neutral', not_processed: 'neutral'
 };
 
 type Props = {
@@ -174,9 +182,12 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
       {pending !== 'search' ? null : <section className="mb-4 flex flex-col gap-2" aria-label="来源检索进度" data-testid="discovery-source-progress">
         <ul className="flex flex-wrap gap-x-4 gap-y-2 text-muted">{sources.map(source => {
           const completed = progress.find(item => item.source.source === source)?.source;
-          return <li key={source}>{SOURCES.find(item => item.id === source)?.label ?? source}：
-            {completed === undefined ? '等待结果' : SOURCE_STATUS[completed.status]}
-            {completed !== undefined && completed.returnedCount > 0 ? ` ${completed.returnedCount} 篇` : ''}</li>;
+          return <li key={source} className="flex min-w-0 items-center gap-2">
+            <span>{SOURCES.find(item => item.id === source)?.label ?? source}：</span>
+            <StatusBadge tone={completed === undefined ? 'processing' : SOURCE_TONE[completed.status]}
+              label={completed === undefined ? '等待结果' : SOURCE_STATUS[completed.status]} />
+            {completed !== undefined && completed.returnedCount > 0 ? <span className="tabular-nums">{completed.returnedCount} 篇</span> : null}
+          </li>;
         })}</ul>
         {progress.every(item => item.records.length === 0) ? null : <>
           <p className="text-muted">已返回原始记录，来源合并完成后可选择加入。</p>
@@ -193,11 +204,12 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
             {result.status === 'failed' ? '各来源均未完成检索' : result.status === 'partial' ? '部分来源未完成，已保留可用结果' : '检索已返回'}，{result.total.toLocaleString('zh-CN')} 篇候选
           </ActionStatus>
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-muted">
-            {result.sources.map(source => <li key={source.source}>
-              {SOURCES.find(entry => entry.id === source.source)?.label ?? source.source}：{SOURCE_STATUS[source.status]}
-              {source.returnedCount > 0 ? ` ${source.returnedCount.toLocaleString('zh-CN')} 篇` : ''}
-              {source.retryAfterMs === null ? '' : `，${Math.ceil(source.retryAfterMs / 1000)} 秒后可重试`}
-              {source.errorCode === null ? '' : `（${source.errorCode}）`}
+            {result.sources.map(source => <li key={source.source} className="flex min-w-0 flex-wrap items-center gap-2">
+              <span>{SOURCES.find(entry => entry.id === source.source)?.label ?? source.source}：</span>
+              <StatusBadge tone={SOURCE_TONE[source.status]} label={SOURCE_STATUS[source.status]} />
+              {source.returnedCount > 0 ? <span className="tabular-nums">{source.returnedCount.toLocaleString('zh-CN')} 篇</span> : null}
+              {source.retryAfterMs === null ? null : <span className="tabular-nums">{Math.ceil(source.retryAfterMs / 1000)} 秒后可重试</span>}
+              {source.errorCode === null ? null : <span>（{source.errorCode}）</span>}
             </li>)}
           </ul>
           {result.warnings.length === 0 ? null : <details data-reading-detail="search-warnings" className="text-muted"><summary>检索说明</summary>
@@ -235,8 +247,10 @@ function DiscoverySearchScope({store, actions, writable, onOpenLibrary}: Props):
           需处理 {receipt.result.counts.skippedArchived + receipt.result.counts.cancelled + receipt.result.counts.notProcessed} 篇，失败 {receipt.result.counts.failed} 篇
         </ActionStatus>
         <p className="mt-2 text-muted">全文、解析与索引进度见文献库。</p>
-        <ul className="mt-2 space-y-2">{receipt.result.items.map(item => <li key={item.entryKey} className="text-muted">
-          {item.inputPositions.map(index => receipt.titles[index]).join('、')}：{DISPOSITION[item.disposition]}{item.errorCode === null ? '' : `（${item.errorCode}）`}
+        <ul className="mt-2 space-y-2">{receipt.result.items.map(item => <li key={item.entryKey} className="flex min-w-0 flex-wrap items-center gap-2 text-muted">
+          <span>{item.inputPositions.map(index => receipt.titles[index]).join('、')}：</span>
+          <StatusBadge tone={DISPOSITION_TONE[item.disposition]} label={DISPOSITION[item.disposition]} />
+          {item.errorCode === null ? null : <span>（{item.errorCode}）</span>}
         </li>)}</ul>
         <button type="button" className={`${formButtonClass} mt-3`} onClick={onOpenLibrary}>查看文献库</button>
       </section>}

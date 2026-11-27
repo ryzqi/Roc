@@ -7,6 +7,7 @@ import {buildScientificChunks, scientificChunkVersion, scientificChunkDefaults,
   type ScientificChunk, type ScientificChunkPolicy} from './scientific-chunks';
 import {normalizeEmbeddingBlob, vectorToBlob} from './embedding-vectors';
 import {researchContentHash} from './research-files';
+import {registerSearchFunctions} from './search-normalization';
 
 export const scientificEmbeddingIdentitySchema = z.object({
   configId: z.string().min(1), revision: z.number().int().positive(),
@@ -75,7 +76,9 @@ function chunkValues(generationId: string, projectId: string | null, chunk: Scie
 
 /** Immutable generations outlive the generic live knowledge index. No parse/evidence artifacts are deleted here. */
 export class ScientificIndexRepository {
-  constructor(private readonly db: Database, private readonly now: () => string = () => new Date().toISOString()) {}
+  constructor(private readonly db: Database, private readonly now: () => string = () => new Date().toISOString()) {
+    registerSearchFunctions(db);
+  }
 
   begin(input: {ir: PaperIRV2; projectId: string | null; source: ScientificIndexSnapshot['source'];
     embedding: ScientificEmbeddingIdentity | null; paperIR?: PaperIRArtifact; policy?: Partial<ScientificChunkPolicy>}): ScientificGeneration {
@@ -224,6 +227,22 @@ export class ScientificIndexRepository {
       AND c.chunk_type IN ('paragraph','algorithm','caption')
       GROUP BY c.generation_id,c.id ORDER BY score,generationId,chunkId LIMIT ?`)
       .all(JSON.stringify(terms), JSON.stringify(generationIds), limit) as Array<{generationId: string; chunkId: string; score: number}>;
+  }
+
+  normalizedLexicalHits(generationIds: readonly string[], terms: readonly string[], limit: number,
+    exclude: readonly {generationId: string; chunkId: string}[] = []): Array<{generationId: string; chunkId: string; score: number}> {
+    if (!generationIds.length || !terms.length || limit <= 0) return [];
+    return this.db.prepare(`WITH matches AS MATERIALIZED (
+      SELECT c.generation_id AS generationId,c.id AS chunkId,roc_search_terms(c.embedding_text,?) AS matchScore
+      FROM research_scientific_chunks c
+      WHERE c.generation_id IN (SELECT value FROM json_each(?)) AND c.retrieval=1
+      AND c.chunk_type IN ('paragraph','algorithm','caption')
+      AND NOT EXISTS (SELECT 1 FROM json_each(?) e
+        WHERE json_extract(e.value,'$.generationId')=c.generation_id AND json_extract(e.value,'$.chunkId')=c.id))
+      SELECT generationId,chunkId,-matchScore AS score FROM matches WHERE matchScore>0
+      ORDER BY score,generationId,chunkId LIMIT ?`)
+      .all(JSON.stringify(terms),JSON.stringify(generationIds),JSON.stringify(exclude),limit) as
+      Array<{generationId: string; chunkId: string; score: number}>;
   }
 
   chunks(id: string, projectId: string | null): ScientificChunk[] {

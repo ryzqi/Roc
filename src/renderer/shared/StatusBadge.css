@@ -1,0 +1,105 @@
+.status-badge {
+  --status-badge-ink: var(--ink-muted);
+  --status-badge-surface: var(--surface-raised);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  block-size: 20px;
+  padding-inline: var(--space-2);
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--r-chip);
+  background: var(--status-badge-surface);
+  color: var(--status-badge-ink);
+  font-family: var(--font-sans);
+  font-size: var(--font-meta-size);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.status-badge[data-tone='processing'] {
+  --status-badge-ink: var(--accent-ink);
+  --status-badge-surface: var(--accent-soft);
+}
+
+.status-badge[data-tone='ready']:not([data-progress]),
+.status-badge[data-tone='ready'][data-progress='3'] {
+  --status-badge-ink: var(--status-success-ink);
+  --status-badge-surface: color-mix(in srgb, var(--status-success) 12%, transparent);
+}
+
+.status-badge[data-tone='warning'] {
+  --status-badge-ink: var(--status-warning-ink);
+  --status-badge-surface: color-mix(in srgb, var(--status-warning) 12%, transparent);
+}
+
+.status-badge[data-tone='danger'] {
+  --status-badge-ink: var(--status-danger-ink);
+  --status-badge-surface: color-mix(in srgb, var(--status-danger) 12%, transparent);
+}
+
+.status-badge__mark {
+  display: inline-flex;
+  flex: 0 0 12px;
+  align-items: center;
+  justify-content: center;
+  inline-size: 12px;
+  block-size: 12px;
+}
+
+.status-badge__dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge__progress {
+  display: block;
+  inline-size: 12px;
+  block-size: 12px;
+}
+
+.status-badge__segment {
+  fill: var(--border-strong);
+}
+
+.status-badge__segment[data-state='completed'],
+.status-badge__segment[data-state='current'] {
+  fill: currentColor;
+}
+
+.status-badge[data-tone='processing'] .status-badge__segment[data-state='completed'] {
+  opacity: 0.55;
+}
+
+.status-badge__label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge[data-compact='true'] {
+  flex: 0 0 20px;
+  inline-size: 20px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  justify-content: center;
+}
+
+.status-badge__hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

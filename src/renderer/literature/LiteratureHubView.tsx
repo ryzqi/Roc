@@ -328,7 +328,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           data-testid="literature-library-browse" data-mode={readerMode}
           className="literature-library-column min-h-0 min-w-0 shrink-0" aria-label="文献列表">
           <LibraryList onRequestImport={() => openImport('document')} onOpenItem={browsing ? inspectPaper : selectPaper}
-            onReadItem={selectPaper}/>
+            onReadItem={selectPaper} showActionError={false}/>
         </aside>
 
         <div
@@ -468,9 +468,9 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
         <p
           role="alert"
           data-testid="literature-action-error"
-          className="flex shrink-0 items-center gap-2 border-t-[0.5px] border-line px-3 py-2 text-[var(--st-bad)] text-[length:var(--font-meta-size)]"
+          className="literature-action-feedback flex items-center gap-2 border-[0.5px] border-line rounded-control bg-surface-overlay px-3 py-2 text-[var(--st-bad)] text-[length:var(--font-meta-size)]"
         >
-          <AlertCircle size={11} aria-hidden="true" />
+          <AlertCircle size={14} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate">{store.action.error}</span>
           <button
             type="button"
@@ -484,6 +484,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
 
       <ImportDialog
         key={store.projectId ?? 'library'}
+        writable={scope.writable}
         client={store.client}
         projectId={store.projectId}
         onZoteroImported={store.reload}

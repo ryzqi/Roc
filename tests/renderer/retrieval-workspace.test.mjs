@@ -27,21 +27,31 @@ before(async () => {
       return <><button data-testid="outside-retrieval" style={{position:'fixed',top:0,right:0}}>Other workspace</button>
         <ViewActivity active={active}><div hidden={!active} style={{height:'100%'}}>{children}</div></ViewActivity></>;
     }
-    window.mount=()=>{
+    window.mount=(options={})=>{
       window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[],questions:[]};
       window.emptyResults=false; window.scientificResults=false;
       window.failSearch=false;
       window.holdAssistant=false;
+      window.deferSearch=false; window.pendingSearch={}; window.searchOutcomes={};
+      window.releaseSearch=(id,outcome={})=>{
+        window.searchOutcomes[id]=outcome;
+        const release=window.pendingSearch[id];delete window.pendingSearch[id];release?.();
+      };
       const status={phase:'idle',generation:2,workspacePath:'/tmp/synthetic-retrieval',error:null,lastScanAt:null,
         counts:{total:2,ready:2,queued:0,running:0,failed:0},
         settings:{projectId:'p1',revision:7,kinds:['markdown'],include:['**/*'],exclude:[],watch:true,paused:false,embeddingConfigId:null}};
       const client={api:{research:{
-        getIndexStatus:async()=>({ok:true,data:status}),
+        getIndexStatus:async input=>({ok:true,data:{...status,settings:{...status.settings,projectId:input.projectId}}}),
         listIndexedFiles:async()=>{window.calls.files++;return {ok:true,data:[]};},
         listIndexJobs:async()=>{window.calls.jobs++;return {ok:true,data:[]};},
         knowledgeJobs:async()=>{window.calls.sourceJobs++;return {ok:true,data:[]};},
         controlIndex:async input=>{window.calls.controls.push(input);return {ok:true,data:status};},
-        queryScientificKnowledge:async input=>{window.calls.search.push(input);if(window.failSearch)return {ok:false,error:{message:'Synthetic retrieval failure'}};return {ok:true,data:{version:"roc-scientific-query/1",query:input.query,projectId:"p1",rounds:[],hits:window.scientificResults?[{id:'scientific-hit',documentId:'original-document',paperId:'original-paper',objectId:'original-equation',
+        queryScientificKnowledge:async input=>{
+          const id=window.calls.search.length,outcomes=window.searchOutcomes;
+          window.calls.search.push(input);
+          if(window.deferSearch)await new Promise(resolve=>{window.pendingSearch[id]=resolve;});
+          if(outcomes[id]?.fail||window.failSearch)return {ok:false,error:{message:'Synthetic retrieval failure'}};
+          return {ok:true,data:{version:"roc-scientific-query/1",query:input.query,projectId:input.projectId,rounds:[],hits:window.scientificResults?[{id:'scientific-hit',documentId:'original-document',paperId:'original-paper',objectId:'original-equation',
               title:'Original equation',content:'x = y',sourceLocator:{rawLocator:'page:3',parseId:'original-parse',knowledgeDocumentId:'document:original-parse'},
               signals:[{method:'exact',rank:1}],score:0.03}]:[],sourceRefs:[],degradation:[],elapsedMs:1,stopReason:"complete",retrievalReceiptId:"fixture",searchSnapshotId:"fixture",intent:[],legacy:researchKnowledgeSearchResultSchema.parse({
           query:input.query,hits:window.emptyResults?[]:[
@@ -56,7 +66,7 @@ before(async () => {
           ],keywordCount:2,vectorCount:1,embeddingModel:null,generatedAt:'2026-11-20T12:00:00.000Z',
           ranking:{schemaVersion:3,ranker:'rrf-v1-k60',candidateLimit:80,route:{intent:'general',documentId:null,diversify:false},
             reranker:{status:'not_requested',model:null,configHash:null,elapsedMs:0},degradation:null,inputHash:'0'.repeat(64),
-            projectId:'p1',limit:20,embedding:null,coverage:{keyword:'results',vector:'not_searched'},candidates:[]}
+            projectId:input.projectId,limit:20,embedding:null,coverage:{keyword:'results',vector:'not_searched'},candidates:[]}
         })}};}
       }}};
       const literature={client,projectId:'p1',status:'ready',items:[],assistant:{pending:false,error:null,threadId:null},action:{error:null,pending:false},
@@ -65,8 +75,15 @@ before(async () => {
         captureChunkEvidence:async id=>{window.calls.evidence.push(id);return true;},
         saveKnowledgeNote:async input=>{window.calls.notes.push(input);return true;}};
       const scope={client,projectId:'p1',writable:true,workspacePath:'/tmp/synthetic-retrieval',openSettings:()=>{}};
-      flushSync(()=>root.render(<Retained key={++session}><WorkspaceScopeProvider value={scope}><RagStudio literature={literature}
-        openInFilesView={path=>window.calls.opened.push({path})} onOpenInReader={target=>window.calls.opened.push(target)}/></WorkspaceScopeProvider></Retained>));
+      session++;
+      const render=projectId=>{
+        const content=<Retained key={session}><WorkspaceScopeProvider value={{...scope,projectId}}><RagStudio literature={{...literature,projectId}}
+          openInFilesView={path=>window.calls.opened.push({path})} onOpenInReader={target=>window.calls.opened.push(target)}/></WorkspaceScopeProvider></Retained>;
+        flushSync(()=>root.render(options.strict?<React.StrictMode>{content}</React.StrictMode>:content));
+      };
+      window.switchRetrievalProject=render;
+      window.unmountRetrieval=()=>flushSync(()=>root.render(null));
+      render('p1');
     };
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedText=text;}}});
     window.mount();
@@ -270,4 +287,170 @@ test('scientific objects retain reader identity and never call legacy chunk capt
   assert.deepEqual(await page.evaluate(()=>window.calls.opened[0]),{parseId:'original-parse',libraryItemId:null,locator:'page:3',text:'x = y'});
   assert.deepEqual(await page.evaluate(()=>window.calls.evidence),[]);
   assert.deepEqual(errors,[]);
+});
+
+test('typing debounces into one automatic retrieval without Enter or assistant handoff', async () => {
+  await page.evaluate(() => window.mount());
+  await page.setViewportSize({width:1100,height:760});
+  const input = page.getByTestId('rag-query');
+  await input.fill('first partial');
+  await page.waitForTimeout(90);
+  await input.fill('second partial');
+  await page.waitForTimeout(90);
+  await input.fill('final automatic query');
+  await page.waitForTimeout(120);
+  assert.equal(await page.evaluate(() => window.calls.search.length), 0);
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await expect(page.getByTestId('rag-results')).toContainText('final automatic query');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.calls.search.length), 1);
+});
+
+test('slow retrieval retains only the latest queued query and suppresses stale results and failures', async () => {
+  await page.evaluate(() => {window.mount();window.deferSearch=true;});
+  const input = page.getByTestId('rag-query');
+  await input.fill('slow A');
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await input.fill('obsolete B');
+  await page.waitForTimeout(300);
+  await input.fill('latest C');
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.calls.search.length), 1);
+  await page.evaluate(() => window.releaseSearch(0,{fail:true}));
+  await page.waitForFunction(() => window.calls.search.length === 2);
+  assert.deepEqual(await page.evaluate(() => window.calls.search.map(call => call.query)), ['slow A','latest C']);
+  await expect(page.getByTestId('rag-search-error')).toHaveCount(0);
+  await expect(page.getByTestId('rag-results')).not.toContainText('slow A');
+  await page.evaluate(() => window.releaseSearch(1));
+  await expect(page.getByTestId('rag-results')).toContainText('latest C');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+});
+
+test('editing a pending explicit question keeps automatic evidence independent from assistant handoff', async () => {
+  await page.evaluate(() => {window.mount();window.deferSearch=true;});
+  const input = page.getByTestId('rag-query');
+  await input.fill('old explicit question');
+  await input.press('Enter');
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await input.fill('new automatic evidence');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.releaseSearch(0));
+  await page.waitForFunction(() => window.calls.search.length === 2);
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await page.evaluate(() => window.releaseSearch(1));
+  await expect(page.getByTestId('rag-results')).toContainText('new automatic evidence');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+});
+
+test('clearing invalidates late evidence and retyping the same completed query retrieves a fresh result', async () => {
+  await page.evaluate(() => window.mount());
+  const input = page.getByTestId('rag-query');
+  await input.fill('same completed query');
+  await expect(page.getByTestId('rag-results')).toContainText('same completed query');
+  await input.fill('');
+  await expect(page.getByTestId('rag-hit-paper-hit')).toHaveCount(0);
+  await input.fill('same completed query');
+  await page.waitForFunction(() => window.calls.search.length === 2);
+  await expect(page.getByTestId('rag-results')).toContainText('same completed query');
+  await page.evaluate(() => {window.deferSearch=true;});
+  await input.fill('clear pending query');
+  await page.waitForFunction(() => window.calls.search.length === 3);
+  await input.fill('');
+  await page.evaluate(() => window.releaseSearch(2));
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('rag-hit-paper-hit')).toHaveCount(0);
+  await expect(page.getByTestId('rag-search-error')).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+});
+
+test('composition blocks auto retrieval and companion Enter, then searches the committed value once', async () => {
+  await page.evaluate(() => window.mount());
+  const input = page.getByTestId('rag-query');
+  await input.dispatchEvent('compositionstart', {data:''});
+  await input.fill('注意力');
+  await page.waitForTimeout(320);
+  assert.equal(await page.evaluate(() => window.calls.search.length), 0);
+  await input.dispatchEvent('keydown', {key:'Enter',code:'Enter',keyCode:229,isComposing:true,bubbles:true,cancelable:true});
+  await input.dispatchEvent('compositionend', {data:'注意力'});
+  await input.press('Enter');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await expect(page.getByTestId('rag-results')).toContainText('注意力');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await page.evaluate(() => {window.deferSearch=true;});
+  await input.fill('question before composition');
+  await input.press('Enter');
+  await page.waitForFunction(() => window.calls.search.length === 2);
+  await input.dispatchEvent('compositionstart', {data:''});
+  await input.fill('组合中的新查询');
+  await page.waitForTimeout(320);
+  await page.evaluate(() => window.releaseSearch(1,{fail:true}));
+  await expect(page.getByTestId('rag-search-error')).toHaveCount(0);
+  await expect(page.getByTestId('rag-results')).toContainText('注意力');
+  assert.equal(await page.evaluate(() => window.calls.search.length), 2);
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await input.dispatchEvent('compositionend', {data:'组合中的新查询'});
+  await input.press('Enter');
+  await page.waitForFunction(() => window.calls.search.length === 3);
+  await page.evaluate(() => window.releaseSearch(2));
+  await expect(page.getByTestId('rag-results')).toContainText('组合中的新查询');
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+});
+
+test('hidden and management views invalidate pending Ask and late replies, then resume the unfinished query', async () => {
+  for (const mode of ['hidden','management']) {
+    await page.evaluate(() => {window.mount();window.deferSearch=true;});
+    await page.getByTestId('rag-query').fill('pending explicit question');
+    await page.getByTestId('rag-query').press('Enter');
+    await page.waitForFunction(() => window.calls.search.length === 1);
+    if (mode === 'hidden') await page.evaluate(() => window.setRetrievalActive(false));
+    else await page.getByTestId('rag-index-toggle').click();
+    await page.evaluate(() => window.releaseSearch(0));
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.calls.questions.length), 0, mode);
+    assert.equal(await page.evaluate(() => window.calls.search.length), 1, mode);
+    if (mode === 'hidden') await page.evaluate(() => window.setRetrievalActive(true));
+    else await page.getByRole('button',{name:'返回检索'}).click();
+    await expect(page.getByTestId('rag-hit-paper-hit')).toHaveCount(0);
+    await page.waitForFunction(() => window.calls.search.length === 2);
+    await page.evaluate(() => window.releaseSearch(1));
+    await expect(page.getByTestId('rag-results')).toContainText('pending explicit question');
+    assert.equal(await page.evaluate(() => window.calls.questions.length), 0, mode);
+  }
+});
+
+test('project changes and unmount discard pending assistant receipts and late search results', async () => {
+  await page.evaluate(() => {window.mount();window.deferSearch=true;});
+  await page.getByTestId('rag-query').fill('project one question');
+  await page.getByTestId('rag-query').press('Enter');
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await page.evaluate(() => {window.switchRetrievalProject('p2');window.releaseSearch(0);});
+  await expect(page.getByTestId('rag-query')).toHaveValue('');
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('rag-hit-paper-hit')).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await page.getByTestId('rag-query').fill('project two question');
+  await page.getByTestId('rag-query').press('Enter');
+  await page.waitForFunction(() => window.calls.search.length === 2);
+  assert.equal(await page.evaluate(() => window.calls.search[1].projectId), 'p2');
+  await page.evaluate(() => {window.unmountRetrieval();window.releaseSearch(1);});
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.calls.questions.length), 0);
+  await expect(page.getByTestId('rag-results')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('StrictMode cleanup leaves one automatic search and explicit Ask coalesces with its current request', async () => {
+  await page.evaluate(() => {window.mount({strict:true});window.deferSearch=true;});
+  await page.getByTestId('rag-query').fill('strict query');
+  await page.waitForFunction(() => window.calls.search.length === 1);
+  await page.getByTestId('rag-query').press('Enter');
+  assert.equal(await page.evaluate(() => window.calls.search.length), 1);
+  await page.evaluate(() => window.releaseSearch(0));
+  await page.waitForFunction(() => window.calls.questions.length === 1);
+  await expect(page.getByTestId('rag-results')).toContainText('strict query');
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.calls.search.length), 1);
+  assert.deepEqual(errors, []);
 });

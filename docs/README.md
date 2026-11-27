@@ -8,6 +8,7 @@
 | --- | --- |
 | [任务导航与组件设计契约](design-system.md) | 四个目的地及子视图、对象打开、状态与视觉约束、官方设计参考 |
 | [UI 重构验证](ui-refactor-validation.md) | 阶段工程证据、验收缺口与回滚范围 |
+| [文献库界面优化验证](ui-library-refinement-2026-11-27.md) | 固定列表、自动导入、可撤销项目移除与状态动效的分阶段证据 |
 | [UX 与动效合同](ux-motion/README.md) | 全界面状态清单、动效生命周期、阶段交付和当前生产采样 |
 | [科研工作台](research-workbench.md) | 壳层、路由、助手输入与停止确认、文稿编辑和异步表单 |
 | [终端会话](terminal-sessions.md) | PTY 所有权、显示分离、输出回放与窗口清理 |

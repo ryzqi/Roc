@@ -1,0 +1,82 @@
+.context-menu-surface {
+  padding: var(--space-1);
+}
+
+.context-menu-items {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: min(220px, var(--anchored-available-width));
+}
+
+.context-menu-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink-primary);
+  font-size: var(--font-ui-size);
+  text-align: start;
+  cursor: pointer;
+  transition: color var(--duration-micro) var(--ease-standard),
+    background-color var(--duration-micro) var(--ease-standard);
+}
+
+.context-menu-item:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--overlay-hover);
+}
+
+.context-menu-item:not(:disabled):active {
+  background: var(--overlay-active);
+}
+
+.context-menu-item:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.context-menu-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-item-icon svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.context-menu-item-label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.context-menu-item-shortcut {
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: var(--font-meta-size);
+  white-space: nowrap;
+}
+
+.context-menu-item[data-danger='true'] {
+  color: var(--ink-muted);
+}
+
+.context-menu-item[data-danger='true']:not(:disabled):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
+  color: var(--status-danger-ink);
+}
+
+.context-menu-item[data-danger='true']:not(:disabled):active {
+  background: color-mix(in srgb, var(--status-danger) 12%, transparent);
+}
+
+.context-menu-separator {
+  block-size: .5px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border-default);
+}

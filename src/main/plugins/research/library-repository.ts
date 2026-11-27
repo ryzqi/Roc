@@ -16,6 +16,7 @@ import {literatureReadIdentifiersSchema, literatureProviderIdentifierRecordSchem
 import type { ResearchRepository } from './repository';
 import {literatureReadReviewsSchema, literatureReviewRecordSchema, type LiteratureReviewRecord,
   type literatureReviewRecordsResultSchema} from '../../../shared/schemas/literature-review';
+import {registerSearchFunctions} from './search-normalization';
 
 export type LibraryItem = z.infer<typeof researchLibraryItemSchema>;
 export type BibliographyEntry = z.infer<typeof researchBibliographyEntrySchema>;
@@ -39,7 +40,9 @@ function readJsonColumn(value: string): JsonColumn {
 export class ResearchLibraryRepository {
   onChanged?: (items: LibraryItem[], changeKind: 'import' | 'link' | 'archive' | 'citation_key') => void;
 
-  constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
+  constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {
+    registerSearchFunctions(db);
+  }
 
   findByIdentity(identity: string, aliases: readonly string[] = []): LibraryItem | null {
     const keys = [...new Set([identity, ...aliases].flatMap(literatureIdentityAliases))];
@@ -109,9 +112,11 @@ export class ResearchLibraryRepository {
     // 里的键，然后想知道库里是哪一篇。只看 metadata_json 时这类搜索永远零命中。
     return (this.db.prepare(`SELECT l.id FROM research_library l WHERE (? = 1 OR archived = 0)
       AND (? IS NULL OR EXISTS (SELECT 1 FROM research_library_projects p WHERE p.item_id = l.id AND p.project_id = ?))
-      AND (metadata_json LIKE ? ESCAPE '\\' OR json_extract(bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\')
+      AND (metadata_json LIKE ? ESCAPE '\\' OR json_extract(bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\'
+        OR roc_search_match(metadata_json, ?) > 0 OR roc_search_match(json_extract(bibliography_json, '$.citationKey'), ?) > 0)
       ORDER BY updated_at DESC, id LIMIT ?`)
-      .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
+      .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query,
+        request.query.trim(), request.query.trim(), request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
   /** Each page and its total share one read transaction; subsequent pages see live changes. */
@@ -120,8 +125,10 @@ export class ResearchLibraryRepository {
     const query = `%${request.query.trim().replace(/[\\%_]/gu, '\\$&')}%`;
     const filter = `(? = 1 OR l.archived = 0)
       AND (? IS NULL OR EXISTS (SELECT 1 FROM research_library_projects p WHERE p.item_id = l.id AND p.project_id = ?))
-      AND (l.metadata_json LIKE ? ESCAPE '\\' OR json_extract(l.bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\')`;
-    const args = [request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query];
+      AND (l.metadata_json LIKE ? ESCAPE '\\' OR json_extract(l.bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\'
+        OR roc_search_match(l.metadata_json, ?) > 0 OR roc_search_match(json_extract(l.bibliography_json, '$.citationKey'), ?) > 0)`;
+    const args = [request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query,
+      request.query.trim(), request.query.trim()];
     return this.db.transaction(() => {
       const total = this.db.prepare(`SELECT COUNT(*) FROM research_library l WHERE ${filter}`).pluck().get(...args) as number;
       const rows = this.db.prepare(`SELECT l.id,l.updated_at FROM research_library l WHERE ${filter}

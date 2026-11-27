@@ -17,7 +17,7 @@ import {acquisitionPageProgress, acquisitionStageLabels, acquisitionStatusLabels
 type Props = {
   client: RocClient; projectId: string; writable: boolean;
   pickFile: () => Promise<string | null>;
-  addPdfToItem: (input: {sourcePath: string; libraryItemId: string}) => Promise<LiteratureImportOutcome>;
+  addPdfToItem: (input: {sourcePath: string; libraryItemId: string; parseAutomatically?: boolean}) => Promise<LiteratureImportOutcome>;
   onOpenPdf: (relativePath: string) => void;
   onOpenItem: (libraryItemId: string) => void;
   onOpenKnowledge?: (target: 'index' | 'wiki') => void;
@@ -74,7 +74,7 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
         const sourcePath = await pickFile();
         if (sourcePath === null || !mounted.current || !writableRef.current) return {ok: true as const, data: null};
         if (!/\.pdf$/i.test(sourcePath)) return {ok: false as const, error: {message: '请选择 PDF 文件。'}};
-        const imported = await addPdfToItem({sourcePath, libraryItemId: job.libraryItemId});
+        const imported = await addPdfToItem({sourcePath, libraryItemId: job.libraryItemId, parseAutomatically: false});
         if (!imported.ok) return {ok: false as const, error: {message: imported.message}};
         if (!mounted.current || !writableRef.current) return {ok: true as const, data: null};
         onDocumentsChanged();

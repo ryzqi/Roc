@@ -25,7 +25,6 @@ import {
   getDocumentContent,
   importBibliographyFile,
   importDocument,
-  importLibraryDoi,
   importLibraryRecord,
   linkLibraryItem,
   listDocuments,
@@ -35,10 +34,11 @@ import {
   upsertKnowledgeDocument,
   writeWorkspaceText
 } from './library-store';
-import { buildLiteratureAssistantPrompt, libraryItemTitle } from './format';
+import { buildLiteratureAssistantPrompt, documentImportFallback, libraryItemTitle } from './format';
 import type { ImportTabRequest } from './hub-route';
 import {requestReadingChange} from './reading-interactions';
 import {useLibraryPages} from './use-library-pages';
+import {useLibraryDocumentStatuses, type LibraryDocumentStatus, type LibraryDocumentStatusSource} from './use-library-document-statuses';
 
 /**
  * The one literature store, created once in `AppShell` and shared by the sidebar's
@@ -68,7 +68,7 @@ const LIBRARY_QUERY_DEBOUNCE_MS = 250;
 const PARSE_POLL_INTERVAL_MS = 1_200;
 
 export type LiteratureImportOutcome =
-  | { ok: true; createdCount: number; duplicateCount: number; documentId?: string }
+  | { ok: true; createdCount: number; duplicateCount: number; documentId?: string; libraryItemId?: string }
   | { ok: false; message: string };
 
 export type LiteratureActionState = {
@@ -94,12 +94,14 @@ export type LiteratureAssistantState = {
 export type LiteratureStore = {
   client: RocClient;
   projectId: string | null;
+  writable: boolean;
   status: AsyncStatus;
   error: string | null;
   items: ResearchLibraryItem[];
   total: number | null;
   hasMore: boolean;
   loadingMore: boolean;
+  refreshing: boolean;
   loadMoreError: string | null;
   loadMore: () => void;
   query: string;
@@ -126,12 +128,20 @@ export type LiteratureStore = {
   documentsStatus: AsyncStatus;
   documentsError: string | null;
   reloadDocuments: () => void;
+  documentStatuses: ReadonlyMap<string, LibraryDocumentStatus>;
+  documentStatusSource: LibraryDocumentStatusSource;
+  documentStatusesStatus: AsyncStatus;
+  documentStatusesError: string | null;
+  reloadDocumentStatuses: () => void;
+  parsingDocumentIds: ReadonlySet<string>;
   addPdfToNewItem: (input: {
     sourcePath: string;
     title: string;
     citationKey: string;
+    metadataMode?: 'automatic' | 'provided';
   }) => Promise<LiteratureImportOutcome>;
-  addPdfToItem: (input: { sourcePath: string; libraryItemId: string }) => Promise<LiteratureImportOutcome>;
+  addDroppedPdf: (file: File) => Promise<LiteratureImportOutcome>;
+  addPdfToItem: (input: { sourcePath: string; libraryItemId: string; parseAutomatically?: boolean }) => Promise<LiteratureImportOutcome>;
   startParse: (documentId: string, tier?: ResearchParseTier | null) => Promise<boolean>;
   /**
    * 批量重解析（提案 §8.5）：用户换了解析模型/档位后，显式把待重解析的文档一次性重跑。
@@ -189,6 +199,7 @@ export type LiteratureStore = {
   askAssistant: (prompt: string) => Promise<void>;
   /** Starts a real `chat.startRun` for the selected paper. */
   askAssistantAboutSelected: () => Promise<void>;
+  askAssistantAboutItem: (item: ResearchLibraryItem) => Promise<void>;
   /** Called by the shell once it has adopted `assistant.threadId`. */
   adoptAssistantThread: () => void;
   /**
@@ -221,7 +232,7 @@ export type LiteratureStore = {
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
 
-export function useLiteratureStore(client: RocClient, projectId: string | null): LiteratureStore {
+export function useLiteratureStore(client: RocClient, projectId: string | null, writable = true): LiteratureStore {
   const [query, setQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const debouncedQuery = useDebouncedValue(query, LIBRARY_QUERY_DEBOUNCE_MS);
@@ -230,8 +241,10 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const selectionRequest = useRef(0);
-  const scopeRef = useRef({client, projectId});
-  if (scopeRef.current.client !== client || scopeRef.current.projectId !== projectId) scopeRef.current = {client, projectId};
+  const scopeRef = useRef({client, projectId, writable});
+  if (scopeRef.current.client !== client || scopeRef.current.projectId !== projectId || scopeRef.current.writable !== writable) {
+    scopeRef.current = {client, projectId, writable};
+  }
   const scope = scopeRef.current;
   const mounted = useRef(true);
   useEffect(() => {
@@ -239,7 +252,11 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     return () => {mounted.current = false; selectionRequest.current++;};
   }, []);
   const [pending, setPending] = useState(false);
-  const [parseInFlight, setParseInFlight] = useState<string | null>(null);
+  const actionCounts = useRef(new Map<typeof scope, number>());
+  const [parseState, setParseState] = useState<{scope: typeof scope; ids: ReadonlySet<string>}>({scope, ids: new Set()});
+  const parseIds = parseState.scope === scope ? parseState.ids : new Set<string>();
+  const parseRequests = useRef(new Map<string, {scope: typeof scope; promise: Promise<boolean>}>());
+  const doiRequests = useRef(new Map<string, string>());
   const [importRequest, setImportRequest] = useState<{ id: number; tab: ImportTabRequest; pending: boolean }>({ id: 0, tab: 'document', pending: false });
   const consumeImportRequest = useCallback((id: number): void => {
     setImportRequest(current => current.id === id && current.pending ? {...current, pending: false} : current);
@@ -248,9 +265,16 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const [assistantPending, setAssistantPending] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
+  const assistantBusy = useRef<typeof scope | null>(null);
+  useEffect(() => {
+    setPending(false); setActionError(null);
+    setAssistantPending(false); setAssistantError(null); setAssistantThreadId(null);
+  }, [scope]);
 
   const list = useLibraryPages(client, projectId, debouncedQuery, includeArchived, query !== debouncedQuery);
   const items = list.items;
+  const statusIds = useMemo(() => items.map(item => item.id), [items]);
+  const documentStatuses = useLibraryDocumentStatuses(client, projectId, statusIds);
 
   const select = useCallback((id: string | null, whenReady?: (commitSelection: () => void) => void): void => {
     if (!mounted.current || scopeRef.current !== scope) return;
@@ -281,6 +305,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     () => listDocuments(client, selectedId ?? ''),
     { label: '读取文献文档' }
   );
+  const parseInFlight = documents.data?.find(document => parseIds.has(document.id))?.id ?? null;
 
   /**
    * Claims + evidence for the whole project.
@@ -315,6 +340,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
+      documentStatuses.reload();
       if (refreshTimer !== undefined) return;
       refreshTimer = setTimeout(() => { refreshTimer = undefined; reloadList(); }, 100);
     };
@@ -330,7 +356,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [client, projectId, reloadList]);
+  }, [client, projectId, reloadList, documentStatuses.reload]);
 
   /**
    * Polls while a parse is in flight.
@@ -346,11 +372,21 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    * stop the poll before it ever saw `parsing` — the 「解析中」/取消 state would be
    * unreachable exactly when it matters.
    */
-  const parsing = parseInFlight !== null || (documents.data ?? []).some(document => document.status === 'parsing');
+  const parsing = parseIds.size > 0 || (documents.data ?? []).some(document => document.status === 'parsing');
   useVisiblePolling(reloadDocuments, PARSE_POLL_INTERVAL_MS, parsing);
+  const processingStatuses = [...documentStatuses.items.values()].some(item => item.documents.some(document =>
+    document.status === 'parsing' || document.indexStatus === 'queued' || document.indexStatus === 'running'));
+  useVisiblePolling(documentStatuses.reload, PARSE_POLL_INTERVAL_MS, parsing || processingStatuses);
 
   const runAction = useCallback(
-    async <Result,>(run: () => Promise<IpcLikeResult<Result>>): Promise<Result | null> => {
+    async <Result,>(run: () => Promise<IpcLikeResult<Result>>, write = true): Promise<Result | null> => {
+      if (!mounted.current || scopeRef.current !== scope) return null;
+      if (write && !scope.writable) {
+        actionErrorRef.current = '当前项目只读，无法修改文献。';
+        setActionError(actionErrorRef.current);
+        return null;
+      }
+      actionCounts.current.set(scope, (actionCounts.current.get(scope) ?? 0) + 1);
       setPending(true);
       setActionError(null);
       // Written **before** the await: import wrappers read this ref in the same
@@ -358,6 +394,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       actionErrorRef.current = null;
       try {
         const result = await runIpcAction(run);
+        if (!mounted.current || scopeRef.current !== scope) return null;
         if (!result.ok) {
           actionErrorRef.current = result.error;
           setActionError(result.error);
@@ -365,10 +402,13 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
         }
         return result.data;
       } finally {
-        setPending(false);
+        const remaining = (actionCounts.current.get(scope) ?? 1) - 1;
+        if (remaining === 0) actionCounts.current.delete(scope);
+        else actionCounts.current.set(scope, remaining);
+        if (mounted.current && scopeRef.current === scope) setPending(remaining > 0);
       }
     },
-    []
+    [scope]
   );
 
   const toOutcome = (result: { createdCount: number; duplicateCount: number } | null): LiteratureImportOutcome =>
@@ -409,6 +449,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
 
   const linkItem = useCallback(
     async (item: ResearchLibraryItem, linked: boolean): Promise<boolean> => {
+      if (!mounted.current || scopeRef.current !== scope) return false;
       if (projectId === null) {
         setActionError('尚未进入项目，无法关联文献。');
         return false;
@@ -419,16 +460,33 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       }
       return updated !== null;
     },
-    [client, projectId, reloadList, runAction]
+    [client, projectId, reloadList, runAction, scope]
   );
 
   const importDoi = useCallback(
     async (doi: string): Promise<LiteratureImportOutcome> => {
-      const result = await runAction(() => importLibraryDoi(client, { doi, projectId }));
+      const key = JSON.stringify([projectId, doi.toLowerCase()]);
+      let requestId = doiRequests.current.get(key);
+      if (requestId === undefined) {requestId = crypto.randomUUID(); doiRequests.current.set(key, requestId);}
+      const result = await runAction(() => client.api.research.addLiterature({
+        projectId, requestId, destination: projectId === null ? 'library_only' : 'current_project',
+        ingestionPolicy: 'fulltext_auto', entries: [{kind: 'doi', doi}]
+      }));
       if (result !== null) {
         reloadList();
+        // Only an observed terminal receipt ends this intent; unknown IPC failures keep its id.
+        // A late caller sharing the old id must not release a newer intent's request.
+        if (result.status !== 'queued' && result.status !== 'running' && doiRequests.current.get(key) === requestId) {
+          doiRequests.current.delete(key);
+        }
+        const {counts} = result;
+        if (counts.failed + counts.cancelled + counts.skippedArchived + counts.notProcessed > 0) {
+          return {ok: false, message: counts.skippedArchived > 0
+            ? '文献已归档，请先恢复后再加入。' : '文献导入未完成，请重试。'};
+        }
+        return {ok: true, createdCount: counts.created + counts.linked, duplicateCount: counts.alreadyPresent};
       }
-      return toOutcome(result);
+      return {ok: false, message: actionErrorRef.current ?? 'DOI 导入失败'};
     },
     [client, projectId, reloadList, runAction]
   );
@@ -455,39 +513,6 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     [client, projectId, reloadList, runAction]
   );
 
-  const addPdfToNewItem = useCallback(
-    async (input: { sourcePath: string; title: string; citationKey: string }): Promise<LiteratureImportOutcome> => {
-      const document = await runAction(() =>
-        importDocument(client, { target: 'new-item', ...input, projectId })
-      );
-      if (document === null) {
-        return { ok: false, message: actionErrorRef.current ?? '导入 PDF 失败' };
-      }
-      reloadList();
-      return { ok: true, createdCount: 1, duplicateCount: 0 };
-    },
-    [client, projectId, reloadList, runAction]
-  );
-
-  const addPdfToItem = useCallback(
-    async (input: { sourcePath: string; libraryItemId: string }): Promise<LiteratureImportOutcome> => {
-      if (projectId === null) {
-        setActionError('尚未进入项目，无法导入 PDF。');
-        return { ok: false, message: '尚未进入项目，无法导入 PDF。' };
-      }
-      const document = await runAction(() =>
-        importDocument(client, { target: 'library-item', ...input, projectId })
-      );
-      if (document === null) {
-        return { ok: false, message: actionErrorRef.current ?? '导入 PDF 失败' };
-      }
-      reloadList();
-      reloadDocuments();
-      return { ok: true, createdCount: 1, duplicateCount: 0, documentId: document.id };
-    },
-    [client, projectId, reloadDocuments, reloadList, runAction]
-  );
-
   /**
    * Starts the parse **without** blocking the reader on it.
    *
@@ -501,31 +526,86 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    */
   const startParse = useCallback(
     async (documentId: string, tier: ResearchParseTier | null = null): Promise<boolean> => {
-      setParseInFlight(documentId);
+      if (!mounted.current || scopeRef.current !== scope || !scope.writable) return false;
+      const existing = parseRequests.current.get(documentId);
+      if (existing?.scope === scope) return existing.promise;
+      setParseState(current => ({scope, ids: new Set([...(current.scope === scope ? current.ids : []), documentId])}));
       setActionError(null);
       const settled = parseDocument(client, documentId, tier)
         .then((result) => {
+          if (!mounted.current || scopeRef.current !== scope) return false;
           if (!result.ok) {
             setActionError(result.error.message);
             return false;
           }
-          return true;
+          if (result.data.id !== documentId) {setActionError('解析返回的文档与请求不一致。'); return false;}
+          if (result.data.status === 'failed' || result.data.status === 'cancelled') {
+            setActionError(result.data.error ?? (result.data.status === 'failed' ? '全文解析失败，请重试。' : '全文解析已取消。'));
+            return false;
+          }
+          return result.data.status === 'ready' && result.data.currentParseId !== null;
         })
         .catch((error: unknown) => {
-          setActionError(error instanceof Error ? error.message : String(error));
+          if (mounted.current && scopeRef.current === scope) setActionError(error instanceof Error ? error.message : String(error));
           return false;
         })
         .finally(() => {
-          setParseInFlight((current) => (current === documentId ? null : current));
-          reloadDocuments();
+          if (parseRequests.current.get(documentId)?.promise === settled) parseRequests.current.delete(documentId);
+          if (!mounted.current || scopeRef.current !== scope) return;
+          setParseState(current => {
+            if (current.scope !== scope) return current;
+            const ids = new Set(current.ids); ids.delete(documentId);
+            return {scope, ids};
+          });
+          reloadDocuments(); reloadList(); documentStatuses.reload();
         });
+      parseRequests.current.set(documentId, {scope, promise: settled});
       // One immediate re-read so a backend that already marked the run running is
       // reflected without waiting a whole poll interval.
       reloadDocuments();
       return await settled;
     },
-    [client, reloadDocuments]
+    [client, reloadDocuments, reloadList, documentStatuses.reload, scope]
   );
+
+  const acceptDocument = useCallback((document: ResearchDocument, parseAutomatically = true): LiteratureImportOutcome => {
+    reloadList(); reloadDocuments(); documentStatuses.reload();
+    // Reimporting an already parsed source reuses its receipt. Imported/failed
+    // sources start the default backend pipeline without holding the import UI.
+    if (parseAutomatically && document.status !== 'parsing' && !(document.status === 'ready' && document.currentParseId !== null)) {
+      void startParse(document.id);
+    }
+    return {ok: true, createdCount: 1, duplicateCount: 0, documentId: document.id, libraryItemId: document.libraryItemId};
+  }, [reloadList, reloadDocuments, documentStatuses.reload, startParse]);
+
+  const addPdfToNewItem = useCallback(async (input: {
+    sourcePath: string; title: string; citationKey: string; metadataMode?: 'automatic' | 'provided';
+  }): Promise<LiteratureImportOutcome> => {
+    const document = await runAction(() => importDocument(client, {target: 'new-item', ...input, projectId}));
+    return document === null ? {ok: false, message: actionErrorRef.current ?? '导入 PDF 失败'} : acceptDocument(document);
+  }, [client, projectId, runAction, acceptDocument]);
+
+  const addPdfToItem = useCallback(async (input: {sourcePath: string; libraryItemId: string; parseAutomatically?: boolean}): Promise<LiteratureImportOutcome> => {
+    if (projectId === null) return {ok: false, message: '尚未进入项目，无法导入 PDF。'};
+    const document = await runAction(() => importDocument(client, {
+      target: 'library-item', sourcePath: input.sourcePath, libraryItemId: input.libraryItemId, projectId
+    }));
+    if (document !== null && document.libraryItemId !== input.libraryItemId) {
+      setActionError('导入返回的文献与请求不一致。');
+      return {ok: false, message: '导入返回的文献与请求不一致。'};
+    }
+    return document === null ? {ok: false, message: actionErrorRef.current ?? '导入 PDF 失败'} : acceptDocument(document, input.parseAutomatically);
+  }, [client, projectId, runAction, acceptDocument]);
+
+  const addDroppedPdf = useCallback(async (file: File): Promise<LiteratureImportOutcome> => {
+    if (!/\.pdf$/iu.test(file.name)) return {ok: false, message: '请拖入 PDF 文件。'};
+    const bridge = window.rocPdfDrop;
+    if (bridge === undefined) return {ok: false, message: '文件拖放暂不可用，请使用导入按钮选择 PDF。'};
+    const document = await runAction(() => bridge.importPdf(file, {
+      ...documentImportFallback(file.name), projectId, metadataMode: 'automatic'
+    }));
+    return document === null ? {ok: false, message: actionErrorRef.current ?? '导入 PDF 失败'} : acceptDocument(document);
+  }, [projectId, runAction, acceptDocument]);
 
   const cancelParseAction = useCallback(
     async (input: { documentId: string; parseId: string }): Promise<boolean> => {
@@ -546,9 +626,11 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    */
   const startParseMany = useCallback(
     async (input: { documentIds: string[] | null; tier: ResearchParseTier | null }) => {
+      if (!mounted.current || scopeRef.current !== scope || !scope.writable) return null;
       setActionError(null);
       try {
         const result = await parseDocuments(client, input);
+        if (!mounted.current || scopeRef.current !== scope) return null;
         if (!result.ok) {
           setActionError(result.error.message);
           return null;
@@ -558,13 +640,13 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
         }
         return { ok: result.data.documents.length, failed: result.data.failed.length };
       } catch (error: unknown) {
-        setActionError(error instanceof Error ? error.message : String(error));
+        if (mounted.current && scopeRef.current === scope) setActionError(error instanceof Error ? error.message : String(error));
         return null;
       } finally {
-        reloadDocuments();
+        if (mounted.current && scopeRef.current === scope) reloadDocuments();
       }
     },
-    [client, reloadDocuments]
+    [client, reloadDocuments, scope]
   );
 
   const loadDocumentContent = useCallback(
@@ -627,7 +709,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       item: ResearchLibraryItem,
       format: ResearchBibliographyFormat
     ): Promise<{ filename: string; content: string } | null> => {
-      const exported = await runAction(() => exportBibliography(client, { ids: [item.id], format }));
+      const exported = await runAction(() => exportBibliography(client, { ids: [item.id], format }), false);
       if (exported === null) {
         return null;
       }
@@ -656,10 +738,12 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    */
   const askAssistant = useCallback(
     async (prompt: string): Promise<void> => {
+      if (!mounted.current || scopeRef.current !== scope || !scope.writable || assistantBusy.current === scope) return;
       if (projectId === null) {
         setAssistantError('先进入一个研究项目，助手才拿得到项目工具与工作目录。');
         return;
       }
+      assistantBusy.current = scope;
       setAssistantPending(true);
       setAssistantError(null);
       try {
@@ -669,18 +753,20 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
           enabledCapabilities: { mcpServers: [], skills: [] },
           researchProjectId: projectId
         });
+        if (!mounted.current || scopeRef.current !== scope) return;
         if (!result.ok) {
           setAssistantError(result.error.message);
           return;
         }
         setAssistantThreadId(result.data.threadId);
       } catch (error) {
-        setAssistantError(error instanceof Error ? error.message : String(error));
+        if (mounted.current && scopeRef.current === scope) setAssistantError(error instanceof Error ? error.message : String(error));
       } finally {
-        setAssistantPending(false);
+        if (assistantBusy.current === scope) assistantBusy.current = null;
+        if (mounted.current && scopeRef.current === scope) setAssistantPending(false);
       }
     },
-    [client, projectId]
+    [client, projectId, scope]
   );
 
   /**
@@ -707,15 +793,26 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     );
   }, [askAssistant, documents.data, selected]);
 
+  const askAssistantAboutItem = useCallback(async (item: ResearchLibraryItem): Promise<void> => {
+    if (!mounted.current || scopeRef.current !== scope || projectId === null || !item.projectIds.includes(projectId)) return;
+    const activeDocument = item.id === selectedId ? documents.data?.[0] ?? null : null;
+    await askAssistant(buildLiteratureAssistantPrompt({
+      title: libraryItemTitle(item), authors: item.metadata.authors, year: item.metadata.publishedYear,
+      citationKey: item.bibliography.citationKey, libraryItemId: item.id, documentId: activeDocument?.id ?? null
+    }));
+  }, [askAssistant, documents.data, selectedId, projectId, scope]);
+
   return {
     client,
     projectId,
+    writable,
     status: list.status,
     error: list.error,
     items,
     total: list.total,
     hasMore: list.hasMore,
     loadingMore: list.loadingMore,
+    refreshing: list.refreshing,
     loadMoreError: list.loadMoreError,
     loadMore: list.loadMore,
     query,
@@ -741,6 +838,12 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     documentsStatus: documents.status,
     documentsError: documents.error,
     reloadDocuments,
+    documentStatuses: documentStatuses.items,
+    documentStatusSource: documentStatuses.source,
+    documentStatusesStatus: documentStatuses.status,
+    documentStatusesError: documentStatuses.error,
+    reloadDocumentStatuses: documentStatuses.reload,
+    parsingDocumentIds: parseIds,
     claims: derived.data?.claims ?? null,
     evidence,
     wikiSnapshot: derived.data,
@@ -753,6 +856,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     consumeImportRequest,
     addPdfToNewItem,
     addPdfToItem,
+    addDroppedPdf,
     startParse,
     startParseMany,
     cancelParse: cancelParseAction,
@@ -765,6 +869,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     assistant: { pending: assistantPending, error: assistantError, threadId: assistantThreadId },
     askAssistant,
     askAssistantAboutSelected,
+    askAssistantAboutItem,
     adoptAssistantThread: () => setAssistantThreadId(null)
   };
 }

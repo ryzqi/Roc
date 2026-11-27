@@ -114,7 +114,11 @@ test('old pages cannot publish after query edits, reloads or project switches', 
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
   await page.evaluate(() => {window.hold = true; window.store.loadMore();});
   await page.waitForFunction(() => window.pending.length === 1);
-  await page.evaluate(() => {window.hold = false; window.store.reload(); window.finish();});
+  await page.evaluate(() => {window.store.reload(); window.finish();});
+  await page.waitForFunction(() => window.pending.length === 1 && window.pending[0].request.cursor === null);
+  // While the fresh snapshot is held, the superseded append cannot become visible.
+  assert.equal(await page.evaluate(() => window.store.items.length), 200);
+  await page.evaluate(() => {window.hold = false; window.finish();});
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
   assert.equal(await page.evaluate(() => window.store.items.length), 200);
 

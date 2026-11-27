@@ -44,7 +44,8 @@ before(async () => {
       cancelAcquisition: input => call('cancelAcquisition',input,job(input.jobId.slice(4),{status:'cancelled'})),
       listLibraryPage: async () => ok({items:[],total:0,hasMore:false,nextCursor:null}),
       wikiSnapshot: async () => ok({sources:[]}),
-      importDocument: input => call('importDocument',input,{id:'manual-document'}),
+      importDocument: input => call('importDocument',input,{id:'manual-document',libraryItemId:input.libraryItemId,
+        status:'imported',currentParseId:null,activeParseId:null}),
       onLibraryChanged: listener => {listeners.add(listener); return ()=>listeners.delete(listener);}
     }}};
     window.clear = () => flushSync(()=>root.render(null));
@@ -499,7 +500,7 @@ test('manual PDF supplement retries the exact job with the imported document and
   await expect(page.getByRole('status').filter({hasText:'已提交后台重试'})).toHaveCount(0);
   await expect(page.getByRole('button', {name: '手动补充 PDF：Paper a', exact:true})).toBeDisabled();
   assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'addPdfToItem').input),
-    {sourcePath:'/synthetic/manual.PDF',libraryItemId:'item-a'});
+    {sourcePath:'/synthetic/manual.PDF',libraryItemId:'item-a',parseAutomatically:false});
   assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'retryAcquisition').input),
     {projectId:'project-a',destination:'current_project',jobId:'job-a',generation:'generation-a',replacementDocumentId:'manual-document'});
   await page.evaluate(() => resolveNext('retryAcquisition',{ok:true,data:job('a',{generation:'generation-new',documentId:'manual-document'})}));
@@ -518,8 +519,8 @@ test('manual PDF supplement retries the exact job with the imported document and
 test('real literature store returns the attached document ID for replacement retry', async () => {
   await page.evaluate(() => mountStore());
   await page.waitForFunction(() => literatureStore.status === 'ready');
-  const result=await page.evaluate(() => literatureStore.addPdfToItem({sourcePath:'/synthetic/manual.PDF',libraryItemId:'item-a'}));
-  assert.deepEqual(result,{ok:true,createdCount:1,duplicateCount:0,documentId:'manual-document'});
+  const result=await page.evaluate(() => literatureStore.addPdfToItem({sourcePath:'/synthetic/manual.PDF',libraryItemId:'item-a',parseAutomatically:false}));
+  assert.deepEqual(result,{ok:true,createdCount:1,duplicateCount:0,documentId:'manual-document',libraryItemId:'item-a'});
   assert.deepEqual(await page.evaluate(() => calls.find(call => call.method === 'importDocument').input),
     {target:'library-item',sourcePath:'/synthetic/manual.PDF',libraryItemId:'item-a',projectId:'project-a'});
 });

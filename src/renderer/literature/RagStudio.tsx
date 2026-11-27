@@ -19,6 +19,7 @@ import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { controlIndex, listIndexedFiles, listIndexJobs, queryScientificKnowledge } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
 import {RagEvidenceSidebar} from './RagEvidenceSidebar';
+import {useRagSearch} from './use-rag-search';
 import './rag-studio.css';
 
 const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
@@ -101,6 +102,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
+  const [composing, setComposing] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
   useEffect(() => {if (indexRequestId > 0) setIndexOpen(true);}, [indexRequestId]);
   const [expandedHits, setExpandedHits] = useState<ReadonlySet<string>>(() => new Set());
@@ -117,17 +119,10 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
   const [asking, setAsking] = useState(false);
   const [controlIntent, setControlIntent] = useState<IndexIntent | null>(null);
   const [result, setResult] = useState<(ScientificQueryResult & {displayHits: ResearchKnowledgeSearchHit[]}) | null>(null);
-  const searchAction = useAsyncAction(
-    (request: Parameters<typeof queryScientificKnowledge>[1]) => queryScientificKnowledge(client, request),
-    { label: '检索知识库' }
-  );
   const controlAction = useAsyncAction(
     (request: Parameters<typeof controlIndex>[1]) => controlIndex(client, request),
     { label: '操作索引' }
   );
-  const searching = searchAction.pending;
-  const searchError = searchAction.error;
-  const searchInFlight = useRef(false);
   const askInFlight = useRef(false);
   const controlInFlight = useRef(false);
   const mounted = useRef(true);
@@ -182,6 +177,29 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
     { label: '读取索引状态' }
   );
   const status = statusResource.data;
+  const search = useRagSearch({
+    query, projectId, rerank,
+    embeddingConfigId: status?.settings.embeddingConfigId ?? null,
+    settingsRevision, indexRevision: status?.settings.revision ?? null, indexGeneration: status?.generation ?? null,
+    enabled: viewSelected && !indexOpen && !composing,
+    load: request => queryScientificKnowledge(client, request),
+    received: data => {
+      const displayHits = scientificQueryHits(data);
+      setResult({...data, displayHits});
+      setExpandedHits(new Set());
+      setSelectedHitId(displayHits[0]?.chunkId ?? null);
+      lastOpenedHit.current = null;
+    }
+  });
+  const searching = search.pending;
+  const searchError = search.error;
+  useEffect(() => {
+    if (query.trim()) return;
+    setResult(null);
+    setExpandedHits(new Set());
+    setSelectedHitId(null);
+    lastOpenedHit.current = null;
+  }, [query]);
 
   const filesResource = useAsyncResource(
     projectId === null || !indexOpen ? null : `index-files:${projectId}:${fileQuery}`,
@@ -237,38 +255,19 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
     reloadJobs();
   };
 
-  const runSearch = async (): Promise<ScientificQueryResult | null> => {
-    const trimmed = query.trim();
-    if (searchInFlight.current || trimmed.length === 0 || projectId === null) {
-      return null;
-    }
-    searchInFlight.current = true;
+  const runSearch = async () => {
     setNote(null);
-    const result = await searchAction.run({
-      query: trimmed,
-      projectId,
-      limit: 20, candidateLimit: 100, documentIds: [], rerank,
-      // Retrieval uses the effective embedding configuration shown by this view.
-      embeddingConfigId: status?.settings.embeddingConfigId ?? null
-    });
-    searchInFlight.current = false;
-    if (!mounted.current) return null;
-    if (result.ok) {
-      setResult({...result.data, displayHits: scientificQueryHits(result.data)});
-      setExpandedHits(new Set());
-      setSelectedHitId(scientificQueryHits(result.data)[0]?.chunkId ?? null);
-      lastOpenedHit.current = null;
-    }
-    return result.ok ? result.data : null;
+    return search.run();
   };
 
   const runAsk = async (): Promise<void> => {
-    if (askInFlight.current || searchInFlight.current || literature.assistant.pending || !query.trim()) return;
+    if (askInFlight.current || composing || literature.assistant.pending || !query.trim()) return;
     askInFlight.current = true;
     setAsking(true);
     try {
-      const evidence = await runSearch();
-      if (evidence === null || !mounted.current) return;
+      const ticket = await runSearch();
+      if (ticket === null || !ticket.outcome.ok || !search.isCurrent(ticket) || !mounted.current) return;
+      const evidence = ticket.outcome.data;
       await literature.askAssistant([
         '请依据当前项目的资料回答以下问题，并在助手中给出答案。',
         `问题：${evidence.query}`,
@@ -593,17 +592,26 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader, indexRe
               <label className="rag-query-field">
                 <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
                 <span className="sr-only">向项目资料提问</span>
-                <input ref={queryRef} type="search" value={query} onChange={event => setQuery(event.target.value)}
-                  onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
+                <input ref={queryRef} type="search" value={query} onChange={event => {
+                  search.invalidate();
+                  setQuery(event.target.value);
+                }}
+                  onCompositionStart={() => {ime.onCompositionStart(); search.invalidate(); setComposing(true);}}
+                  onCompositionEnd={event => {
+                    ime.onCompositionEnd();
+                    search.invalidate();
+                    setQuery(event.currentTarget.value);
+                    setComposing(false);
+                  }}
                   onKeyDown={event => {if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault();}}
                   placeholder="输入问题、关键词或原文片段" data-testid="rag-query" />
               </label>
-              <ActionButton variant="unstyled" type="submit" aria-label="提问" disabled={!query.trim() || searching || asking || literature.assistant.pending}
+              <ActionButton variant="unstyled" type="submit" aria-label="提问" disabled={!query.trim() || composing || asking || literature.assistant.pending}
                 loading={asking || literature.assistant.pending} loadingLabel={searching ? '检索中' : '正在移交助手'}
                 data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">提问</ActionButton>
             </form>
             <div className="rag-search-options">
-              <ActionButton variant="unstyled" aria-label="检索证据" disabled={!query.trim() || searching || asking} loading={searching && !asking} loadingLabel="检索中"
+              <ActionButton variant="unstyled" aria-label="检索证据" disabled={!query.trim() || composing || searching || asking} loading={searching && !asking} loadingLabel="检索中"
                 onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button"><Search size={14} aria-hidden="true" />检索证据</ActionButton>
               <ActionStatus state={asking || literature.assistant.pending ? 'pending' : 'idle'} icon={null}
                 className="text-muted" testId="rag-ask-status">

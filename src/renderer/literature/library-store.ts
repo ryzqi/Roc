@@ -140,8 +140,9 @@ export function searchLiterature(
 // ---- documents (T5.3) -------------------------------------------------------
 
 /**
- * `target: 'new-item'` needs a title and citation key, so a PDF import always
- * collects them first; `target: 'library-item'` attaches to an existing record.
+ * `target: 'new-item'` keeps explicit title/key fallback values for compatibility.
+ * Automatic metadata mode resolves source metadata and a collision-free key in
+ * main; provided mode preserves manual values. Existing-item imports attach.
  */
 export function importDocument(
   client: RocClient,

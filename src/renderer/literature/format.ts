@@ -165,6 +165,13 @@ export function deriveCitationKey(input: { title: string; authors: readonly stri
   return candidate;
 }
 
+/** Compatibility values only; automatic import resolves metadata and key in main. */
+export function documentImportFallback(filenameOrPath: string): {title: string; citationKey: string} {
+  const filename = filenameOrPath.split(/[\\/]/u).at(-1) ?? '';
+  const title = filename.replace(/\.[^.]+$/u, '').trim().slice(0, 1000) || 'PDF';
+  return {title, citationKey: deriveCitationKey({title, authors: [], year: null}) ?? 'paper'};
+}
+
 /**
  * The prompt behind the reader's 「问助手」 action (P5/T5.4).
  *

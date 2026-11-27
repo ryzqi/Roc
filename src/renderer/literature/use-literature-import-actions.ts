@@ -81,8 +81,11 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
       entries: ids.map(candidateId => ({ kind: 'candidate' as const, searchId, candidateId })) });
     if (!response.ok) return { ok: false as const, message: response.error.message };
     reload();
-    const { counts } = response.data;
-    if (counts.failed + counts.cancelled + counts.skippedArchived + counts.notProcessed > 0) requests.current.delete(key);
+    // Only observed terminal receipts end this intent; unknown failures retain its id.
+    // A late caller sharing an old id must not release a newer intent's request.
+    if (response.data.status !== 'queued' && response.data.status !== 'running' && requests.current.get(key) === requestId) {
+      requests.current.delete(key);
+    }
     return { ok: true as const, result: response.data };
   }, [client, projectId, reload]);
 

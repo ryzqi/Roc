@@ -1,6 +1,7 @@
 import {TriangleAlert} from 'lucide-react';
 import type {LiteratureCandidate} from '../../shared/schemas/literature-import';
 import {ActionButton} from '../shared/form-ui';
+import {formatAuthorList, formatYear} from './format';
 
 const fields = {doi: 'DOI', title: '标题', authors: '作者', publishedYear: '年份',
   citationCount: '引用量', url: '来源链接', openAccessUrl: '开放获取链接'} as const;
@@ -43,8 +44,8 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
           : <p className="break-words text-ink text-[length:var(--font-body-size)]">{candidate.record.title}</p>}
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted text-[length:var(--font-meta-size)]">
           <span>{[...new Set(candidate.origins.map(origin => origin.source))].join(' / ')}</span>
-          <span>{candidate.record.publishedYear ?? '年份未知'}</span>
-          <span>{candidate.record.authors.slice(0, 2).join('；') || '作者未知'}</span>
+          <span>{formatYear(candidate.record.publishedYear)}</span>
+          <span title={formatAuthorList(candidate.record.authors, Number.MAX_SAFE_INTEGER)}>{formatAuthorList(candidate.record.authors)}</span>
           <span>{candidate.record.openAccessUrl === null ? '未提供全文链接' : '提供全文链接'}</span>
         </div>
       </div>

@@ -55,6 +55,37 @@ test('real native PDF text searches the actual FTS and sqlite-vec index without 
     assert.ok(result.candidates.filter(c=>c.chunkId).every(c=>!f.db.prepare('SELECT 1 FROM research_knowledge_chunks WHERE id=?').get(c.chunkId)));
   } finally {await f.close();}
 });
+
+test('scientific text tolerates script, phonetic and compound spellings with dense retrieval disabled and original snapshots intact', async () => {
+  const text = 'Multi‑Agent 注意力機制处理重慶绿色网络。';
+  const f = await scientificSearchFixture(api, {objects:false,embedded:false,extraParagraphs:[{heading:'3 Method',text}]});
+  try {
+    const original = f.db.prepare(`SELECT generation_id,id,content,content_hash,embedding_text,embedding_text_hash,chunk_json
+      FROM research_scientific_chunks ORDER BY generation_id,id`).all();
+    for (const query of ['MULTI-AGENT', 'multi agent', 'multiagent', '注意力机制', 'zhuyili', 'zhu yi li', 'zyl', 'chongqing', 'lǜ sè']) {
+      const result = await f.router.search(f.request(query));
+      const hit = result.hits.find(candidate => candidate.content.includes(text));
+      assert.ok(hit, query);
+      assert.equal(hit.generationId, f.generation.id, query);
+      assert.equal(hit.documentId, f.document.id, query);
+      assert.equal(hit.sourceLocator.parseId, f.ir.identity.parseId, query);
+      assert.equal(hit.sourceLocator.parseHash, f.ir.identity.parseHash, query);
+      assert.ok(hit.signals.some(signal => ['lexical','fts'].includes(signal.method)), query);
+      assert.ok(result.candidates.every(candidate => candidate.generationId === f.generation.id), query);
+      assert.deepEqual(result.channels.find(channel => channel.channel === 'text').degradation, ['dense_not_configured']);
+      await f.router.assertCurrent(result);
+    }
+    assert.equal(f.calls(), 0);
+    assert.deepEqual(f.db.prepare(`SELECT generation_id,id,content,content_hash,embedding_text,embedding_text_hash,chunk_json
+      FROM research_scientific_chunks ORDER BY generation_id,id`).all(), original);
+    assert.equal(hash(await readFile(f.source)), hash(f.bytes));
+    const workspace = join(f.root, 'tolerant-foreign');
+    await mkdir(workspace);
+    const foreign = f.repository.createProject({title:'Foreign',description:'',workspacePath:workspace,language:'en'});
+    const isolated = await f.router.search({...f.request('zhuyili'),projectId:foreign.id});
+    assert.equal(isolated.candidates.length, 0);
+  } finally {await f.close();}
+});
 test('empty DOI, exact object number, year and absent embeddings cannot expand scope',async()=>{
   const f=await scientificSearchFixture(api,{embedded:false});
   try {

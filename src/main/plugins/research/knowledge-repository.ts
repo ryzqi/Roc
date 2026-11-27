@@ -22,6 +22,7 @@ import { normalizeEmbeddingBlob } from './embedding-vectors';
 import {planKnowledgeSource, knowledgeEmbeddingInput} from './knowledge-source-plan';
 import {compareScientificRelevance} from './scientific-retrieval-fusion';
 import {knowledgeContextRequestSchema, type KnowledgeContextRequest} from '../../../shared/schemas/research-knowledge-context';
+import {registerSearchFunctions, searchTerms} from './search-normalization';
 
 export type KnowledgeEmbeddingPolicy = 'selected' | 'none';
 export type KnowledgeSourceWrite = {
@@ -82,7 +83,9 @@ export class ResearchKnowledgeRepository {
     private readonly requireProject: (id: string) => void,
     private readonly now: Clock,
     readonly processing = new ResearchProcessingObserver()
-  ) {}
+  ) {
+    registerSearchFunctions(db);
+  }
 
   saveEmbeddingConfig(request: ResearchEmbeddingConfigSaveRequest, apiKeySecretKey: string): void {
     /**
@@ -704,6 +707,30 @@ export class ResearchKnowledgeRepository {
   }
 
   private keywordSearch(query: string, projectId: string | null, limit: number, documentId: string | null = null): ResearchKnowledgeSearchHit[] {
+    const primary = this.literalKeywordSearch(query, projectId, limit, documentId);
+    if (primary.length >= limit) return primary;
+    const terms = JSON.stringify(searchTerms(query));
+    // Keep the established FTS/Han ordering ahead of relaxed candidates. Both document and chunk
+    // scope checks match the primary path, and source hydration still verifies the original bytes.
+    const extra = this.db.prepare(`WITH matches AS MATERIALIZED (
+      SELECT c.id AS chunk_id,c.document_id,c.chunk_index,
+        roc_search_terms(c.content,?) AS content_score,roc_search_terms(d.title,?) AS title_score
+      FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id
+      WHERE (? IS NULL OR c.project_id=? OR c.project_id IS NULL) AND (? IS NULL OR d.project_id=? OR d.project_id IS NULL)
+      AND (? IS NULL OR d.id=?) AND c.id NOT IN (SELECT value FROM json_each(?))
+      AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)),
+      selected AS MATERIALIZED (
+        SELECT * FROM matches WHERE content_score>0 OR title_score>0
+        ORDER BY (content_score=0),content_score DESC,title_score DESC,document_id,chunk_index LIMIT ?)
+      SELECT c.id AS chunk_id,c.document_id,d.title,c.content,c.locator,d.source_type,d.source_id
+      FROM selected JOIN research_knowledge_chunks c ON c.id=selected.chunk_id JOIN research_knowledge_documents d ON d.id=c.document_id
+      ORDER BY (selected.content_score=0),selected.content_score DESC,selected.title_score DESC,selected.document_id,selected.chunk_index`)
+      .all(terms,terms,projectId,projectId,projectId,projectId,documentId,documentId,
+        JSON.stringify(primary.map(hit => hit.chunkId)),limit-primary.length) as KnowledgeHitRow[];
+    return [...primary,...extra.map(toKnowledgeHit)];
+  }
+
+  private literalKeywordSearch(query: string, projectId: string | null, limit: number, documentId: string | null): ResearchKnowledgeSearchHit[] {
     if (/\p{Script=Han}/u.test(query)) return this.hanKeywordSearch(query,projectId,limit,documentId);
     const match = query
       .split(/\s+/u)

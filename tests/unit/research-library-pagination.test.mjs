@@ -1,5 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
+import {performance} from 'node:perf_hooks';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
@@ -78,5 +79,55 @@ test('keyset continuation does not shift when an earlier row is archived or a ne
     assert.equal(next.total, 230);
     assert.equal(next.hasMore, false);
     assert.equal(f.repository.library.listPage(request(f.project.id)).items[0].id, inserted.id);
+  } finally {await f.close();}
+});
+
+test('tolerant metadata and citation searches share complete pagination totals while preserving originals and scope', async () => {
+  const f = createResearchFixture(api);
+  try {
+    const imported = f.repository.library.import(entries(213, 'Multi‑Agent 注意力機制'), f.project.id, {flush: false, notify: false}).items;
+    f.repository.library.import(entries(2, 'Multi‑Agent 注意力機制 unrelated'), null, {flush: false, notify: false});
+    const original = f.db.prepare('SELECT id,metadata_json,bibliography_json FROM research_library ORDER BY id').all();
+    for (const query of ['MULTI-AGENT', 'multi agent', 'multiagent', '注意力机制', 'zhuyili', 'zhu yi li', 'zyl']) {
+      const first = f.repository.library.listPage({...request(f.project.id), query});
+      const second = f.repository.library.listPage({...request(f.project.id), query, cursor: first.nextCursor});
+      assert.equal(first.total, 213, query);
+      assert.equal(second.total, 213, query);
+      assert.deepEqual([...first.items, ...second.items].map(item => item.id), imported.map(item => item.id).sort(), query);
+      assert.deepEqual(f.repository.library.list({...request(f.project.id), query}), first.items, query);
+    }
+    const item = imported[0];
+    f.repository.library.setCitationKey(item.id, item.revision, 'ChongQing-Study');
+    assert.equal(f.repository.library.listPage({...request(f.project.id), query: 'chongqingstudy'}).total, 1);
+    f.repository.library.archive(imported[1].id, imported[1].revision, true);
+    assert.equal(f.repository.library.listPage({...request(f.project.id), query: '注意力机制'}).total, 212);
+    assert.equal(f.repository.library.listPage({...request(f.project.id), query: 'zhuyili', includeArchived: true}).total, 213);
+    const unchanged = f.db.prepare('SELECT id,metadata_json FROM research_library ORDER BY id').all();
+    assert.deepEqual(unchanged, original.map(({id, metadata_json}) => ({id, metadata_json})));
+  } finally {await f.close();}
+});
+
+test('1200-record read-time phonetic search has bounded local cost with exact totals and keyset continuation', async t => {
+  const f = createResearchFixture(api);
+  try {
+    const records = [...entries(1180, '无关元数据'), ...entries(20, '注意力機制 Multi‑Agent')];
+    const imported = f.repository.library.import(records, f.project.id, {flush:false,notify:false}).items;
+    const changes = () => f.db.prepare('SELECT total_changes()').pluck().get();
+    const before = changes();
+    const started = performance.now();
+    const first = f.repository.library.listPage({...request(f.project.id),query:'zhuyili',limit:7});
+    const cold = performance.now() - started;
+    const secondStarted = performance.now();
+    const second = f.repository.library.listPage({...request(f.project.id),query:'zhuyili',limit:7,cursor:first.nextCursor});
+    const warmSecond = performance.now() - secondStarted;
+    const thirdStarted = performance.now();
+    const third = f.repository.library.listPage({...request(f.project.id),query:'zhuyili',limit:7,cursor:second.nextCursor});
+    const warmThird = performance.now() - thirdStarted;
+    const elapsed = performance.now() - started;
+    assert.equal(first.total, 20); assert.equal(second.total, 20); assert.equal(third.total, 20);
+    assert.deepEqual([...first.items, ...second.items, ...third.items].map(item => item.id), imported.slice(1180).map(item => item.id).sort());
+    assert.equal(changes(), before);
+    assert.ok(elapsed < 10_000, `1200-record tolerant query took ${elapsed.toFixed(1)}ms`);
+    t.diagnostic(`1200 original library records; page/count cold=${cold.toFixed(1)}ms, warm=${warmSecond.toFixed(1)}/${warmThird.toFixed(1)}ms, total=${elapsed.toFixed(1)}ms`);
   } finally {await f.close();}
 });

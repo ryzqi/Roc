@@ -34,9 +34,9 @@ before(async () => {
     import {ViewActivity} from './src/renderer/shared/view-activity';
     import './src/renderer/styles/index.css';
     const ok=data=>({ok:true,data});
-    const item={id:'paper',revision:1,archived:false,projectIds:['fixture'],updatedAt:'2026-11-20T00:00:00.000Z',
+    const item={id:'paper',revision:1,archived:false,projectIds:['fixture'],sources:[],updatedAt:'2026-11-20T00:00:00.000Z',
       metadata:{title:'Understanding how scientific evidence supports a research claim',authors:['Fixture Author'],publishedYear:2026,citationCount:null,doi:null,url:null,openAccessUrl:null,source:'local'},
-      bibliography:{title:'Understanding scientific evidence',citationKey:'fixture2026',fields:{}}};
+      bibliography:{title:'Understanding scientific evidence',citationKey:'fixture2026',entryType:'article',fields:{}}};
     const second={...item,id:'second',metadata:{...item.metadata,title:'Second paper for navigation'}};
     const paperDocument={id:'document',libraryItemId:'paper',filename:'scientific-evidence.pdf',mediaType:'application/pdf',status:'ready',sourceHash:'source',currentParseId:'parse',activeParseId:null};
     const blocks=[{id:'heading',kind:'heading',label:'Introduction',text:'Evidence and understanding',locator:'page:1',locations:[],imageAssetId:null},
@@ -173,7 +173,20 @@ test('literature keeps full reading width, with reachable navigation at narrow a
     await page.getByTestId('literature-toggle-navigation').click();
     await expect(page.getByRole('complementary',{name:'文献列表'})).toBeVisible();
     if(width<1024) await expect(page.getByTestId('paper-reader')).toBeHidden();
-    await page.getByTestId('literature-row-second').click();
+    const nextPaper = page.getByTestId('literature-row-second');
+    await nextPaper.focus();
+    await nextPaper.hover();
+    const rowHitTarget = await nextPaper.evaluate(element=>{
+      const bounds=element.getBoundingClientRect();
+      return {height:bounds.height,
+        centerTarget:document.elementFromPoint(bounds.x+bounds.width/2,bounds.y+bounds.height/2)?.closest('button')?.dataset.testid};
+    });
+    assert.deepEqual(rowHitTarget,{height:64,centerTarget:'literature-row-second'});
+    if(process.env.ROC_LITERATURE_CAPTURE) {
+      await mkdir(process.env.ROC_LITERATURE_CAPTURE,{recursive:true});
+      await page.getByTestId('literature-hub').screenshot({path:join(process.env.ROC_LITERATURE_CAPTURE,'navigation-'+width+'.png')});
+    }
+    await page.keyboard.press('Enter');
     await expect(page.getByTestId('reader-title')).toHaveText('Second paper for navigation');
     await expect(page.getByTestId('literature-toggle-navigation')).toHaveAttribute('aria-expanded','false');
     await expect(page.getByLabel('选择当前文献')).toBeFocused();
@@ -183,6 +196,7 @@ test('literature keeps full reading width, with reachable navigation at narrow a
 });
 
 test('other tasks occupy full canvas without unrelated paper selection, in both themes',async()=>{
+  await page.evaluate(() => {window.setHubActive(true); window.setContextDrawerOpen(false); window.openObject({kind:'reader',libraryItemId:'paper'});});
   for(const theme of ['light','dark']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     for(const width of [440,820,1280]) {
@@ -263,7 +277,9 @@ test('sidebar and canvas share one visible literature list without losing local 
     await expect(localList).toBeVisible();
     await expect(importer).toHaveCount(1);
     await expect(localList.getByTestId('literature-import-open')).toBeVisible();
-    await localList.getByLabel('已加载结果排序').selectOption('title');
+    await localList.getByTestId('literature-filter-toggle').click();
+    await page.getByTestId('literature-filter-popover').getByLabel('已加载结果排序').selectOption('title');
+    await page.keyboard.press('Escape');
     await page.evaluate(()=>window.setContextDrawerOpen(true));
     await expect(page.getByTestId('fixture-context-library')).toBeVisible();
     await expect(toggle).toBeHidden();
@@ -276,8 +292,11 @@ test('sidebar and canvas share one visible literature list without losing local 
     await expect(toggle).toHaveAttribute('aria-expanded','true');
     await expect(localList).toBeVisible();
     await expect(importer).toHaveCount(1);
-    await expect(localList.getByLabel('已加载结果排序')).toHaveValue('title');
-    await localList.getByTestId('literature-row-second').click();
+    await localList.getByTestId('literature-filter-toggle').click();
+    await expect(page.getByTestId('literature-filter-popover').getByLabel('已加载结果排序')).toHaveValue('title');
+    await page.keyboard.press('Escape');
+    await localList.getByTestId('literature-row-second').focus();
+    await localList.getByTestId('literature-read-second').click();
     await expect(page.getByTestId('reader-title')).toHaveText('Second paper for navigation');
     await expect(toggle).toHaveAttribute('aria-expanded','false');
     await expect(importer).toHaveCount(1);

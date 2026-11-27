@@ -172,14 +172,17 @@ async function mount({count = 1000, width = 1280, windowWidth = 1450, theme = 'l
   await expect(page.getByTestId('literature-library-browse')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-0')).toBeVisible();
   await settleRendering();
+  assert.equal((await page.locator('.literature-toolbar').boundingBox()).height, 48);
+  assert.equal((await page.getByTestId('literature-list-toolbar').boundingBox()).height, 48);
 }
 
 async function geometry({includeFirstRow = true} = {}) {
   return page.evaluate(includeFirstRow => {
     const selectors = {
       hubToolbar: '.literature-toolbar',
-      listToolbar: '.library-list-toolbar',
+      listToolbar: '[data-testid="literature-list-toolbar"]',
       list: '[data-testid="literature-list"]',
+      listBody: '[data-testid="literature-list-body"]',
       viewport: '.library-virtual-list',
       ...(includeFirstRow ? {firstRow: '[data-testid="literature-row-paper-0"]'} : {})
     };
@@ -251,7 +254,7 @@ test('filter portals preserve list geometry and return keyboard focus after Esca
     await page.keyboard.press('Enter');
     await expect(popover).toBeVisible();
     await expect(popover).toHaveAttribute('data-state', 'open');
-    await expect(page.getByTestId('literature-archived-toggle')).toBeFocused();
+    await expect(popover.getByTestId('literature-status-filter-all')).toBeFocused();
     const portal = await popover.evaluate(element => ({
       bodyContains: document.body.contains(element),
       rootContains: document.getElementById('root').contains(element),
@@ -284,15 +287,20 @@ test('filter portals preserve list geometry and return keyboard focus after Esca
   }
 });
 
-test('non-modal filter Tab order reaches the next toolbar control and rapid toggles finish cleanly', async () => {
+test('non-modal filter Tab order traverses its controls, reaches import and rapid toggles finish cleanly', async () => {
   await mount();
   const trigger = page.getByTestId('literature-filter-toggle');
   const popover = page.getByTestId('literature-filter-popover');
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('literature-archived-toggle')).toBeFocused();
+  await expect(popover.getByTestId('literature-status-filter-all')).toBeFocused();
+  for (const testId of ['literature-sort', 'literature-archived-toggle', 'literature-multiselect', 'literature-refresh']) {
+    await page.keyboard.press('Tab');
+    await expect(popover.getByTestId(testId)).toBeFocused();
+    await expect(popover).toBeVisible();
+  }
   await page.keyboard.press('Tab');
-  await expect(page.getByTestId('literature-multiselect')).toBeFocused();
+  await expect(page.getByTestId('literature-import-open')).toBeFocused();
   await expect(popover).toBeHidden();
 
   const baseline = await geometry();
@@ -480,7 +488,7 @@ test('four-times CPU slowdown preserves geometry and zero layout shift while swi
       for (let index = 1; index <= 20; index++) {
         await page.keyboard.press('ArrowDown');
         await expect(page.getByTestId('literature-row-paper-' + index)).toBeFocused();
-        await page.keyboard.press('Enter');
+        await page.keyboard.press('Space');
         await expect(page.getByTestId('literature-inspector-title')).toContainText(
           String(index).padStart(4, '0') + ' Understanding');
         assertStableGeometry(baseline, await geometry({includeFirstRow: false}), '4x paper ' + index);

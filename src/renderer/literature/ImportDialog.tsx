@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import type { LiteratureSearchResult, LiteratureCandidate } from '../../shared/schemas/literature-import';
 import type { LiteratureImportActions } from './use-literature-import-actions';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
@@ -22,6 +22,7 @@ import {
   arxivQueryFromInput,
   buildManualRecord,
   deriveCitationKey,
+  documentImportFallback,
   documentKindLabel,
   isCitationKeyValid,
   isDocumentPathSupported,
@@ -34,6 +35,7 @@ import './import-workspace.css';
 /**
  * Four entry choices disclose six existing import paths. Drafts stay in this
  * dialog when switching methods; Zotero checkpoint edits retain their own guard.
+ * New documents resolve metadata by default; explicit overrides stay local until used.
  * Success reports metadata or document receipt, never inferred indexing progress.
  */
 export type ImportDialogProps = {
@@ -41,6 +43,8 @@ export type ImportDialogProps = {
   projectId: string | null;
   onZoteroImported: () => void;
   open: boolean;
+  /** Live project permission; changes preserve the current import draft. */
+  writable?: boolean;
   /** Which tab to show first; defaults to 文档. */
   initialTab?: ImportTabRequest;
   onClose: () => void;
@@ -57,6 +61,7 @@ export type ImportDialogProps = {
     sourcePath: string;
     title: string;
     citationKey: string;
+    metadataMode?: 'automatic' | 'provided';
   }) => Promise<LiteratureImportOutcome>;
   addDocumentToItem: (input: { sourcePath: string; libraryItemId: string }) => Promise<LiteratureImportOutcome>;
 };
@@ -109,7 +114,9 @@ function outcomeMessage(outcome: LiteratureImportOutcome, tab: ImportTabRequest)
 }
 
 export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null {
-  const { open, onClose } = props;
+  const { open, onClose, writable = true } = props;
+  const writableRef = useRef(writable);
+  writableRef.current = writable;
   const zoteroJob = useZoteroImportJob(props.client, props.projectId, props.onZoteroImported);
   const attachmentJobs = useZoteroAttachmentJobs(props.client, props.projectId, props.onZoteroImported);
   const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
@@ -149,6 +156,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   // Document tab
   const [documentPath, setDocumentPath] = useState<string | null>(null);
   const [documentTarget, setDocumentTarget] = useState<'new-item' | 'library-item'>('new-item');
+  const [documentMetadataMode, setDocumentMetadataMode] = useState<'automatic' | 'provided'>('automatic');
   const [documentTitle, setDocumentTitle] = useState('');
   const [documentKeyOverride, setDocumentKeyOverride] = useState<string | null>(null);
 
@@ -202,6 +210,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setDocumentPath(null);
     setDocumentTitle('');
     setDocumentKeyOverride(null);
+    setDocumentMetadataMode('automatic');
     setDoiInput('');
     setBibliographyPath(null);
     setManualTitle('');
@@ -239,8 +248,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   // in other tabs still need a deliberate discard when the dialog closes.
   const manualFields = [manualTitle, manualAuthors, manualYear, manualDoi, manualUrl, manualAbstract, manualKey];
   const draftSignatures: Partial<Record<ImportTabRequest, string>> = {
-    document: documentPath !== null || documentTitle.length > 0 || documentKeyOverride !== null
-      ? JSON.stringify([documentPath, documentTarget, documentTitle, documentKeyOverride]) : '',
+    document: documentPath !== null || documentTitle.length > 0 || documentKeyOverride !== null || documentMetadataMode === 'provided'
+      ? JSON.stringify([documentPath, documentTarget, documentMetadataMode, documentTitle, documentKeyOverride]) : '',
     doi: doiInput,
     bibliography: bibliographyPath === null ? '' : JSON.stringify([bibliographyPath, bibliographyFormat]),
     manual: manualFields.some(value => value.length > 0) ? JSON.stringify(manualFields) : ''
@@ -292,7 +301,12 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   }
 
   const run = async (action: () => Promise<LiteratureImportOutcome>): Promise<void> => {
-    const submittedTab = tab, signature = draftSignatures[tab];
+    if (!writableRef.current) return;
+    const submittedTab = tab;
+    // Automatic and attached imports do not consume a retained manual override.
+    const signature = tab === 'document' && (documentTarget === 'library-item' || documentMetadataMode === 'automatic')
+      ? JSON.stringify([documentPath, documentTarget, documentMetadataMode, '', null])
+      : draftSignatures[tab];
     await perform('import', action, outcome => {
       setMessage(outcomeMessage(outcome, submittedTab));
       if (outcome.ok && signature !== undefined) setSavedDrafts(current => ({ ...current, [submittedTab]: signature }));
@@ -300,13 +314,18 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   };
 
   const pick = async (assign: (path: string) => void): Promise<void> => {
-    await perform('pick', props.pickFile, path => { if (path !== null) assign(path); });
+    if (!writableRef.current) return;
+    await perform('pick', props.pickFile, path => {
+      if (path !== null && writableRef.current) assign(path);
+    });
   };
 
   const documentReady =
     documentPath !== null &&
     isDocumentPathSupported(documentPath) &&
-    (documentTarget === 'library-item' ? props.selectedItem !== null : documentTitle.trim().length > 0 && isCitationKeyValid(documentKey.trim()));
+    (documentTarget === 'library-item'
+      ? props.selectedItem !== null && props.canAttachToSelection
+      : documentMetadataMode === 'automatic' || documentTitle.trim().length > 0 && isCitationKeyValid(documentKey.trim()));
 
   const manualReady = manualTitle.trim().length > 0 && isCitationKeyValid(effectiveManualKey);
 
@@ -374,6 +393,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   type="radio"
                   name="document-target"
                   checked={documentTarget === 'new-item'}
+                  disabled={!writable}
                   onChange={() => setDocumentTarget('new-item')}
                   data-testid="literature-import-target-new"
                 />
@@ -384,7 +404,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   type="radio"
                   name="document-target"
                   checked={documentTarget === 'library-item'}
-                  disabled={props.selectedItem === null}
+                  disabled={!writable || props.selectedItem === null || !props.canAttachToSelection}
                   onChange={() => setDocumentTarget('library-item')}
                   data-testid="literature-import-target-existing"
                 />
@@ -394,6 +414,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             <div className="flex items-center gap-2">
               <ActionButton
                 onClick={() => void pick(setDocumentPath)}
+                disabled={!writable}
                 data-testid="literature-import-pick-document"
                 loading={operation === 'pick'}
                 loadingLabel="正在选择文件…"
@@ -409,62 +430,81 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               <p>支持 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件最大 512 MB。</p>
             </details>
             {documentTarget === 'new-item' ? (
-              <>
-                <label className={labelClass} htmlFor="literature-import-document-title">
-                  题名（必填）
-                </label>
-                <input
-                  id="literature-import-document-title"
-                  ref={titleRef}
-                  value={documentTitle}
-                  onChange={(event) => setDocumentTitle(event.target.value)}
-                  className={fieldClass}
-                  data-testid="literature-import-document-title"
-                />
-                <label className={labelClass} htmlFor="literature-import-document-key">
-                  引用键（必填）
-                </label>
-                <input
-                  id="literature-import-document-key"
-                  value={documentKey}
-                  onChange={(event) => setDocumentKeyOverride(event.target.value)}
-                  className={fieldClass}
-                  data-testid="literature-import-document-key"
-                />
-                {documentKeyOverride === null ? null : (
-                  <button type="button" className={`${formSecondaryButtonClass} self-start`}
-                    onClick={() => setDocumentKeyOverride(null)} data-testid="literature-import-document-key-auto">
-                    恢复自动生成
-                  </button>
-                )}
-                {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
-                  <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
-                    引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
-                  </ActionStatus>
-                ) : null}
-                {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
-                  <p className="text-muted text-[length:var(--font-micro-size)]">无法从题名生成引用键，请填写引用键。</p>
-                ) : null}
-              </>
+              <details className="literature-import-document-metadata" open={documentMetadataMode === 'provided'}>
+                <summary className={`${formSecondaryButtonClass} literature-import-document-disclosure`}
+                  aria-disabled={pending || !writable || undefined}
+                  aria-expanded={documentMetadataMode === 'provided'}
+                  aria-controls="literature-import-document-fields"
+                  onClick={event => {
+                    event.preventDefault();
+                    if (busy.current !== null || !writableRef.current) return;
+                    setDocumentMetadataMode(current => current === 'automatic' ? 'provided' : 'automatic');
+                  }}
+                  data-testid="literature-import-document-metadata-toggle">
+                  <ChevronDown size={14} aria-hidden="true"/>
+                  手动填写题名和引用键
+                </summary>
+                <div id="literature-import-document-fields" className="literature-import-document-fields"
+                  hidden={documentMetadataMode !== 'provided'}
+                  data-testid="literature-import-document-metadata-fields">
+                  <label className={labelClass} htmlFor="literature-import-document-title">
+                    题名（必填）
+                  </label>
+                  <input
+                    id="literature-import-document-title"
+                    ref={titleRef}
+                    value={documentTitle}
+                    onChange={(event) => setDocumentTitle(event.target.value)}
+                    className={fieldClass}
+                    data-testid="literature-import-document-title"
+                  />
+                  <label className={labelClass} htmlFor="literature-import-document-key">
+                    引用键（必填）
+                  </label>
+                  <input
+                    id="literature-import-document-key"
+                    value={documentKey}
+                    onChange={(event) => setDocumentKeyOverride(event.target.value)}
+                    className={fieldClass}
+                    data-testid="literature-import-document-key"
+                  />
+                  {documentKeyOverride === null ? null : (
+                    <button type="button" className={`${formSecondaryButtonClass} self-start`}
+                      onClick={() => setDocumentKeyOverride(null)} data-testid="literature-import-document-key-auto">
+                      恢复自动生成
+                    </button>
+                  )}
+                  {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
+                    <ActionStatus state="error" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
+                      引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
+                    </ActionStatus>
+                  ) : null}
+                  {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
+                    <p className="text-muted text-[length:var(--font-micro-size)]">无法从题名生成引用键，请填写引用键。</p>
+                  ) : null}
+                </div>
+              </details>
             ) : null}
             <ActionButton
               variant="primary"
-              disabled={!documentReady || pending}
+              disabled={!documentReady || pending || !writable}
               loading={operation === 'import'}
               loadingLabel="正在添加文档…"
               onClick={() => {
                 const path = documentPath;
-                if (path === null) {
+                if (path === null || !documentReady) {
                   return;
                 }
                 void run(async () => {
-                  if (documentTarget === 'library-item' && props.selectedItem !== null) {
+                  if (documentTarget === 'library-item' && props.selectedItem !== null && props.canAttachToSelection) {
                     return await props.addDocumentToItem({ sourcePath: path, libraryItemId: props.selectedItem.id });
                   }
                   return await props.addDocumentToNewItem({
                     sourcePath: path,
-                    title: documentTitle.trim(),
-                    citationKey: documentKey.trim()
+                    ...(documentMetadataMode === 'provided'
+                      ? {title: documentTitle.trim(), citationKey: documentKey.trim()}
+                      : documentImportFallback(path)),
+                    metadataMode: documentMetadataMode
                   });
                 });
               }}
@@ -496,7 +536,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             ) : null}
             <ActionButton
               variant="primary"
-              disabled={normalizedDoi === null || pending}
+              disabled={normalizedDoi === null || pending || !writable}
               loading={operation === 'import'}
               loadingLabel="正在添加文献…"
               onClick={() => {
@@ -537,6 +577,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             <div className="flex items-center gap-2">
               <ActionButton
                 onClick={() => void pick(setBibliographyPath)}
+                disabled={!writable}
                 data-testid="literature-import-pick-bibliography"
                 loading={operation === 'pick'}
                 loadingLabel="正在选择文件…"
@@ -549,7 +590,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             </div>
             <ActionButton
               variant="primary"
-              disabled={bibliographyPath === null || pending}
+              disabled={bibliographyPath === null || pending || !writable}
               loading={operation === 'import'}
               loadingLabel="正在导入引用文件…"
               onClick={() => {
@@ -656,7 +697,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             ) : null}
             <ActionButton
               variant="primary"
-              disabled={!manualReady || pending}
+              disabled={!manualReady || pending || !writable}
               loading={operation === 'import'}
               loadingLabel="正在添加文献…"
               onClick={() => {
@@ -686,8 +727,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           </div>
         ) : null}
 
-        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} attachments={attachmentJobs}
-          draftGuard={zoteroDraftGuard} /> : null}
+        {tab === 'zotero' ? <fieldset disabled={!writable} className="literature-import-readonly-fieldset">
+          <ZoteroImportPanel client={props.client} job={zoteroJob} attachments={attachmentJobs}
+            draftGuard={zoteroDraftGuard}/>
+        </fieldset> : null}
 
         {tab === 'search' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-search">
@@ -749,7 +792,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             {searchHits.length === 0 ? null : (
               <ul className="flex flex-col pe-1" aria-label="检索结果" tabIndex={0}>
                 {searchHits.map(candidate => <LiteratureCandidateReview key={candidate.candidateId}
-                  candidate={candidate} pending={pending || searchResult === null}
+                  candidate={candidate} pending={pending || searchResult === null || !writable}
                   onAdd={() => {
                     if (searchResult === null) return;
                     void run(() => props.addCandidate(searchResult.searchId, candidate.candidateId));
@@ -777,6 +820,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             {message.text}
           </ActionStatus>
         )}
+        {!writable ? <p role="note" className="text-muted text-[length:var(--font-meta-size)]"
+          data-testid="literature-import-readonly">项目已归档，恢复项目后可添加文献。</p> : null}
 
         </div>
       </fieldset>

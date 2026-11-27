@@ -16,6 +16,16 @@
 .literature-import-content textarea { min-height: 160px; }
 .literature-import-content > [data-testid^="literature-import-panel-"] { gap: 12px; }
 .literature-import-content [role="alert"] { flex-shrink: 0; }
+.literature-import-document-metadata::details-content { overflow: visible; transition: none; }
+.literature-import-document-fields:not([hidden]) { display: flex; flex-direction: column; gap: var(--space-3); margin-block-start: var(--space-3); }
+.literature-import-document-disclosure { list-style: none; cursor: pointer; }
+.literature-import-document-disclosure::-webkit-details-marker { display: none; }
+.literature-import-document-disclosure:not([aria-disabled="true"]):hover { background: var(--overlay-hover); color: var(--ink-primary); }
+.literature-import-document-disclosure:not([aria-disabled="true"]):active { background: var(--overlay-active); }
+.literature-import-document-disclosure[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.literature-import-document-disclosure > svg { flex-shrink: 0; }
+.literature-import-document-disclosure[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.literature-import-readonly-fieldset { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 @media (max-width: 600px) {
   .literature-import-navigation { padding: 12px; }
   .literature-import-content { padding: 16px; }

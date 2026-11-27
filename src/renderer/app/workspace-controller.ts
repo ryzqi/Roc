@@ -23,13 +23,14 @@ export function useWorkspaceController(client: RocClient, route: AppRoute) {
   const boundWorkspace = useBoundWorkspace(client, project);
   const gitSummary = useGitSummary(client, boundWorkspace.path, route.tool === 'git');
   // One store serves the context drawer, retained canvas and object-opening commands.
-  const literature = useLiteratureStore(client, route.projectId);
+  const projectWritable = isProjectWritable(project);
+  const literature = useLiteratureStore(client, route.projectId, route.projectId === null || projectWritable);
   const conceptRows = useMemo(() => {
     if (literature.claims === null || literature.evidence === null) return [];
     return wikiConceptRows(literature.claims, literature.evidence, literature.wikiSnapshot?.relations);
   }, [literature.claims, literature.evidence, literature.wikiSnapshot]);
   return {currentProject, projects, project, workspaceBinding, boundWorkspace, gitSummary, literature, conceptRows,
-    projectName: project?.title ?? null, projectWritable: isProjectWritable(project),
+    projectName: project?.title ?? null, projectWritable,
     inProject: route.projectId !== null, projectLoadFailed: route.projectId !== null && currentProject.status === 'error'};
 }
 

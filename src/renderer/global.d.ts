@@ -1,4 +1,5 @@
 import type { RocPreloadApi } from '../shared/ipc';
+import type { RocPdfDropApi } from '../shared/pdf-drop';
 
 /**
  * Global declarations for the renderer shell.
@@ -12,6 +13,7 @@ import type { RocPreloadApi } from '../shared/ipc';
 declare global {
   interface Window {
     roc: RocPreloadApi;
+    readonly rocPdfDrop?: RocPdfDropApi;
   }
 }
 

@@ -19,6 +19,11 @@ import {paperIrArtifactSchema, paperIrV2Version, type PaperIRMetadata} from '../
 import {buildPaperIR} from './paper-ir-builder';
 import {assertPaperIRArtifact} from './paper-ir-repository';
 import type {PreparedKnowledgeEmbeddings} from './embedding-service';
+import {betterBibtexKey} from './cite-key';
+import {literatureIdentity, literatureSourceIdentity} from './literature-identity';
+import type {DocumentImportEntry} from './document-import-metadata';
+import {readResearchDocumentStatuses} from './document-status';
+import type {ResearchDocumentStatusRequest, ResearchDocumentStatusResult} from '../../../shared/schemas/research-document-status';
 
 export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
 export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
@@ -48,16 +53,38 @@ export class ResearchDocumentRepository {
     return (this.db.prepare('SELECT id FROM research_documents WHERE library_item_id = ? ORDER BY created_at, id').all(libraryItemId) as Array<{ id: string }>).map((row) => this.get(row.id));
   }
 
+  statusMany(request: ResearchDocumentStatusRequest): ResearchDocumentStatusResult {
+    return readResearchDocumentStatuses(this.db, this.research, request);
+  }
+
   import(input: { id: string; libraryItemId: string | null; entry: { metadata: ResearchLiterature; bibliography: BibliographyEntry } | null;
+    sourceEntries?: readonly DocumentImportEntry[]; automaticCitationKey?: boolean;
     projectId: string | null; filename: string; mediaType: string; sourcePath: string; sourceHash: string; size: number }, notify: boolean): { document: ResearchDocument; created: boolean } {
     return this.db.transaction(() => {
       this.research.library.validateDestination(input.projectId);
       let libraryItemId = input.libraryItemId;
       if (libraryItemId === null) {
         if (input.entry === null) throw new Error('research_document_metadata_required');
-        libraryItemId = this.research.library.import([input.entry], input.projectId, {notify}).items[0].id;
+        let entries = [...input.sourceEntries ?? [], input.entry];
+        const primary = entries[0];
+        if (entries.some(entry => literatureIdentity(entry.metadata) !== literatureIdentity(primary.metadata))) {
+          throw new Error('research_document_metadata_identity_mismatch');
+        }
+        if (input.automaticCitationKey === true) {
+          const existing = this.research.library.findByIdentity(literatureIdentity(primary.metadata),
+            entries.map(entry => literatureSourceIdentity(entry.metadata)));
+          if (existing?.archived) throw new Error('research_library_item_archived');
+          // All asynchronous metadata preparation is finished; allocation sees the current database keys.
+          const citationKey = existing?.bibliography.citationKey ?? betterBibtexKey(primary.metadata, this.research.library.usedCitationKeys());
+          entries = entries.map(entry => ({...entry, bibliography: {...entry.bibliography, citationKey}}));
+        }
+        const imported = this.research.library.import(entries, input.projectId, {notify, skipArchived: input.automaticCitationKey === true});
+        if (imported.items.length === 0 || imported.items.some(item => item.id !== imported.items[0].id)) {
+          throw new Error('research_document_metadata_identity_mismatch');
+        }
+        libraryItemId = imported.items[0].id;
       } else {
-        if (input.entry !== null) throw new Error('research_document_target_invalid');
+        if (input.entry !== null || input.sourceEntries?.length) throw new Error('research_document_target_invalid');
         if (this.research.library.get(libraryItemId).archived) throw new Error('research_library_item_archived');
         if (input.projectId !== null) this.research.library.link(libraryItemId, input.projectId, true, {notify});
       }

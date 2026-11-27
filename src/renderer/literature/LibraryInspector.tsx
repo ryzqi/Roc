@@ -4,8 +4,11 @@ import {useCopyFeedback} from '../shared/hooks/use-copy-feedback';
 import {ActionButton} from '../shared/form-ui';
 import {ErrorBar} from '../shell/ErrorBar';
 import {EmptyState} from '../shell/EmptyState';
-import {formatAuthorList, formatDoi, formatYear, libraryItemTitle, readVenue} from './format';
 import {ResourceStatus} from './ResourceStatus';
+import {PaperMetaCard} from './PaperMetaCard';
+import {StatusBadge} from '../shared/StatusBadge';
+import {libraryAvailability} from './library-availability';
+import {useLibraryDocumentStatus} from './use-library-document-statuses';
 import type {LiteratureStore} from './use-literature-store';
 import type {ResearchDocument} from '../../shared/types';
 import './library-inspector.css';
@@ -19,6 +22,7 @@ export function LibraryInspector({literature, onRead, onOpenKnowledge}: {
   const scope = useWorkspaceScope();
   const copy = useCopyFeedback();
   const item = literature.selected;
+  const receipt = useLibraryDocumentStatus(literature.documentStatusSource, item?.id ?? '');
   if (literature.selectedStatus === 'error') return <ErrorBar error={{
     level: 'page', message: literature.selectedError ?? '读取文献失败', retry: literature.reloadSelected
   }}/>;
@@ -31,16 +35,15 @@ export function LibraryInspector({literature, onRead, onOpenKnowledge}: {
     if (entry.currentParseId === null) onRead(item.id);
     else scope.openLiterature({kind: 'reader', libraryItemId: item.id, parseId: entry.currentParseId});
   };
-  const venue = readVenue(item.bibliography), doi = formatDoi(item.metadata.doi);
+  const availability = libraryAvailability(item, receipt,
+    literature.documentsStatus === 'ready' ? documents : undefined,
+    documents.some(entry => literature.parsingDocumentIds?.has(entry.id)));
   return <div className="library-inspector-content" data-library-item={item.id}>
     <section className="library-inspector-meta" aria-label="完整文献信息">
-      <h3 data-testid="literature-inspector-title">{libraryItemTitle(item)}</h3>
-      <p>{formatAuthorList(item.metadata.authors, Number.MAX_SAFE_INTEGER)}</p>
+      <div data-testid="literature-inspector-title"><PaperMetaCard item={item} showIdentifiers/></div>
+      <StatusBadge tone={availability.tone} label={availability.label} progress={availability.progress}
+        title={availability.detail} testId="literature-inspector-status"/>
       <dl className="library-inspector-fields">
-        <dt>年份</dt><dd>{formatYear(item.metadata.publishedYear)}</dd>
-        {venue === null ? null : <><dt>出版物</dt><dd>{venue}</dd></>}
-        <dt>引用键</dt><dd className="font-mono">{item.bibliography.citationKey}</dd>
-        {doi === null ? null : <><dt>DOI</dt><dd>{doi}</dd></>}
         {item.metadata.citationCount === null ? null : <><dt>被引</dt><dd>{item.metadata.citationCount.toLocaleString('zh-CN')} 次</dd></>}
         <dt>来源</dt><dd>{item.metadata.source}</dd>
         <dt>版本</dt><dd>{item.revision}</dd>
@@ -53,7 +56,7 @@ export function LibraryInspector({literature, onRead, onOpenKnowledge}: {
         <ActionButton variant="compact" onClick={() => copy.copy(item.bibliography.citationKey)}>
           <Copy size={14} aria-hidden="true"/>{copy.copied ? '已复制' : '复制引用键'}
         </ActionButton>
-        <ActionButton variant="compact" disabled={literature.projectId === null} loading={literature.assistant.pending}
+        <ActionButton variant="compact" disabled={literature.projectId === null || !scope.writable} loading={literature.assistant.pending}
           onClick={() => void literature.askAssistantAboutSelected()}>
           <Sparkles size={14} aria-hidden="true"/>问 AI
         </ActionButton>

@@ -46,11 +46,13 @@ import {PdfDownloadService} from './pdf-download-service';
 import type {ResearchDocumentService} from './document-service';
 import {ResearchLiteratureAcquisitionWiki} from './literature-acquisition-wiki';
 import {LiteratureWikiAcquisition, reconcileAcquisitionReadiness} from './literature-wiki-acquisition';
+import type {DocumentDoiPreparation} from './document-import-metadata';
 
 export type ResearchLiteratureServices = {
   literatureImports: LiteratureImportService;
   releaseDownloads(projectId: string): Promise<void>;
   configureDocumentPipeline(getDocuments: () => Promise<ResearchDocumentService>): void;
+  prepareDocumentDoi: DocumentDoiPreparation;
 };
 
 export async function registerResearchLiterature(
@@ -180,6 +182,7 @@ export async function registerResearchLiterature(
   }
   return {
     literatureImports,
+    prepareDocumentDoi: (doi, projectId, signal) => library.prepareDoi(doi, projectId, signal),
     releaseDownloads: async projectId => { await huggingfaceDownloads?.releaseProject(projectId); },
     configureDocumentPipeline: getDocuments => {
       pdfAcquisition.configureDocumentPipeline(getDocuments);

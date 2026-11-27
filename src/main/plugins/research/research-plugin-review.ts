@@ -63,7 +63,7 @@ export function registerResearchReview(
   const interruptedDocuments = production.scientificLibraryIndex.recover();
   const documentProvider = lifecycle.provide(context, 'documents', [...researchDocumentCapabilities, ...zoteroCapabilities], child => {
     documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null,
-      createPaperSemanticGenerator(options.modelFactory), options.scholarlyParser, production.scientificLibraryIndex);
+      createPaperSemanticGenerator(options.modelFactory), options.scholarlyParser, production.scientificLibraryIndex, literature.prepareDocumentDoi);
     registerZoteroCapabilities(child, zotero, researchImports, pickZoteroAttachment, documents);
     registerResearchDocumentCapabilities(child, researchRepository.documents, documents);
     return documents;

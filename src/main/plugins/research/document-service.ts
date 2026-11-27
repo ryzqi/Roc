@@ -13,7 +13,7 @@ import type {
 import type {ResearchRelationReviewer} from '../../../shared/schemas/research-evidence-relations';
 import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes, maximumArtifactBytes } from './document-files';
 import type { ResearchDocument, StoredDocumentContent } from './document-repository';
-import {normalizeResearchDoi} from './literature-identity';
+import {literatureIdentityAliases, normalizeResearchArxiv, normalizeResearchDoi} from './literature-identity';
 import {enrichPaperSemantics, type PaperSemanticGenerator} from './paper-semantic-service';
 import {enrichScholarlyFields, type ScholarlyParserAdapter} from './scholarly-parser-adapter';
 import type { ResearchRepository } from './repository';
@@ -24,6 +24,7 @@ import {documentSourceRange, VerifiedDocumentSources, verifyDocumentSource} from
 import {PaperIRRepository} from './paper-ir-repository';
 import {hasUnprovenResearchProcessExit} from './process-exit-state';
 import type {ScientificLibraryIndexService, PreparedLibraryIndex} from './scientific-library-index';
+import {inspectPdfImportMetadata, type DocumentDoiPreparation, type DocumentImportEntry} from './document-import-metadata';
 
 type DocumentTools = Pick<ResearchToolchain, 'parseDocument' | 'normalizeBibliography' | 'defaultParseOptions'>;
 type ImportTask = { controller: AbortController; promise: Promise<ResearchDocument> };
@@ -39,14 +40,16 @@ export class ResearchDocumentService {
   constructor(private readonly repository: ResearchRepository, private readonly tools: DocumentTools, private readonly rootPath: string | null,
     private readonly semanticGenerator: PaperSemanticGenerator | null = null,
     private readonly scholarlyParser: ScholarlyParserAdapter | null = null,
-    private readonly scientificIndex: ScientificLibraryIndexService | null = null) {}
+    private readonly scientificIndex: ScientificLibraryIndexService | null = null,
+    private readonly prepareDoi: DocumentDoiPreparation | null = null) {}
 
-  async import(request: z.infer<typeof researchDocumentImportRequestSchema>): Promise<ResearchDocument> {
+  async import(request: z.infer<typeof researchDocumentImportRequestSchema>,
+    options: {automaticMetadata?: boolean} = {}): Promise<ResearchDocument> {
     this.requireOpen();
     this.repository.library.validateDestination(request.projectId);
     if (request.target === 'library-item' && this.repository.library.get(request.libraryItemId).archived) throw new Error('research_library_item_archived');
     const controller = new AbortController();
-    const task: ImportTask = { controller, promise: this.importFile(request, controller.signal) };
+    const task: ImportTask = { controller, promise: this.importFile(request, controller.signal, options.automaticMetadata === true) };
     this.tasks.add(task);
     try { return await task.promise; }
     finally { this.tasks.delete(task); }
@@ -341,7 +344,8 @@ export class ResearchDocumentService {
     await Promise.all([Promise.allSettled(tasks.map(task => task.promise)), this.sources?.shutdown()]);
   }
 
-  private async importFile(request: z.infer<typeof researchDocumentImportRequestSchema>, signal: AbortSignal): Promise<ResearchDocument> {
+  private async importFile(request: z.infer<typeof researchDocumentImportRequestSchema>, signal: AbortSignal,
+    automaticMetadata: boolean): Promise<ResearchDocument> {
     if (!isAbsolute(request.sourcePath)) throw new Error('research_absolute_path_required');
     const info = await lstat(request.sourcePath);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error('research_document_source_invalid');
@@ -349,11 +353,12 @@ export class ResearchDocumentService {
     const mediaType = documentMediaTypes[extension];
     if (mediaType === undefined) throw new Error('research_source_format_unsupported');
     const bytes = await readResearchFile(await researchWorkspace(dirname(request.sourcePath)), basename(request.sourcePath), maximumDocumentBytes);
-    return this.persistFile(request, bytes, null, signal);
+    return this.persistFile(request, bytes, null, signal, automaticMetadata);
   }
 
   private async persistFile(request: z.infer<typeof researchDocumentImportRequestSchema>, bytes: Buffer,
-    record: ((document: ResearchDocument) => void) | null, signal: AbortSignal): Promise<ResearchDocument> {
+    record: ((document: ResearchDocument) => void) | null, signal: AbortSignal,
+    automaticMetadata = false): Promise<ResearchDocument> {
     this.requireActive(signal);
     const extension = extname(request.sourcePath).toLowerCase();
     const mediaType = documentMediaTypes[extension];
@@ -370,20 +375,46 @@ export class ResearchDocumentService {
       const sourcePath = join(directory, `source${extension}`);
       await writeFile(sourcePath, bytes, { mode: 0o600, flag: 'wx' });
       let entry: { metadata: ResearchLiterature; bibliography: ResearchBibliographyEntry } | null = null;
+      const sourceEntries: DocumentImportEntry[] = [];
       if (request.target === 'new-item') {
+        const extracted = automaticMetadata && mediaType === 'application/pdf' ? await inspectPdfImportMetadata(bytes, signal) : null;
+        this.requireActive(signal);
+        const arxivId = extracted?.arxivId ?? null;
+        const arxivDoiAlias = arxivId === null ? null :
+          literatureIdentityAliases(`arxiv:${normalizeResearchArxiv(arxivId).id}`).find(alias => alias.startsWith('doi:'))?.slice(4) ?? null;
+        const lookupDoi = extracted?.doi ?? arxivDoiAlias;
         const now = new Date().toISOString();
-        const metadata: ResearchLiterature = { id: `local:document:${sourceHash}`, source: 'local', externalId: `document:${sourceHash}`, doi: null,
-          title: request.title, authors: [], abstract: null, publishedYear: null, citationCount: null, url: null, openAccessUrl: null, importedAt: now, updatedAt: now };
+        const metadata: ResearchLiterature = { id: `local:document:${sourceHash}`, source: 'local', externalId: `document:${sourceHash}`, doi: extracted?.doi ?? null,
+          title: extracted?.title ?? request.title, authors: extracted?.authors ?? [], abstract: null,
+          publishedYear: extracted?.publishedYear ?? null, citationCount: null, url: arxivId === null ? null : `https://arxiv.org/abs/${arxivId}`,
+          openAccessUrl: null, importedAt: now, updatedAt: now };
         const job = await createResearchDirectory(directory, 'metadata');
         const json = join(job, 'source.json');
         await writeFile(json, JSON.stringify([{ metadata, citationKey: request.citationKey }]), { mode: 0o600, flag: 'wx' });
         const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: json, outputDir: join(job, 'output'), jobDir: job, signal,
           admission: { projectId: request.projectId, priority: 'user' } });
         if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
-        entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors }, bibliography: entries[0] };
+        entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors },
+          bibliography: {...entries[0], fields: {...entries[0].fields, ...(arxivId === null ? {} : {eprint: arxivId, archiveprefix: 'arXiv'})}} };
+        if (automaticMetadata && lookupDoi !== null && this.prepareDoi !== null) {
+          try {
+            const prepared = await this.prepareDoi(lookupDoi, request.projectId, signal);
+            if (prepared.metadata.doi === null || prepared.bibliography.doi === null ||
+                normalizeResearchDoi(prepared.metadata.doi) !== lookupDoi ||
+                normalizeResearchDoi(prepared.bibliography.doi) !== lookupDoi) throw new Error('research_doi_response_mismatch');
+            if (metadata.doi === null) {
+              // The registered alias is only a lookup key until an exact provider response confirms its DOI.
+              entry = {metadata: {...entry.metadata, doi: lookupDoi}, bibliography: {...entry.bibliography, doi: lookupDoi,
+                fields: {...entry.bibliography.fields, doi: lookupDoi},
+                csl: entry.bibliography.csl === null ? null : {...entry.bibliography.csl, DOI: lookupDoi}}};
+            }
+            sourceEntries.push(prepared);
+          } catch {this.requireActive(signal);}
+        }
       }
       this.requireActive(signal);
-      const input = { id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry,
+      const input = { id, libraryItemId: request.target === 'library-item' ? request.libraryItemId : null, entry, sourceEntries,
+        automaticCitationKey: request.target === 'new-item' && automaticMetadata,
         projectId: request.projectId, filename: basename(request.sourcePath), mediaType, sourcePath: researchRelativePath(relative(root, sourcePath)), sourceHash, size: bytes.length };
       const result = record === null ? this.repository.documents.import(input, true) : this.repository.documents.importWithReceipt(input, record);
       persisted = result.created;

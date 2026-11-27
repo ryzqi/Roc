@@ -24,12 +24,26 @@
 - PDF 默认 startParse 已覆盖全文解析与索引；不能把 ok:true 或静态定时进度当作就绪状态。
 - 全库 archive 影响所有项目并退休科学来源；项目移除使用 linkItem(false)，Undo 使用 linkItem(true)。
 - 文献宿主采用单击 Inspector / 明确阅读按钮或双击全文；阅读深链保留原入口，列表保持挂载。
+- 文献元数据列表已有 250ms 防抖；真实全文入口 RagStudio 仍手动提交检索，需要补齐实时搜索并保护旧请求身份。
+- 阶段三沿用现有共享 motion.ts；根 MotionConfig 的 reducedMotion 尚未保证所有 scale/位移和 CSS 披露归零，需要一条全局适配链。
+- 原生导入 details 的 block-size 过渡让快速 Space→Tab 被 focus trap 回送关闭按钮；唯一变量取消该局部过渡的真实窗口 probe 通过。表单披露只需原生开启，活动流披露将在阶段三统一检查。
+- 阶段三将保持浮层定位元素不参与动画，仅动其内容；选择滑块、图标反馈、批量/撤销和可视行补位复用共享事件预设。拖拽轨道不插值，快速原生滚动暂停行级表现。
+- Floating UI 关闭时保留 x/y，但复位 isPositioned；退出 DOM 的可见性必须按同一次挂载的定位历史保留，初次未定位仍隐藏。Inspector 的边界渐隐、遮罩与内容应同步折返，关闭时立即 inert。
+- 性能验收区分 RAF 调度间隔、输入到第二次 RAF 和实际渲染帧；不能将前两者作为物理 60/120fps 或每帧 8/16ms 的证明。阶段三补充实际 trace / paint 证据并如实报告环境限制。
+- 全文容错只做读时文本投影，注册到每个 Main/worker 连接；原有 FTS/字面候选优先，容错填充剩余候选。查询队列最多一个运行和一个最新待运行请求，清空/IME/离开/项目切换立即使旧回执失效；问 AI 使用本次显式请求的当前回执。
+- 缓存按内容键存储 2048 条、保守字符串预算 8MiB；短 ASCII 不缓存，32768 字滑动窗口避免大文本投影爆量。1200 条文献 warm page+count 约 9ms；生产只读 worker 与 Main 的 10000+ chunk 搜索保持一致且原始行/回执字节未改变。
+- Undo 按钮禁用 / 消失会让原生焦点回落 body；恢复成员关系的 RPC 返回早于列表刷新完成。焦点恢复必须等待成功恢复的行实际挂载，并用作用域、查询及用户焦点所有权守卫，不能仅同步调用 focus 或改变选中文献。
+- Durable 导入 ledger 会直接返回相同 requestId 的旧收据；成功 DOI / 候选导入后的再次加入必须开启新意图，未知失败重试仍复用原意图。后台刷新保留 ready 行时应单独呈现 error，不靠 loading/error 状态卸载列表。
 
 ## Technical Decisions
 | Decision | Rationale |
 |----------|-----------|
 | 列表以现有 Virtuoso 固定行高重构 | 避免引入重复依赖和丢失现有键盘导航/分页能力 |
 | 每阶段保留运行截图与布局测量 | 样式静态审计不能证明 CLS、滚动与焦点稳定 |
+| 项目移除使用解除关联与六秒撤销 | 保留全局文献、科学来源和其他项目关系，不将全库归档包装成局部删除 |
+| PDF 自动补全为请求级模式，显式手工模式优先 | 不改变持久化 schema/receipt，保留既有导入调用与用户手工覆盖 |
+| 已加载状态筛选与全库后台搜索分开说明范围 | 批量状态只覆盖已加载的页，不能使后续页搜索匹配不可达 |
+| 就绪要求当前解析和实际语义索引均通过校验 | 解析回执不能证明索引就绪；不通过计时器制造完成状态 |
 
 ## Issues Encountered
 | Issue | Resolution |
@@ -42,3 +56,5 @@
 - AGENTS.md，docs/adr/0022-single-frontend-after-cutover.md，docs/adr/0023-visual-and-motion-spec.md
 - .agents/skills/b-end-design-system/SKILL.md
 - .agents/skills/desktop-agent-ui/SKILL.md
+
+- 240px 导航栏原 132px 行尾动作会覆盖标题中心；440px 以下缩为阅读 / 更多 68px，菜单及快捷键保留复制 / 问 AI。真实 hover 命中、窄栏 Tab 和明暗裁切全部通过。
