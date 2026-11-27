@@ -10,6 +10,7 @@ type Processor = (documentId: string, signal: AbortSignal, requireCurrent: () =>
 export class ResearchKnowledgeJobs {
   private processor: Processor | null = null;
   private running: Promise<void> | null = null;
+  private active: {documentId: string; controller: AbortController; settled: Promise<void>} | null = null;
   private readonly controller = new AbortController();
   private readonly listeners = new Set<() => void>();
   constructor(private readonly db: Database, private readonly now: () => string,
@@ -75,6 +76,13 @@ export class ResearchKnowledgeJobs {
     this.running = Promise.resolve().then(()=>this.drain()).finally(()=>{this.running=null;});
   }
 
+  async releaseSources(documentIds: readonly string[]): Promise<void> {
+    const current = this.active;
+    if (!current || !documentIds.includes(current.documentId)) return;
+    current.controller.abort();
+    await current.settled;
+  }
+
   async idle(): Promise<void> { await this.running; }
   async shutdown(): Promise<void> { this.controller.abort(); await this.running; }
 
@@ -84,6 +92,10 @@ export class ResearchKnowledgeJobs {
         .get() as {document_id: string; generation: string} | undefined;
       if (job === undefined) return;
       const release = this.activity.begin('research');
+      const controller = new AbortController();
+      const signal = AbortSignal.any([controller.signal, this.controller.signal]);
+      const {promise, resolve} = Promise.withResolvers<void>();
+      this.active = {documentId: job.document_id, controller, settled: promise};
       try {
         this.db.prepare("UPDATE research_knowledge_jobs SET status='running',attempts=attempts+1,updated_at=? WHERE document_id=? AND generation=?")
           .run(this.now(), job.document_id, job.generation);
@@ -92,11 +104,11 @@ export class ResearchKnowledgeJobs {
           const requireCurrent = (): void => {
             const current = this.db.prepare('SELECT generation,status FROM research_knowledge_jobs WHERE document_id=?')
               .get(job.document_id) as {generation: string; status: string} | undefined;
-            if (this.controller.signal.aborted || current?.generation !== job.generation || current.status !== 'running') {
+            if (signal.aborted || current?.generation !== job.generation || current.status !== 'running') {
               throw new Error('research_knowledge_job_changed');
             }
           };
-          if (await this.processor(job.document_id, this.controller.signal, requireCurrent) === null) {
+          if (await this.processor(job.document_id, signal, requireCurrent) === null) {
             status='blocked'; error='未配置可用的嵌入模型，请在检索设置中配置后重试。';
           }
         } catch {
@@ -109,6 +121,8 @@ export class ResearchKnowledgeJobs {
           .run(status, error, this.now(), job.document_id, job.generation);
         for (const listener of this.listeners) listener();
       } finally {
+        this.active = null;
+        resolve();
         release();
       }
     }

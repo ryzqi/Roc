@@ -70,7 +70,7 @@ export function registerResearchReview(
   }, async () => {
     try { await documents?.shutdown(); } finally { documents = null; }
   });
-  literature.configureDocumentPipeline(() => documentProvider.get());
+  literature.configureDocumentPipeline(() => documentProvider.get(), () => documents);
   if (interruptedDocuments.length) {
     void documentProvider.get().then(async service => {
       await service.parseMany({documentIds: interruptedDocuments, tier: null});

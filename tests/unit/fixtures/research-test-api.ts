@@ -96,7 +96,7 @@ export { ResearchDocumentService } from '../../../src/main/plugins/research/docu
 export {withDocumentSourceRequest} from '../../../src/main/plugins/research/document-source-request';
 export {VerifiedDocumentSources, documentSourceLimits, documentSourceRange, verifyDocumentSource} from '../../../src/main/plugins/research/verified-document-source';
 export {registerResearchDocumentCapabilities, researchDocumentCapabilities} from '../../../src/main/plugins/research/document-capabilities';
-export {registerResearchLibraryCapabilities, researchLibraryCapabilities} from '../../../src/main/plugins/research/library-capabilities';
+export {registerResearchLibraryCapabilities, registerResearchLibraryDeletion, researchLibraryCapabilities} from '../../../src/main/plugins/research/library-capabilities';
 export {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from '../../../src/main/plugins/research/systematic-review-capabilities';
 export {ResearchReviewSearchService} from '../../../src/main/plugins/research/review-search-service';
 export {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from '../../../src/main/plugins/research/review-search-capabilities';

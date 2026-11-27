@@ -8,7 +8,7 @@ export type AcquisitionStep = (job: AcquisitionClaim, signal: AbortSignal, requi
 /** Each claim advances one durable stage; workers never inherit an Agent run's lifetime. */
 export class LiteratureAcquisitionService {
   private processor: AcquisitionStep | null = null;
-  private readonly active = new Map<string, {controller: AbortController; run: Promise<void>}>();
+  private readonly active = new Map<string, {libraryItemId: string; controller: AbortController; run: Promise<void>}>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private closed = false;
   private reconcile: (() => void) | undefined;
@@ -61,6 +61,12 @@ export class LiteratureAcquisitionService {
     this.timer.unref();
   }
 
+  async releaseItem(libraryItemId: string): Promise<void> {
+    const tasks = [...this.active.values()].filter(task => task.libraryItemId === libraryItemId);
+    for (const task of tasks) task.controller.abort();
+    await Promise.all(tasks.map(task => task.run));
+  }
+
   async shutdown(): Promise<void> {
     this.closed = true;
     clearTimeout(this.timer);
@@ -87,7 +93,7 @@ export class LiteratureAcquisitionService {
       const controller = new AbortController();
       const run = Promise.resolve().then(() => this.advance(job, controller.signal, processor))
         .catch(() => this.onError()).finally(() => { this.active.delete(job.id); this.wake(); });
-      this.active.set(job.id, {controller, run});
+      this.active.set(job.id, {libraryItemId: job.libraryItemId, controller, run});
     }
   }
 

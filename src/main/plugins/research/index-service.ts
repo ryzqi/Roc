@@ -457,7 +457,7 @@ export class ResearchIndexService {
       span.fail(error);
       const code = failureCode(error);
       if (scientific) this.repository.scientificIndex.fail(scientific.id, code, signal.aborted || this.closed);
-      const running = this.repository.indexing.job(job.id).status === 'running';
+      const running = this.repository.indexing.isRunning(job.id);
       this.repository.indexing.failJob(job, code, signal.aborted || this.closed);
       if (running && (signal.aborted || this.closed)) this.repository.indexing.requestScan(job.projectId, job.input.force);
       if (!this.closed && !signal.aborted && ['research_index_source_changed', 'research_index_parser_changed', 'research_index_embedding_changed', 'research_index_workspace_changed', 'research_file_changed_during_read'].includes(code)) this.schedule(job.projectId, false);

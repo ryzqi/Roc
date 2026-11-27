@@ -31,6 +31,10 @@
 .library-row-metadata > span:first-child { flex: 1 1 60px; }
 .library-row-status { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); color: var(--muted); font-size: var(--font-meta-size); }
 .library-row-status > span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.library-row[data-deletable=true] .library-row-open { padding-inline-end: 60px; }
+.library-row-delete { position: absolute; inset-inline-end: var(--control-height-compact); top: var(--space-2); opacity: 0; }
+.library-row:is([data-selected=true], :hover, :focus-within) .library-row-delete { opacity: 1; }
+.library-row-delete:enabled:hover, .library-row-delete:focus-visible { color: var(--st-bad); }
 .library-row-copy { position: absolute; inset-inline-end: 0; top: var(--space-2); }
 .library-row-error { flex: 1 0 100%; min-width: 0; padding: var(--space-1) var(--space-2); overflow-wrap: anywhere; color: var(--st-bad); font-size: var(--font-meta-size); }
 .library-row-selection { display: flex; align-items: flex-start; flex-shrink: 0; padding: var(--space-3) 0 var(--space-2) var(--space-2); }

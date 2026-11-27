@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LibraryVirtualizedRowsHandle } from './LibraryVirtualizedRows';
-import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
+import {ConfirmDialog} from '../shell/ConfirmDialog';
 import { formatAuthorList, formatYear, libraryItemTitle, readVenue } from './format';
 import { useLiterature } from './literature-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
@@ -35,6 +36,7 @@ import type {LiteratureStore} from './use-literature-store';
 export type LibraryListProps = {
   /** Tight rows/spacing for the 256px sidebar. */
   compact?: boolean;
+  writable?: boolean;
   /** Bibliography category selected in the context drawer. */
   entryType?: string | null;
   /** Owns guarded selection and any navigation; without it the list selects directly. */
@@ -61,8 +63,26 @@ function fullTextLabel(item: ResearchLibraryItem, store: LiteratureStore): strin
   return '全文已保存';
 }
 
-export function LibraryList({ compact = false, entryType = null, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
+export function LibraryList({ compact = false, writable = true, entryType = null, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
+  const [deleteTarget, setDeleteTarget] = useState<ResearchLibraryItem | null>(null);
+  const [cleanupPending, setCleanupPending] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const deletion = useAsyncAction((item: ResearchLibraryItem) => literature.client.api.research.deleteLibraryItem({
+    id: item.id, expectedRevision: item.revision
+  }), {label: '永久删除文献'});
+  const confirmDelete = async (): Promise<void> => {
+    if (deleteTarget === null) return;
+    const result = await deletion.run(deleteTarget);
+    if (!result.ok) return;
+    literature.forgetDeletedItems([deleteTarget.id]);
+    setCleanupPending(result.data.cleanupPending);
+    if (!result.data.cleanupPending) {
+      setDeleteTarget(null);
+      setDeleteNotice(result.data.preservedFiles === 0 ? '文献已永久删除。'
+        : `文献已删除，保留了 ${result.data.preservedFiles} 个已被修改或无法确认归 Roc 所有的文件。`);
+    }
+  };
   const [searchDraft, setSearchDraft] = useState(literature.query);
   const [sort, setSort] = useState<SortOrder>('updated');
   const [selecting, setSelecting] = useState(false);
@@ -143,7 +163,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
     const selected = item.id === literature.selectedId;
     const venue = readVenue(item.bibliography);
     const tabIndex = item.id === tabStopId ? 0 : -1;
-    return <div className="library-row" data-selected={selected}>
+    return <div className="library-row" data-selected={selected} data-deletable={writable && !selecting}>
       {selecting ? <label className="library-row-selection">
         <input type="checkbox" checked={checkedIds.has(item.id)} tabIndex={tabIndex}
           aria-label={`选择文献 ${libraryItemTitle(item)}`}
@@ -197,6 +217,11 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
       </button>
       <CitationKeyCopy key={item.bibliography.citationKey} itemId={item.id}
         citationKey={item.bibliography.citationKey} tabIndex={tabIndex}/>
+      {writable && !selecting ? <button type="button" className="library-row-delete library-icon-button" tabIndex={tabIndex}
+        aria-label={`永久删除文献 ${libraryItemTitle(item)}`} title="永久删除文献" data-testid={`literature-delete-${item.id}`}
+        onClick={() => {deletion.reset(); setDeleteNotice(null); setCleanupPending(false); setDeleteTarget(item);}}>
+        <Trash2 size={14} aria-hidden="true"/>
+      </button> : null}
     </div>;
   };
 
@@ -310,6 +335,15 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
         </button> : null}
         {literature.loadMoreError ? <p role="alert">{literature.loadMoreError}</p> : null}
       </div> : null}
+
+      {deleteNotice === null ? null : <p role="status" className="shrink-0 px-2 pb-2 text-muted">{deleteNotice}</p>}
+      <ConfirmDialog open={deleteTarget !== null} title={cleanupPending ? '文献文件仍待清理' : '永久删除文献'}
+        message={cleanupPending ? '文献已从文献库移除。剩余文件将自动重试清理，也可以立即重试。'
+          : `永久删除“${deleteTarget ? libraryItemTitle(deleteTarget) : ''}”${deleteTarget?.projectIds.length ? `及其在 ${deleteTarget.projectIds.length} 个项目中的关联` : ''}？`}
+        detail={cleanupPending ? undefined : '此操作会清理 Roc 管理的全文、解析结果、索引、衍生 Wiki 内容及关联阅读笔记和批注，无法撤销。'}
+        confirmLabel={cleanupPending ? '重试清理' : '永久删除'} cancelLabel={cleanupPending ? '关闭' : '取消'}
+        tone={cleanupPending ? 'default' : 'destructive'} pending={deletion.pending} error={deletion.error}
+        onConfirm={confirmDelete} onCancel={() => setDeleteTarget(null)} testId="literature-delete-confirm"/>
 
       {literature.action.error === null ? null : (
         <div className="shrink-0 px-2 pb-2">

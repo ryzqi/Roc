@@ -1,3 +1,4 @@
+import {researchLibraryDeleteRequestSchema} from '../../shared/schemas/research-library';
 import {wikiSaveSchema, wikiRollbackSchema} from '../../shared/schemas/research-wiki-pages';
 import {researchTaskRequestSchema} from '../../shared/schemas/research-tasks';
 import {taskFactsSaveSchema} from '../../shared/schemas/research-task-facts';
@@ -85,6 +86,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
         const input = transformInput(target.inputTransform, args);
         if (target.capabilityName.startsWith('terminal.')) {
           return withTerminalOwner(windowId, () => invoker.invokeCapability(target.capabilityName, input));
+        }
+        if (target.capabilityName === 'research.library.delete') {
+          const request = researchLibraryDeleteRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.id, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
         }
         if (target.capabilityName === 'research.wiki.save' || target.capabilityName === 'research.wiki.rollback') {
           const request = target.capabilityName === 'research.wiki.save' ? wikiSaveSchema.parse(input) : wikiRollbackSchema.parse(input);

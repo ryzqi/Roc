@@ -116,6 +116,7 @@ export type LiteratureStore = {
   select: (id: string | null, whenReady?: (commitSelection: () => void) => void) => void;
   action: LiteratureActionState;
   clearActionError: () => void;
+  forgetDeletedItems: (ids: string[]) => void;
   archiveItem: (item: ResearchLibraryItem, archived: boolean) => Promise<boolean>;
   setCitationKey: (item: ResearchLibraryItem, citationKey: string) => Promise<boolean>;
   linkItem: (item: ResearchLibraryItem, linked: boolean) => Promise<boolean>;
@@ -311,6 +312,15 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
 
   const reloadDocuments = documents.reload;
   const reloadList = list.reload;
+  const forgetDeletedItems = useCallback((ids: string[]): void => {
+    if (scopeRef.current !== scope) return;
+    if (selectedIdRef.current !== null && ids.includes(selectedIdRef.current)) {
+      selectionRequest.current++;
+      selectedIdRef.current = null;
+      setSelection({projectId, id: null});
+    }
+    reloadList();
+  }, [projectId, reloadList, scope]);
 
   useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -319,7 +329,12 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       refreshTimer = setTimeout(() => { refreshTimer = undefined; reloadList(); }, 100);
     };
     const unsubscribe = client.api.research.onLibraryChanged((event) => {
-      if (projectId === null || event.affectedProjectIds.includes(projectId)) refresh();
+      if (event.changeKind === 'delete') {
+        if (projectId === null || event.affectedProjectIds.includes(projectId) ||
+          (selectedIdRef.current !== null && event.affectedItemIds.includes(selectedIdRef.current))) {
+          forgetDeletedItems(event.affectedItemIds);
+        }
+      } else if (projectId === null || event.affectedProjectIds.includes(projectId)) refresh();
     });
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -330,7 +345,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [client, projectId, reloadList]);
+  }, [client, projectId, reloadList, forgetDeletedItems]);
 
   /**
    * Polls while a parse is in flight.
@@ -731,6 +746,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     select,
     action: { pending, error: actionError },
     clearActionError: () => setActionError(null),
+    forgetDeletedItems,
     archiveItem,
     setCitationKey,
     linkItem,

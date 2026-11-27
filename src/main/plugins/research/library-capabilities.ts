@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from '../../../shared/schemas/literature-identifiers';
 import {literatureReadReviewsSchema, literatureReviewRecordsResultSchema} from '../../../shared/schemas/literature-review';
 import {
-  researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
+  researchLibraryArchiveRequestSchema, researchLibraryDeleteRequestSchema, researchLibraryDeleteResultSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
   researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
   researchLibraryListRequestSchema, researchLibraryListPageRequestSchema, researchLibraryPageSchema, researchLibraryRecordImportRequestSchema,
@@ -13,6 +13,8 @@ import { RocDomainError } from '../../services/errors';
 import type { RocErrorCategory } from '../../../shared/types';
 import type { ResearchLibraryRepository } from './library-repository';
 import type { ResearchLibraryService } from './library-service';
+import type {LibraryDeletionService} from './library-deletion-service';
+import {requireResearchHuman} from '../../services/research-human-context';
 
 const capabilities = {
   list: descriptor('research.library.list', researchLibraryListRequestSchema, researchLibraryItemSchema.array()),
@@ -29,7 +31,21 @@ const capabilities = {
   identifiers: descriptor('research.library.getIdentifiers', literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema),
   reviews: descriptor('research.library.getReviews', literatureReadReviewsSchema, literatureReviewRecordsResultSchema)
 };
-export const researchLibraryCapabilities = Object.values(capabilities);
+const deleteCapability = descriptor('research.library.delete', researchLibraryDeleteRequestSchema, researchLibraryDeleteResultSchema);
+export const researchLibraryCapabilities = [...Object.values(capabilities), deleteCapability];
+
+export function registerResearchLibraryDeletion(context: RocPluginContext, service: LibraryDeletionService): void {
+  context.capabilities.register(context.pluginId, deleteCapability, async input => {
+    requireResearchHuman('research.library.delete', input.id);
+    try {return await service.delete(input.id, input.expectedRevision);}
+    catch (error) {
+      if (error instanceof Error && error.message === 'research_library_version_conflict') {
+        throw new RocDomainError({code: error.message, ...libraryFailures[error.message], retryable: false});
+      }
+      throw error;
+    }
+  });
+}
 
 const libraryFailures: Record<string, { message: string; category: RocErrorCategory }> = {
   research_library_item_not_found: { message: '文献不存在。', category: 'not_found' },

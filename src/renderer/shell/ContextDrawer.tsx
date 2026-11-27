@@ -198,7 +198,7 @@ function OverviewResources({ client, projectId, binding, projects, onOpenProject
   </div>;
 }
 
-function LiteratureResources({ onOpenLiterature }: Pick<ContextDrawerProps, 'onOpenLiterature'>): React.JSX.Element {
+function LiteratureResources({ onOpenLiterature, writable }: Pick<ContextDrawerProps, 'onOpenLiterature' | 'writable'>): React.JSX.Element {
   const literature = useLiterature();
   const [category, setCategory] = useState<string | null>(null);
   const { counts, zoteroCount } = useMemo(() => {
@@ -237,7 +237,7 @@ function LiteratureResources({ onOpenLiterature }: Pick<ContextDrawerProps, 'onO
       </button>
     </div>
     <div className="min-h-0 flex-1">
-      <LibraryList compact entryType={selectedCategory} onOpenItem={onOpenLiterature} onRequestImport={() => {
+      <LibraryList compact writable={writable} entryType={selectedCategory} onOpenItem={onOpenLiterature} onRequestImport={() => {
         literature.requestImport();
         onOpenLiterature(null);
       }} />

@@ -162,7 +162,9 @@ export class ResearchReviewFullTextRepository {
         snapshot.version!==row.version||request.parentBindingId!==row.parent_id||request.requestId!==row.request_id||
         snapshot.recordedAt!==row.created_at||snapshot.requestHash!==hash(JSON.stringify(request))||
         (snapshot.version===1)!==(request.parentBindingId===null)||
-        row.document_id!==(snapshot.source===null?null:snapshot.source.documentId))throw new Error('research_review_fulltext_snapshot_invalid');
+        (row.document_id!==null&&row.document_id!==snapshot.source?.documentId)||
+        (row.document_id===null&&snapshot.source!==null&&this.db.prepare('SELECT 1 FROM research_documents WHERE id=?').get(snapshot.source.documentId)!==undefined))
+      throw new Error('research_review_fulltext_snapshot_invalid');
     if(title.plan.snapshot.request.projectId!==request.projectId||title.plan.snapshot.request.corpusId!==request.corpusId||
         title.freezeHash!==request.expectedTitleFreezeHash||title.freeze===null||
         !title.freeze.authority.items.some(item=>item.hit.id===request.hitId&&item.status==='included'))throw new Error('research_review_fulltext_snapshot_invalid');
@@ -177,6 +179,7 @@ export class ResearchReviewFullTextRepository {
           (source.parse!==null&&(source.parse.id!==request.outcome.selection.parseId||source.parse.hash!==request.outcome.selection.parseHash))) {
         throw new Error('research_review_fulltext_snapshot_invalid');
       }
+      if (row.document_id===null) return snapshot;
       const document=this.repository.documents.get(source.documentId);
       if(document.libraryItemId!==source.libraryItemId)throw new Error('research_review_fulltext_snapshot_invalid');
       if(source.parse!==null) {
@@ -202,7 +205,8 @@ export class ResearchReviewFullTextRepository {
     const latest=this.latest(row.corpus_id,row.hit_id);
     if(latest===undefined)throw new Error('research_review_fulltext_snapshot_invalid');
     let referenceStatus:ResearchReviewFullTextBindingInspection['referenceStatus']='not_retrieved';
-    if(snapshot.source!==null) {
+    if(snapshot.source!==null&&row.document_id===null) referenceStatus='superseded';
+    else if(snapshot.source!==null) {
       const document=this.repository.documents.get(snapshot.source.documentId),library=this.repository.library.get(snapshot.source.libraryItemId);
       referenceStatus=document.sourceHash===snapshot.source.sourceHash&&!library.archived&&library.projectIds.includes(row.project_id)&&
         (snapshot.source.parse===null||document.currentParseId===snapshot.source.parse.id)?'current':'superseded';

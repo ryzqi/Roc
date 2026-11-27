@@ -270,7 +270,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none', width: narrow ? '100%' : 240 }} className="literature-library-column min-h-0 min-w-0 shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
-          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={selectPaper} />
+          <LibraryList writable={scope.writable} onRequestImport={() => openImport('document')} onOpenItem={selectPaper} />
         </aside>
 
         <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${selectedTab}`} tabIndex={0} style={navigationOpen && narrow ? {display: 'none'} : undefined} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>

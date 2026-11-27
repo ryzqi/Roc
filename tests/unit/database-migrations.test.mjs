@@ -220,7 +220,7 @@ test('failed backup removes only its incomplete directory and leaves the source 
   } finally { f.dispose(); }
 });
 
-for (const version of [71, 72, 73, 74, 75]) {
+for (const version of [71, 72, 73, 74, 75, 76]) {
   test(`v${version} research database upgrades automatically, preserving all old rows and index matches`, async () => {
     const f = fixture(version);
     try {
@@ -232,7 +232,7 @@ for (const version of [71, 72, 73, 74, 75]) {
       const current = new Database(f.path);
       try {
         schemas.applyResearchDatabaseSchema(current);
-        assert.equal(current.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 76);
+        assert.equal(current.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 77);
         for (const name of preserved) assert.deepEqual(fingerprintTable(current, name), before[name], name);
         assert.equal(current.prepare("SELECT count(*) FROM research_wiki_fts WHERE research_wiki_fts MATCH 'historicaltoken'").pluck().get(), wikiCount);
         assert.deepEqual(current.pragma('foreign_key_check'), []);
@@ -246,7 +246,7 @@ for (const version of [71, 72, 73, 74, 75]) {
       const backupDir = join(backupBase, directories[0]);
       const receipt = JSON.parse(readFileSync(join(backupDir, 'manifest.json'), 'utf8'));
       assert.equal(receipt.status, 'complete');
-      assert.deepEqual(receipt.backups.map(item => [item.fromVersion, item.toVersion]), [[version, 76]]);
+      assert.deepEqual(receipt.backups.map(item => [item.fromVersion, item.toVersion]), [[version, 77]]);
       const old = new Database(join(backupDir, receipt.backups[0].fileName), { readonly: true });
       try { assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), version); }
       finally { old.close(); }
@@ -268,7 +268,7 @@ test('kernel upgrades a historical database before the seven-database fast probe
     assert.equal(runtime.getStatus().started, true);
     await runtime.shutdown();
     const db = new Database(f.path, { readonly: true });
-    try { assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 76); }
+    try { assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 77); }
     finally { db.close(); }
   } finally {
     if (runtime.getStatus().started) await runtime.shutdown();
@@ -334,7 +334,7 @@ test('published schema changes require an explicit contract/migration review', (
     task: [1, '61e9b86f932f3da4b9e577705e6b001122f30ad31890a5fa79470512ad552654'],
     workspace: [1, 'eef6de66960c0c28c113712c668e95ea6da6ac5a135ad725514e403808496f1d'],
     diagnostics: [1, 'd7798722d73b5302a0fad697ca1a58a1c6fe7b7b958bf0640e8e541d0a7c28da'],
-    research: [76, '1241f753c8a2dec38f2829a15e9955f4af5d99556b3f1ec154e09757f1f63f7f']
+    research: [77, 'aa0f32e3338880b0da16ea73a33ee2bb11d059e50ff6e89d24059b2425e9b48a']
   };
   const names = { core:'core', agent:'agent', memory:'memory', task:'task',
     workspace:'plugin:@roc/plugin-workspace', diagnostics:'plugin:@roc/plugin-diagnostics',
@@ -345,5 +345,5 @@ test('published schema changes require an explicit contract/migration review', (
     assert.equal(schemaHelpers.checksumSchemaObjects(names[key], version, actual), checksum,
       `${key}: changed DDL requires a new schema version and migration`);
   }
-  assert.equal(Object.keys(researchLegacyChecksums).length, 5);
+  assert.equal(Object.keys(researchLegacyChecksums).length, 6);
 });

@@ -8,7 +8,7 @@ import type {ResearchLibraryRepository} from './library-repository';
 import type {WorkspacePathStructureChangeNotifier} from '../../services/workspace-path-structure-event';
 import {normalizeResearchArxiv, normalizeResearchDoi, normalizeResearchPmid} from './literature-identity';
 import {resolvePdfSources, type PdfResolverDependencies, type PdfSourceCandidate, type PdfSourceInput} from './pdf-source-resolver';
-import {PdfDownloadService, pdfFailureRetryAfterMs} from './pdf-download-service';
+import {PdfDownloadService, pdfFailureRetryAfterMs, type PdfPublication} from './pdf-download-service';
 import type {ResearchDocument} from './document-repository';
 import type {ResearchDocumentService} from './document-service';
 import {readResearchFile, researchAbsolutePath, researchContentHash, researchWorkspace} from './research-files';
@@ -110,16 +110,18 @@ export class LiteraturePdfAcquisition {
     private readonly downloader: PdfDownloadService, private readonly notifyWorkspaceChanged: WorkspacePathStructureChangeNotifier,
     governor: LiteratureProviderGovernor, dependencies: {resolver?: PdfResolverDependencies;
       getSettings?: () => LiteratureAcquisitionSettings;
-      onProviderError?: (provider: string, error: unknown) => void; now?: () => number; random?: () => number} = {}) {
+      onProviderError?: (provider: string, error: unknown) => void; recordPublication?: (job: AcquisitionClaim, file: PdfPublication) => void; now?: () => number; random?: () => number} = {}) {
     this.resolverDependencies = {...dependencies.resolver, governor,
       onProviderError: (provider, error) => dependencies.onProviderError?.(provider, error)};
     this.now = dependencies.now ?? Date.now;
     this.random = dependencies.random ?? Math.random;
     this.getSettings = dependencies.getSettings;
+    this.recordPublication = dependencies.recordPublication;
   }
 
   private readonly now: () => number;
   private readonly random: () => number;
+  private readonly recordPublication: ((job: AcquisitionClaim, file: PdfPublication) => void) | undefined;
   private readonly getSettings: (() => LiteratureAcquisitionSettings) | undefined;
 
   private resolverOptions(): PdfResolverDependencies {
@@ -168,6 +170,7 @@ export class LiteraturePdfAcquisition {
       return {stage: 'download', status: 'blocked', errorCode: documentError(error)};
     }
     const notifyWorkspaceChanged = job.projectId === null ? () => {} : this.notifyWorkspaceChanged;
+    const recordPublication = (file: PdfPublication): void => this.recordPublication?.(job, file);
 
     if (job.stage === 'resolve') {
       let providerFailed = false;
@@ -183,7 +186,7 @@ export class LiteraturePdfAcquisition {
           requireCurrent();
           const pdf = await this.downloader.publishExisting({jobId: job.id, generation: job.generation,
             libraryItemId: job.libraryItemId, title: job.title, year: this.library.get(job.libraryItemId).metadata.publishedYear,
-            workspacePath, bytes, signal, requireCurrent, notifyWorkspaceChanged});
+            workspacePath, bytes, signal, requireCurrent, notifyWorkspaceChanged, recordPublication});
           requireCurrent();
           return {stage: 'import', status: 'queued', documentId: existing.id, receipt: pdf.receipt};
         }
@@ -221,7 +224,7 @@ export class LiteraturePdfAcquisition {
       const pdf = await this.downloader.acquire({jobId: job.id, generation: job.generation, libraryItemId: job.libraryItemId,
         title: job.title, year: this.library.get(job.libraryItemId).metadata.publishedYear, workspacePath,
         candidates: parsed.data.candidates as PdfSourceCandidate[], signal, requireCurrent,
-        notifyWorkspaceChanged});
+        notifyWorkspaceChanged, recordPublication});
       requireCurrent();
       return {stage: 'import', status: this.documentService === null ? 'blocked' : 'queued',
         ...(this.documentService === null ? {errorCode: 'research_document_import_not_configured'} : {}),
