@@ -4,10 +4,10 @@
 执行《界面优化.md》三个阶段，沿用现有桌面壳、语义 Tokens 与 Motion 预设；每阶段完成必要运行验证并独立 Git 提交。
 
 ## Next Step
-用户已授权推送。远程 main 新增 3 个提交，与本地三阶段提交分叉；合并远程改动，解决冲突并验证后推送，核对远程 SHA。原有严格帧预算与实机验收缺口继续保留。
+远程合并与推送已完成：合并提交 `3bc321a` 已推送至 origin/main，并通过 ls-remote 核对。本次合并回归 347/347、隔离安装包历史启动验证通过；原有严格帧预算与实机验收缺口继续保留。
 
 ## Current Phase
-Remote integration and push
+Delivery complete
 
 ## Phases
 
@@ -44,9 +44,9 @@ Remote integration and push
 ### Phase 6: 合并远程并推送
 - [x] 核对远程、分支及本地三阶段提交
 - [x] 合并远程 arXiv、发现全文导入、永久删除改动并解决冲突
-- [ ] 完成合并相关检查与回归，提交合并结果
-- [ ] 推送 main 并核对远程 SHA
-- **Status:** in_progress
+- [x] 完成合并相关检查与回归，提交合并结果
+- [x] 推送 main 并核对远程 SHA
+- **Status:** complete
 
 ## Remaining Acceptance
 - [ ] 4x CPU 严格 8/16ms 帧预算：RAF P95 32.5ms，当前结果未达

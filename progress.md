@@ -111,3 +111,4 @@
 - Electron 合并首轮 66/75：3 项新永久删除检查暴露菜单关闭回焦覆盖确认框初始焦点；6 项旧工作流检查仍用 End 定位旧菜单尾项“移除”。列表布局、零重排、保留与分页均通过。局部修复菜单到确认框的焦点交接；键盘用例改为 End 定位删除后 ArrowUp 定位移除，保留目标身份断言，待复测。
 - 最终 Renderer 去重 75/75（action/workflow 50/50 复测 + 未受影响四套 25/25），1100/420px 明暗删除确认框 cut=0；最终 build / IPC / design / motion 通过。
 - 最终独立安装包历史启动通过：/tmp/roc-push-merge-package-final-GDXYaP/mac-arm64/Roc.app；v76→77，20 张表指纹与源文件/附件保留，removedRows=0，历史项目/文献/文档真实读取及可见窗口确认。合成旧关系科学后台警告保留，无 fatal。完整命令和范围已写入 docs/ui-library-refinement-2026-11-27.md。
+- 合并提交 3bc321a 已通过 git push origin main 发布；git ls-remote origin refs/heads/main 与本地 HEAD 同为 3bc321aefe14b7c39df26d46e46bd1f98e2d9d0f，工作区干净。推送前远程仍为 d10d8ee，无新增分叉。此完成记录作为后续文档提交一并同步。
