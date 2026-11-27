@@ -29,6 +29,7 @@ before(async () => {
     import {ProjectFormDialog} from './src/renderer/project/ProjectFormDialog';
     import {ToolCallBlock} from './src/renderer/assistant/blocks/tool-call-block';
     import {LazyMotion, domMax, MotionConfig} from 'motion/react';
+    import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
     function Harness() {
       const [composerThread, setComposerThread] = useState('test');
       const {draft, updateDraft} = useAssistantComposerDraft('test-project', composerThread);
@@ -175,7 +176,7 @@ before(async () => {
       window.searchOpened = []; window.projectSubmissions = []; window.projectCancels = 0; window.deferWorkspacePick = false;
       window.deferSend = false; window.sendFailure = null; window.modelSelectCalls = [];
       window.focusCloseCalls = 0; window.focusActionCalls = 0;
-      flushSync(() => root.render(<MotionConfig reducedMotion={reducedMotion}><LazyMotion features={domMax} strict><Harness /></LazyMotion></MotionConfig>));
+      flushSync(() => root.render(<MotionConfig reducedMotion={reducedMotion}><MotionPreferenceProvider><LazyMotion features={domMax} strict><Harness /></LazyMotion></MotionPreferenceProvider></MotionConfig>));
     };
     window.mount();
   `});
@@ -267,6 +268,70 @@ test('composer requires text for an image attachment, matching the run contract'
   }]}));
   await expect(page.getByTestId('assistant-composer-send')).toBeDisabled();
   await resetComposer();
+});
+
+test('composer cancels an attachment transition and honors reduced motion after an image read', async () => {
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+  await page.evaluate(() => window.mount('never'));
+  await resetComposer();
+  await page.getByTestId('assistant-composer-input').fill('保留附件草稿');
+  await page.evaluate(() => {
+    setComposerDraft(current => ({...current, attachments: [{
+      kind: 'image', source: 'drop', name: 'figure.png', mediaType: 'image/png', sizeBytes: 3, data: 'cG5n', previewUrl: null
+    }]}));
+    const strip = document.querySelector('.assistant-attachment-strip');
+    window.attachmentMotionStarts = 0;
+    window.attachmentMotionSkips = 0;
+    // Hold the scoped API's update callback to cover cancellation before its snapshot is ready.
+    strip.startViewTransition = update => {
+      window.attachmentMotionStarts++;
+      let finish, completeUpdate;
+      const finished = new Promise(resolve => {finish = resolve;});
+      const updateCallbackDone = new Promise(resolve => {completeUpdate = resolve;});
+      return {ready: Promise.resolve(), finished, updateCallbackDone, skipTransition() {
+        window.attachmentMotionSkips++;
+        queueMicrotask(() => {update(); completeUpdate(); finish();});
+      }};
+    };
+  });
+  try {
+    await page.getByRole('button', {name: '移除附件 figure.png'}).click();
+    assert.equal(await page.evaluate(() => window.attachmentMotionStarts), 1);
+    await page.evaluate(() => document.documentElement.setAttribute('data-reduce-motion', 'true'));
+    await expect(page.locator('html')).toHaveAttribute('data-motion-reduced', 'true');
+    await expect(page.getByTestId('assistant-composer-attachments')).toHaveCount(0);
+    assert.equal(await page.evaluate(() => window.attachmentMotionSkips), 1);
+    await expect(page.getByTestId('assistant-composer-input')).toHaveValue('保留附件草稿');
+
+    await page.evaluate(() => document.documentElement.removeAttribute('data-reduce-motion'));
+    await expect(page.locator('html')).toHaveAttribute('data-motion-reduced', 'false');
+    await page.evaluate(() => {
+      const original = Blob.prototype.arrayBuffer;
+      Blob.prototype.arrayBuffer = () => new Promise(resolve => {
+        window.finishImageRead = () => resolve(new Uint8Array([1, 2, 3]).buffer);
+      });
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['png'], 'new-figure.png', {type: 'image/png'}));
+      document.querySelector('[data-testid="assistant-composer-input"]')
+        .dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));
+      Blob.prototype.arrayBuffer = original;
+    });
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await expect(page.locator('html')).toHaveAttribute('data-motion-reduced', 'true');
+    await page.evaluate(() => window.finishImageRead());
+    await expect(page.getByTestId('assistant-composer-attachments')).toContainText('new-figure.png');
+    assert.equal(await page.evaluate(() => window.attachmentMotionStarts), 1,
+      'a file read started before the preference changed must not start another transition');
+    await expect(page.getByTestId('assistant-composer-input')).toHaveValue('保留附件草稿');
+  } finally {
+    await page.evaluate(() => {
+      document.documentElement.removeAttribute('data-reduce-motion');
+      delete document.querySelector('.assistant-attachment-strip').startViewTransition;
+      window.mount();
+    });
+    await page.emulateMedia({reducedMotion: 'no-preference'});
+    await resetComposer();
+  }
 });
 
 test('composer serializes overlapping image reads', async () => {
@@ -1069,6 +1134,10 @@ test('tool details defer payload work until keyboard expansion and reuse unchang
   await expect(summary).toBeFocused();
 
   await page.emulateMedia({reducedMotion: 'reduce'});
-  const duration = await details.evaluate(element => getComputedStyle(element, '::details-content').transitionDuration);
-  assert.ok(duration.split(',').every(value => parseFloat(value) <= 0.00001), duration);
+  const reducedTransition = await details.evaluate(element => {
+    const style = getComputedStyle(element, '::details-content');
+    return {duration: style.transitionDuration, properties: style.transitionProperty};
+  });
+  assert.ok(reducedTransition.duration.split(',').every(value => parseFloat(value) === 0.1), JSON.stringify(reducedTransition));
+  assert.deepEqual(reducedTransition.properties.split(',').map(value => value.trim()), ['opacity', 'display', 'overlay']);
 });

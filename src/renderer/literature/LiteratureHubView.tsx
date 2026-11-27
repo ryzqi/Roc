@@ -70,6 +70,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const [readerMode, setReaderMode] = useState<'browse' | 'read'>('browse');
   const [inspectorOpen, setInspectorOpen] = useState(store.selectedId !== null);
   const [inspectorSection, setInspectorSection] = useState<'paper' | 'processing'>('paper');
+  const [inspectorMotion, setInspectorMotion] = useState<{id: string; direction: -1 | 0 | 1} | null>(null);
   const [monitorLock, setMonitorLock] = useState(false);
   const monitorLockRef = useRef(false);
   const onMonitorLock = useCallback((locked: boolean) => {monitorLockRef.current = locked; setMonitorLock(locked);}, []);
@@ -137,9 +138,10 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
       requestAnimationFrame(() => paperPickerRef.current?.focus({preventScroll: true}));
     });
   };
-  const inspectPaper = (id: string): void => {
+  const inspectPaper = (id: string, direction: -1 | 0 | 1 = 0): void => {
     store.select(id, commitSelection => {
       commitSelection();
+      setInspectorMotion({id, direction});
       setInspectorSection('paper');
       setInspectorOpen(true);
     });
@@ -454,8 +456,9 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           open={inspectorOpen} overlay={!browsing || inspectorOverlay} anchorRef={libraryCanvasRef}
           returnFocusRef={inspectorTriggerRef} title={inspectorSection === 'paper' ? '文献详情' : '后台处理'}
           testId="literature-inspector" onClose={() => setInspectorOpen(false)}>
-          {inspectorSection === 'paper' ? <LibraryInspector key={JSON.stringify([store.projectId, store.selectedId])}
-            literature={store} onRead={selectPaper} onOpenKnowledge={openPipelineKnowledge}/>
+          {inspectorSection === 'paper' ? <LibraryInspector key={store.projectId}
+            literature={store} direction={inspectorMotion?.id === store.selectedId ? inspectorMotion.direction : 0}
+            onRead={selectPaper} onOpenKnowledge={openPipelineKnowledge}/>
             : store.projectId === null ? null : <LiteratureProcessingPanel client={store.client} projectId={store.projectId}
               presentation="inspector" writable={scope.writable} pickFile={actions.pickFile} addPdfToItem={store.addPdfToItem}
               onOpenPdf={scope.openFileInCanvas} onDocumentsChanged={store.reloadDocuments}

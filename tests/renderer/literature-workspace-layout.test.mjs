@@ -25,6 +25,8 @@ before(async () => {
   }], script: `
     import React,{useRef,useState} from 'react';
     import {createRoot} from 'react-dom/client';
+      import {LazyMotion,domMax} from 'motion/react';
+      import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
     import {flushSync} from 'react-dom';
     import {LiteratureHubView} from './src/renderer/literature/LiteratureHubView';
     import {LibraryList} from './src/renderer/literature/LibraryList';
@@ -93,7 +95,7 @@ before(async () => {
         </LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
     const root=createRoot(document.getElementById('root'));
-    window.mount=()=>flushSync(()=>root.render(<Harness/>));
+    window.mount=()=>flushSync(()=>root.render(<MotionPreferenceProvider><LazyMotion features={domMax} strict><Harness/></LazyMotion></MotionPreferenceProvider>));
   `, style:'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,sans-serif}#root{width:820px}'});
   await writeFile(join(directory,'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory,'data'))});

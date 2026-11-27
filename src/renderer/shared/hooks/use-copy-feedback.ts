@@ -18,31 +18,42 @@ export function useCopyFeedback(resetAfterMs = 1500): CopyFeedback {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  const generation = useRef(0);
+  const mounted = useRef(false);
 
   useEffect(
-    () => () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-      }
+    () => {
+      mounted.current = true;
+      return () => {
+        mounted.current = false;
+        generation.current++;
+        if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      };
     },
     []
   );
 
   const copy = useCallback(
     (value: string) => {
+      const request = ++generation.current;
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
       }
       void (async () => {
         try {
           await navigator.clipboard.writeText(value);
+          if (!mounted.current || request !== generation.current) return;
           setCopied(true);
           setError(null);
         } catch {
+          if (!mounted.current || request !== generation.current) return;
           setCopied(false);
           setError('剪贴板不可用，请手动复制。');
         }
-        timerRef.current = window.setTimeout(() => setCopied(false), resetAfterMs);
+        timerRef.current = window.setTimeout(() => {
+          if (mounted.current && request === generation.current) setCopied(false);
+          timerRef.current = null;
+        }, resetAfterMs);
       })();
     },
     [resetAfterMs]

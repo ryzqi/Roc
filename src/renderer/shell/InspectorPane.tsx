@@ -1,12 +1,12 @@
-import {useEffect, useId, useRef, useState, type ReactNode, type RefObject} from 'react';
+import {useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject} from 'react';
 import {
   autoUpdate, FloatingFocusManager, FloatingPortal, size,
-  useDismiss, useFloating, useInteractions, useRole, useTransitionStatus
+  useDismiss, useFloating, useInteractions, useRole
 } from '@floating-ui/react';
 import {X} from 'lucide-react';
-import {motionDurationSeconds} from '../shared/motion';
 import {OVERLAY_Z_INDEX} from './overlay-stack';
 import {useOverlayBehavior} from './use-overlay-behavior';
+import {useFloatingSurfacePresence} from './use-floating-surface-presence';
 import './inspector-pane.css';
 
 type Bounds = {x: number; y: number; width: number; height: number};
@@ -30,7 +30,7 @@ export function InspectorPane({open, overlay, anchorRef, returnFocusRef, title, 
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
-  const {refs, context, floatingStyles} = useFloating({
+  const {refs, context, floatingStyles, isPositioned, update: updatePosition} = useFloating({
     open: open && overlay, onOpenChange: value => {if (!value) onClose();},
     strategy: 'fixed', placement: 'left-start', whileElementsMounted: autoUpdate,
     middleware: [size({apply({elements}) {
@@ -40,6 +40,14 @@ export function InspectorPane({open, overlay, anchorRef, returnFocusRef, title, 
       elements.floating.style.height = `${rect.height}px`;
     }})]
   });
+  useLayoutEffect(() => {
+    if (open && overlay) updatePosition();
+  }, [open, overlay, updatePosition]);
+  const setFloating = refs.setFloating;
+  const setPanel = useCallback((element: HTMLDivElement | null): void => {
+    setFloating(element);
+    panelRef.current = element;
+  }, [setFloating]);
   const setReference = refs.setReference;
   // The canvas host's ref is attached after its children finish their layout
   // effects. Read it after that commit, including an initially narrow window.
@@ -77,7 +85,7 @@ export function InspectorPane({open, overlay, anchorRef, returnFocusRef, title, 
   });
   const role = useRole(context, {role: 'dialog'});
   const {getFloatingProps} = useInteractions([dismiss, role]);
-  const {isMounted, status} = useTransitionStatus(context, {duration: motionDurationSeconds.overlay * 1000});
+  const {isMounted, state, visible, reduced} = useFloatingSurfacePresence(context, isPositioned, 'drawer');
   useOverlayBehavior({
     open: open && overlay, panelRef, overlayId, onRequestClose: onClose,
     canClose: () => true, inertBackground: false, modal: false, manageFocus: false, captureEscape: true
@@ -101,14 +109,17 @@ export function InspectorPane({open, overlay, anchorRef, returnFocusRef, title, 
     </aside>
   </div>;
   return <>{isMounted && bounds !== null ? <FloatingPortal>
-    <div className="inspector-pane-backdrop" aria-hidden="true" data-state={status}
-      style={{left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height, zIndex: OVERLAY_Z_INDEX.dialog}}/>
+    <div className="inspector-pane-backdrop" aria-hidden="true" data-state={state} data-motion-reduced={reduced}
+      data-testid={`${testId}-scrim`}
+      style={{left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height,
+        visibility: visible ? undefined : 'hidden', zIndex: OVERLAY_Z_INDEX.dialog}}/>
     <FloatingFocusManager context={context} modal={false} initialFocus={-1}
-      disabled={!open} closeOnFocusOut={false} returnFocus={returnFocusRef ?? true}>
-      <div ref={element => {refs.setFloating(element); panelRef.current = element;}}
+      disabled={!open || !isPositioned} closeOnFocusOut={false} returnFocus={returnFocusRef ?? true}>
+      <div ref={setPanel}
         {...getFloatingProps()} aria-labelledby={titleId} aria-hidden={!open || undefined} inert={!open}
-        className="inspector-pane-overlay" data-testid={testId} data-presentation="overlay" data-state={status}
-        style={{...floatingStyles, zIndex: OVERLAY_Z_INDEX.dialog}}>
+        className="inspector-pane-overlay" data-testid={testId} data-presentation="overlay" data-state={state}
+        data-motion-reduced={reduced}
+        style={{...floatingStyles, visibility: visible ? undefined : 'hidden', zIndex: OVERLAY_Z_INDEX.dialog}}>
         <section className="inspector-pane-panel">{content}</section>
       </div>
     </FloatingFocusManager>

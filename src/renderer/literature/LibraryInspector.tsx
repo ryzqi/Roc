@@ -1,4 +1,7 @@
-import {BookOpen, Copy, FilePlus2, Sparkles} from 'lucide-react';
+import {AnimatePresence} from 'motion/react';
+import {BookOpen, FilePlus2, Sparkles} from 'lucide-react';
+import {CopyFeedbackIcon} from '../shared/CopyFeedbackIcon';
+import {LibraryPresence} from './LibraryPresence';
 import {useWorkspaceScope} from '../app/workspace-scope';
 import {useCopyFeedback} from '../shared/hooks/use-copy-feedback';
 import {ActionButton} from '../shared/form-ui';
@@ -14,11 +17,26 @@ import type {ResearchDocument} from '../../shared/types';
 import './library-inspector.css';
 
 /** Metadata and receipts share one selection; no parsing state is inferred from time. */
-export function LibraryInspector({literature, onRead, onOpenKnowledge}: {
+type LibraryInspectorProps = {
   literature: LiteratureStore;
+  direction?: -1 | 0 | 1;
   onRead: (id: string) => void;
   onOpenKnowledge: (target: 'index' | 'wiki') => void;
-}): React.JSX.Element {
+};
+
+export function LibraryInspector(props: LibraryInspectorProps): React.JSX.Element {
+  const {literature, direction = 0} = props;
+  return <div className="library-inspector-handoff">
+    <AnimatePresence initial={false}>
+      <LibraryPresence key={literature.selectedId ?? 'empty'} className="library-inspector-page"
+        event="content-handoff" direction={direction}>
+        <LibraryInspectorContent {...props}/>
+      </LibraryPresence>
+    </AnimatePresence>
+  </div>;
+}
+
+function LibraryInspectorContent({literature, onRead, onOpenKnowledge}: LibraryInspectorProps): React.JSX.Element {
   const scope = useWorkspaceScope();
   const copy = useCopyFeedback();
   const item = literature.selected;
@@ -54,7 +72,7 @@ export function LibraryInspector({literature, onRead, onOpenKnowledge}: {
           <BookOpen size={14} aria-hidden="true"/>阅读
         </ActionButton>
         <ActionButton variant="compact" onClick={() => copy.copy(item.bibliography.citationKey)}>
-          <Copy size={14} aria-hidden="true"/>{copy.copied ? '已复制' : '复制引用键'}
+          <CopyFeedbackIcon copied={copy.copied}/>{copy.copied ? '已复制' : '复制引用键'}
         </ActionButton>
         <ActionButton variant="compact" disabled={literature.projectId === null || !scope.writable} loading={literature.assistant.pending}
           onClick={() => void literature.askAssistantAboutSelected()}>

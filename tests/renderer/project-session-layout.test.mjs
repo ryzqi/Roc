@@ -17,6 +17,7 @@ before(async()=>{
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LazyMotion,domMax,MotionConfig} from 'motion/react';
+    import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
     import {SWRConfig} from 'swr';
     import {ProjectPortalView} from './src/renderer/project/ProjectPortalView';
     import {SessionListView} from './src/renderer/assistant/SessionListView';
@@ -41,9 +42,9 @@ before(async()=>{
       assistantRunning={false} onOpenGit={()=>{}} onOpenManagement={()=>{}} layoutPreset="research" onChangePreset={()=>{}}/>;}
     const root=createRoot(document.getElementById('root'));let key=0;
     window.pinNow=id=>flushSync(()=>document.querySelector('[data-testid="portal-card-pin-'+id+'"]').click());
-    window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="user"><LazyMotion features={domMax} strict><React.Fragment key={++key}>
+    window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="user"><MotionPreferenceProvider><LazyMotion features={domMax} strict><React.Fragment key={++key}>
       {surface==='chrome'?<Chrome/>:surface==='portal'?<ProjectPortalView client={client} createFormRequested={false} onRequestConsumed={()=>{}} onOpenProject={id=>window.opened.push(id)}/>:surface==='search'?<Search/>:<SessionListView client={client} activeThreadId="one" onSelectThread={id=>window.opened.push(id)} onStartNewThread={()=>window.created++} onThreadDeleted={()=>{}}/>}
-    </React.Fragment></LazyMotion></MotionConfig></SWRConfig>));
+    </React.Fragment></LazyMotion></MotionPreferenceProvider></MotionConfig></SWRConfig>));
   `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory,'data'))});app.whenReady().then(()=>new BrowserWindow({show:false,width:1450,height:900}).loadFile(${JSON.stringify(join(directory,'index.html'))}));`);
   app=await _electron.launch({executablePath:electronPath,args:[join(directory,'main.cjs')]});
@@ -232,17 +233,37 @@ test('small pin reversals retain visual position, project focus, disclosures and
     await expect(page.locator('[data-project-body]')).toHaveCount(1);
     assert.equal(await page.evaluate(()=>window.pinCycleAnimations.every(animation=>animation.playState==='idle')),true);
     await page.getByTestId('portal-search').fill('');
-    await page.emulateMedia({reducedMotion:'reduce'});
-    assert.equal(await page.evaluate(()=>{
-      window.pinNow('motion-1');
-      return [...document.querySelectorAll('[data-project-id]')].flatMap(row=>row.getAnimations()).length;
-    }),0,'reduced motion keeps the pin result without displacement');
-    await page.evaluate(()=>window.pinNow('motion-1'));
+    for (const preference of ['app', 'system']) {
+      assert.ok(await page.evaluate(()=>{
+        window.pinNow('motion-1');
+        window.pinPreferenceAnimations=[...document.querySelectorAll('[data-project-id]')].flatMap(row=>row.getAnimations());
+        for(const animation of window.pinPreferenceAnimations) animation.pause();
+        return window.pinPreferenceAnimations.length;
+      })>0);
+      if(preference==='app') await page.evaluate(()=>document.documentElement.setAttribute('data-reduce-motion','true'));
+      else await page.emulateMedia({reducedMotion:'reduce'});
+      await expect(page.locator('html')).toHaveAttribute('data-motion-reduced','true');
+      assert.equal(await page.evaluate(()=>window.pinPreferenceAnimations.every(animation=>animation.playState==='idle')),true,
+        preference+' preference cancels an ongoing reorder');
+      const reduced=await page.evaluate(()=>{
+        window.pinNow('motion-1');
+        return [...document.querySelectorAll('[data-project-id]')].flatMap(row=>row.getAnimations()).map(animation=>({
+          duration:animation.effect.getTiming().duration,frames:animation.effect.getKeyframes()
+        }));
+      });
+      assert.ok(reduced.length>0,'reduced motion retains opacity feedback');
+      assert.ok(reduced.every(animation=>animation.duration===100 && animation.frames.every(frame=>
+        typeof frame.opacity==='string' && !('translate' in frame) && !('transform' in frame))),JSON.stringify(reduced));
+      if(preference==='app') await page.evaluate(()=>document.documentElement.removeAttribute('data-reduce-motion'));
+      else await page.emulateMedia({reducedMotion:'no-preference'});
+      await expect(page.locator('html')).toHaveAttribute('data-motion-reduced','false');
+    }
   } finally {
     await page.emulateMedia({reducedMotion:'reduce'});
     await page.evaluate(()=>{
       window.projectData.splice(0,window.projectData.length,...window.savedProjects);
-      delete window.savedProjects;delete window.pinCycleAnimations;
+      delete window.savedProjects;delete window.pinCycleAnimations;delete window.pinPreferenceAnimations;
+      document.documentElement.removeAttribute('data-reduce-motion');
       document.getElementById('root').style.height='';
       mount('portal');
     });

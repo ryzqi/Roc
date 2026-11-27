@@ -12,15 +12,20 @@
 | modal | 居中弱淡入和小范围缩放 | `ModalShell` 继续拥有遮罩、焦点、关闭守卫；退出树不能再次触发操作 |
 | drawer | 从所在边缘进入，遮罩同期开关 | 重资源保持挂载；逻辑 open、视觉 present、可交互状态分开；断点转换先稳定几何 |
 | content-handoff | 新模块 ready 后交接，加载期间保持原页，明确目标 | 正文、PDF、图谱、终端不做整页截图或缩放；草稿宿主身份不变 |
-| list-small | 仅稳定、可见且小规模的项目重排提供位置连续性 | 搜索结果立即更新；大集合、虚拟行和正文高度变化不做整列 FLIP |
+| list-small | 仅稳定、可见且小规模的项目重排提供位置连续性 | 大集合筛选仅淡入；文献移除只对可视区且位移不超过两行的保留行补位，不测量整列 |
+| icon / number | 同位图标交叉淡入；计数仅个位过渡 | 结果必须来自真实回执；新计数立即可访问 |
+| removal / error | 移除像素短暂消隐；新错误原位短微震 | 退出像素立即 inert；错误正文保持，不延迟业务提交 |
 | drag | 指针位置直接映射宽度，RAF 合并重复输入 | 不加 tween；释放或键盘结束才持久化；Escape 还原起点且不写中间值 |
-| disclosure | 原生 `details` 保持双向展开与读屏语义 | 允许 `::details-content` 的尺寸过渡；阅读恢复时取消过渡以保持滚动锚点 |
+| disclosure | 原生 `details` 保持双向展开与读屏语义 | 不做尺寸动画，立即反映 open 状态并保持滚动锚点 |
 
-P2 的 `motionTransitions` 提供上述七个事件入口，原有面板导出引用同一对象；遮罩保持原有独立预设。
-CSS 的 micro/fast/base/overlay 与 Motion 秒值由合同检查对应，原有 fast/base/slow 数值保留，
-slow 明确指向兼容刻度。普通 utility 使用 `ui-motion-*`，属性仍由调用者明确指定。
-P3 的活动栏和画布子导航共用 `SelectionIndicator`，每个实例以 `useId` 隔离
-layout identity；只测量指示条，活动栏提供实际滚动容器的 `layoutScroll`。
+`motionTransitions` 与 `getMotionTransition` / `getMotionVariants` 是唯一 JS 时序入口；
+CSS 毫秒与 Motion 秒值由合同检查对应。微交互 90ms、快速 150ms、浮层进入 220ms、
+退出 150ms、内容进入 150ms / 退出 110ms；图标 140ms、移除 110ms、数字 180ms、
+错误 260ms，全部单次过渡不超过 300ms。弹簧使用 duration 与 bounce:0，避免物理
+弹簧尾部超出预算。遮罩沿用所属 modal/drawer 的同一进退时序。
+
+活动栏、画布导航与文献分段共用 `SelectionIndicator`，以 `useId` 隔离 layout identity。
+减少动态效果时移除装饰层 projection，控制本身不重挂；活动栏提供实际滚动容器的 layoutScroll。
 
 共享 [ActionStatus / TransientStatus](../../src/renderer/shared/action-status.tsx)只接收展示状态。
 `ActionStatus` 的 pending/success 默认使用 `status`，error 使用常驻 `alert`；若外层已拥有
@@ -36,7 +41,7 @@ live region，传 `announce={false}`，避免重复播报。`TransientStatus` �
 FocusScope 到退出结束的既有合同，避免改变 Radix 的隐藏、滚动锁和嵌套焦点生命周期；
 它的关闭守卫与快速重开仍由原逻辑控制，是本阶段的明确例外。
 
-原生 CSS transitions 优先用于受控显示、选中和 anchored popover；需要保留卸载视觉时才引入 presence。已有 `AnimatePresence` 必须让退出子树读取实时 presence，不能依靠卸载前捕获的 `open=true`。View Transition 只作用于附件等局部稳定身份，检查支持与拒绝并在反向、换对象或卸载时跳过旧 transition。
+原生 CSS transitions 用于受控显示和 anchored popover；只在保留卸载视觉时引入 presence。Floating UI 首次定位前隐藏；同一次挂载保留 positioned/entered 历史，退出坐标不被 isPositioned=false 清空，快速重开从当前插值点折返。已有 `AnimatePresence` 必须让退出子树读取实时 presence，不能依靠卸载前捕获的 `open=true`。View Transition 只作用于附件等局部稳定身份，检查支持与拒绝并在反向、换对象或卸载时跳过旧 transition。
 
 `ModalShell` 的焦点恢复保留首次打开者（包含无打开者的情况），以实际 panel DOM 是否脱离文档判断卸载。React StrictMode 的 effect 重放和 ref detach 不代表弹层已移除；不能在模拟清理时把焦点还给背景。结束交互只尝试一次恢复，即使旧打开者处于父层的 inert 树内，也不在视觉卸载时重试，防止父层重开后抢焦点。父级直接卸载仍 present 的弹层保留真实恢复。
 
@@ -63,9 +68,33 @@ opacity/transform 负责边缘移动；scrim 同步过渡，关闭时不接收�
 
 ## 减少动态效果
 
-根 `MotionConfig reducedMotion="user"` 禁用 transform 与布局动画，仍可能保留 opacity。全局 CSS 同时抑制 transition、循环动画和 `::details-content`。用文字、状态属性和焦点保留同等信息；不要让“没有位移”成为菜单或抽屉仍可交互的关闭状态。
+`MotionPreferenceProvider` 与 `useEffectiveReducedMotion` 共用一个 live store，合并系统媒体查询、
+html/body/#root 的 `data-reduce-motion` / `data-reduced-motion` 输入，以及继承的
+`MotionConfig always`。输出 `data-motion-reduced` 不作为输入，避免自我锁定。
+Provider 不创建 DOM 容器或重挂业务树；Portals 和独立浮层也消费同一偏好。
 
-原生 `scroll`、文本输入、拖动和布局恢复直接落到最终态。组件依赖系统偏好只用于必须立即改变视觉生命周期的场景，不新建独立偏好存储。
+减少动态效果时位移、缩放、微震立即归零，只保留 100ms opacity。Motion 已在退出的
+视觉子层通过局部 transformTemplate 立即清除残留变换；定位 wrapper、虚拟滚动和
+居中所需结构 transform 保留。CSS 停止循环动画，保留 display/overlay 离散退场。
+原生 scroll、文本输入、拖动与布局恢复直接落到最终态。ViewTransition / WAAPI
+在偏好变更、滚动或卸载时取消，不等待旧动画完成。
+
+## 文献状态过渡
+
+Inspector 固定外框，只交接内部页面；旧页退出立即 inert/aria-hidden，当前页保留独立
+ResourceStatus 身份。方向取自列表当前可见排序中的前后位置，非列表选择不推测方向。
+批量栏与 Undo 退出同样隔离交互；六秒撤销窗口和焦点所有权
+仍由原业务 hook 决定。复制使用请求序号与卸载守卫，旧回执不能覆盖最新结果。
+
+列表删除立即提交真实成员关系；可见旧行最多保留 110ms 的 inert 装饰副本，
+移除全部 ID/test hooks，不保留 React 事件。后续行最多移动两行距离，测量最多 30
+可见行，不改 Virtuoso 定位 wrapper。新变更、滚动、缩放或减少动态效果立即取消；
+筛选不生成删除副本，大集合筛选只轻淡入。滚动用 passive capture 与 scrollend
+（含静止回退）暂停行级悬停和循环反馈，不劫持原生滚轮。
+
+首次加载延迟 150ms 才显示 64px 同高骨架；进度仅来自回执，进行中 1.8s 透明呼吸，
+完成转为静态勾号。计数等宽、仅个位过渡；独立可访问文本立即提供当前完整数值，
+装饰数字整体 aria-hidden，旧数字退出期间也不进入可访问树。
 
 ## P4 助手与任务反馈
 
@@ -106,11 +135,11 @@ Zotero 暂停与当前题录收录/取消保留独立锁，取消请求等待最
 同样等待真实终态或当前段返回。Wiki 的来源、BasisDigest、修订和发布身份、
 工件的 sourceHash 和 expectedRevision 不作为动画计时或虚构成功的依据。
 
-文献虚拟行、PDF 正文、图谱、CodeMirror、Git diff 和 xterm 不扩大动效范围；
+除上文明确的可视行移除外，PDF 正文、图谱、CodeMirror、Git diff 和 xterm 不扩大动效范围；
 选择、滚动定位、草稿、来源检视和后端授权继续由原模块控制。
 
 ## 静态约束
 
-禁止 `transition-all` 和任意写死的 Tailwind `duration-[…]`。优先声明 opacity、transform、color、background-color、border-color 等具体属性。高频输入路径不动画 filter、blur、shadow、width、height 或整个虚拟列表的 layout。原生披露尺寸过渡是明确例外。
+禁止 `transition-all` 和任意写死的 Tailwind `duration-[…]`。优先声明 opacity、transform、color、background-color、border-color 等具体属性。高频输入路径不动画 filter、blur、shadow、width、height 或整个虚拟列表的 layout。原生披露保留语义且不做尺寸动画。
 
 共享状态组件只处理文字、图标、可访问属性和短反馈，不持有业务服务、权限判断、请求身份或编辑草稿。失败原因和授权内容常驻可达；技术版本、请求 ID 与完整原值进入明确的诊断或来源入口。

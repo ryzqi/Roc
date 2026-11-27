@@ -20,3 +20,4 @@
 .hitl-approval-action:active { background: var(--overlay-active); transform: translateY(1px); }
 .hitl-approval-action:disabled { opacity: .5; }
 @media (prefers-reduced-motion: reduce) { .hitl-approval-action:active { transform: none; } }
+:where([data-motion-reduced='true']) .hitl-approval-action:active { transform: none; }

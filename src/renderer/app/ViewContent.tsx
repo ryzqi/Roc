@@ -5,7 +5,8 @@ import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary } from '../shell/LazyBoundary';
 import { ViewActivity } from '../shared/view-activity';
-import { motionTransitions } from '../shared/motion';
+import { getMotionTransition } from '../shared/motion';
+import { useEffectiveReducedMotion } from '../shared/motion-preference';
 import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, type ViewProps } from './view-registry';
 import { retainedViewsAfterNavigation, viewHostFor } from './view-retention';
 
@@ -33,6 +34,7 @@ const viewLabels: Record<AppViewTarget, string> = {
  */
 export function ViewContent({ view, subview = null, projectId }: ViewContentProps): React.JSX.Element {
   useViewResolution();
+  const reducedMotion = useEffectiveReducedMotion();
   const target = subview ?? view;
   const [shownView, setShownView] = useState<AppViewTarget>(target);
   const [retained, setRetained] = useState<readonly AppViewTarget[]>(() => [target]);
@@ -80,7 +82,7 @@ export function ViewContent({ view, subview = null, projectId }: ViewContentProp
       })}
       <m.div key={shownView} aria-hidden="true" data-testid="canvas-content-handoff"
         className="pointer-events-none absolute inset-0 bg-surface-base"
-        initial={{ opacity: 0.08 }} animate={{ opacity: 0 }} transition={motionTransitions['content-handoff']} />
+        initial={{ opacity: 0.08 }} animate={{ opacity: 0 }} transition={getMotionTransition('content-handoff', reducedMotion)} />
       </div>
     </div>
   );

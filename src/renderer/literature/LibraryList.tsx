@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
+import {AnimatePresence, useIsPresent} from 'motion/react';
 import {AlertCircle, BookOpen, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal, Sparkles, Unlink, X} from 'lucide-react';
 import type {ResearchLibraryItem} from '../../shared/types';
 import type {LibraryVirtualizedRowsHandle} from './LibraryVirtualizedRows';
@@ -16,12 +17,17 @@ import {useLiterature} from './literature-scope';
 import {LibraryPaperRow, type LibraryRowActions} from './LibraryPaperRow';
 import {libraryAvailability, type LibraryStatusGroup} from './library-availability';
 import {useLibraryRemoval} from './use-library-removal';
+import {SelectionIndicator} from '../shared/SelectionIndicator';
+import {LibraryPresence} from './LibraryPresence';
+import {useLibraryRowMotion} from './use-library-row-motion';
+import {LibraryLoading} from './LibraryLoading';
+import {AnimatedCount} from '../shared/AnimatedCount';
 import './library-list.css';
 
 export type LibraryListProps = {
   compact?: boolean;
   entryType?: string | null;
-  onOpenItem?: (id: string) => void;
+  onOpenItem?: (id: string, direction: -1 | 0 | 1) => void;
   onReadItem?: (id: string) => void;
   showActionError?: boolean;
   onRequestImport: () => void;
@@ -121,6 +127,7 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
       (statusGroup === 'all' || availability.get(item.id)?.group === statusGroup)),
   [baseItems, removal.hiddenIds, statusGroup, availability]);
   const checkedItems = useMemo(() => checkedIds.size === 0 ? [] : items.filter(item => checkedIds.has(item.id)), [items, checkedIds]);
+  useLibraryRowMotion(listBodyRef, items, scope, virtualizerReady, removal.hiddenIds);
   const checkedItemsKey = checkedItems.map(item => item.id).join(':');
   const selectedDocuments = useMemo(() => literature.documentsStatus === 'ready'
     ? literature.documents.filter(document => document.libraryItemId === literature.selectedId) : undefined,
@@ -282,7 +289,10 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
     },
     open(id) {
       const current = currentRef.current;
-      if (current.onOpenItem) current.onOpenItem(id); else current.literature.select(id);
+      const previous = current.items.findIndex(item => item.id === current.literature.selectedId);
+      const next = current.items.findIndex(item => item.id === id);
+      const direction = previous < 0 || next < 0 || next === previous ? 0 : next > previous ? 1 : -1;
+      if (current.onOpenItem) current.onOpenItem(id, direction); else current.literature.select(id);
     },
     read(id) {currentRef.current.onReadItem?.(id);},
     ask(item) {void currentRef.current.literature.askAssistantAboutItem?.(item);},
@@ -452,7 +462,7 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
       {literature.status === 'error' && items.length === 0 ? <EmptyState compact tone="error"
         title={literature.error ?? '读取文献库失败'} action={{label: '重新读取文献库', onClick: literature.reload}}/>
         : literature.status === 'loading' && literature.items.length === 0
-          ? <EmptyState compact tone="loading" title="正在读取文献库…" testId="literature-loading"/>
+          ? <LibraryLoading/>
           : unfilteredEmpty ? <div className="library-empty" data-testid="literature-empty">
             <div className="library-drop-zone" data-testid="literature-drop-zone">
               <FilePlus2 size={24} aria-hidden="true"/><p>{writable ? '拖入 PDF 或粘贴 DOI' : '当前文献库为空'}</p>
@@ -474,7 +484,7 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
               </ul>}
     </div>
     {literature.status === 'ready' ? <div className="library-list-footer">
-      <span data-testid="literature-count">已加载 {literature.items.length.toLocaleString('zh-CN')} / {literature.total?.toLocaleString('zh-CN')} 条</span>
+      <span data-testid="literature-count">已加载 <AnimatedCount value={literature.items.length}/> / <AnimatedCount value={literature.total ?? literature.items.length}/> 条</span>
       {entryType !== null ? <span>当前分类 {items.length.toLocaleString('zh-CN')} 条</span> : null}
       {statusGroup !== 'all' ? <span>已加载文献状态</span> : null}
       {literature.includeArchived ? <span>含已归档</span> : null}
@@ -484,19 +494,21 @@ export function LibraryList({compact = false, entryType = null, onOpenItem, onRe
       </button> : null}
     </div> : null}
     <div className="library-floating-actions">
-      {selecting && checkedItems.length > 0 ? <BulkCitationActions key={checkedItemsKey} items={checkedItems}
+      <AnimatePresence initial={false}>
+      {selecting && checkedItems.length > 0 ? <LibraryPresence key="bulk"><BulkCitationActions key={checkedItemsKey} items={checkedItems}
         literature={literature} isCurrent={isCurrent} canRemove={canRemove} pendingRemoval={removal.pending}
-        onRemove={() => removal.remove(checkedItems)} onClear={clearSelection}/> : null}
-      {removal.undoCount > 0 ? <div className="library-undo-toast" data-testid="literature-undo-toast" role="status">
+        onRemove={() => removal.remove(checkedItems)} onClear={clearSelection}/></LibraryPresence> : null}
+      {removal.undoCount > 0 ? <LibraryPresence key="undo"><div className="library-undo-toast" data-testid="literature-undo-toast" role="status">
         <span>已移除 {removal.undoCount.toLocaleString('zh-CN')} 篇</span>
         <button type="button" onClick={event => undoRemoval(event.currentTarget)} disabled={removal.pending} data-testid="literature-undo">
           {removal.pending ? '正在恢复…' : '撤销'}
         </button>
         <button type="button" onClick={removal.dismiss} aria-label="关闭撤销提示" className="library-icon-button"><X size={14} aria-hidden="true"/></button>
-      </div> : null}
-      {feedbackError === null || feedbackError === undefined ? null : <p role="alert" className="library-feedback-error">
+      </div></LibraryPresence> : null}
+      </AnimatePresence>
+      {feedbackError === null || feedbackError === undefined ? null : <LibraryPresence key={feedbackError} event="error"><p role="alert" className="library-feedback-error">
         <AlertCircle size={14} aria-hidden="true"/><span>{feedbackError}</span>
-      </p>}
+      </p></LibraryPresence>}
       {literature.loadMoreError ? <p role="alert" className="library-feedback-error">{literature.loadMoreError}</p> : null}
       {literature.error && (literature.status === 'ready' || items.length > 0)
         ? <div data-testid="literature-refresh-error"><ErrorBar error={{level: 'page', message: literature.error, retry: literature.reload}}/></div> : null}
@@ -521,6 +533,7 @@ function LibraryStatusSegments({value, counts, onChange, inFilter = false}: {
   onChange: (value: LibraryStatusGroup) => void;
   inFilter?: boolean;
 }): React.JSX.Element {
+  const indicatorId = useId();
   const groups = STATUS_GROUPS.filter(group => group === 'all' || counts[group] > 0);
   return <div className="library-status-segments" role="radiogroup" aria-label="已加载文献状态">
     {groups.map(group => <button key={group} type="button" role="radio" aria-checked={value === group}
@@ -534,7 +547,9 @@ function LibraryStatusSegments({value, counts, onChange, inFilter = false}: {
         event.preventDefault(); onChange(groups[next]!);
         const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
         buttons?.[next]?.focus();
-      }}>{STATUS_LABELS[group]}</button>)}
+      }}>{value === group ? <SelectionIndicator layoutId={`library-status-${indicatorId}`}
+        className="library-status-indicator" testId={`literature-status-indicator-${inFilter ? 'filter' : 'toolbar'}`}/> : null}
+        <span className="library-status-label">{STATUS_LABELS[group]}</span></button>)}
   </div>;
 }
 
@@ -542,9 +557,10 @@ function BulkCitationActions({items, literature, isCurrent, canRemove, pendingRe
   items: ResearchLibraryItem[]; literature: LiteratureStore; isCurrent: () => boolean;
   canRemove: boolean; pendingRemoval: boolean; onRemove: () => void; onClear: () => void;
 }): React.JSX.Element {
+  const present = useIsPresent();
   const {copied, error, copy} = useCopyFeedback();
   const mounted = useRef(false);
-  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
+  useEffect(() => {mounted.current = present; return () => {mounted.current = false;};}, [present]);
   const exportAction = useAsyncAction(() => literature.client.api.research.exportBibliography({
     ids: items.map(item => item.id), format: 'bibtex'
   }), {label: '导出引用'});

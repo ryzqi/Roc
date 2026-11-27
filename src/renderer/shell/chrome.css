@@ -71,7 +71,7 @@
   transform: translateY(-3px);
   transition-property: opacity, transform, display, overlay;
   transition-duration: var(--duration-fast);
-  transition-timing-function: var(--ease-soft);
+  transition-timing-function: var(--ease-exit);
   transition-behavior: allow-discrete;
 }
 
@@ -85,6 +85,8 @@
 .titlebar-layout-menu:popover-open {
   opacity: 1;
   transform: translateY(0);
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-soft);
 }
 
 .titlebar-project-menu[inert],
@@ -114,4 +116,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chrome-control:not(:disabled):active { transform: none; }
+  .titlebar-project-menu,
+  .titlebar-layout-menu { transform: none !important; }
 }
+
+:where([data-motion-reduced='true']) .chrome-control:not(:disabled):active { transform: none; }
+:where([data-motion-reduced='true']) .titlebar-project-menu,
+:where([data-motion-reduced='true']) .titlebar-layout-menu { transform: none !important; }

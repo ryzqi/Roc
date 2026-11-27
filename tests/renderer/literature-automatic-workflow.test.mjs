@@ -1011,7 +1011,7 @@ test('row keyboard navigation, asking and reading retain the actual item identit
   await page.waitForFunction(() => window.fixture.snapshot().selectedId === 'paper-0' &&
     window.fixture.snapshot().documentsStatus === 'ready');
   await expect(page.getByTestId('literature-library-browse')).toBeVisible();
-  await expect(page.getByTestId('literature-inspector-title')).toContainText('0000 Scientific evidence');
+  await expect(page.locator('.library-inspector-page[data-present="true"]').getByTestId('literature-inspector-title')).toContainText('0000 Scientific evidence');
   await expect(page.getByTestId('paper-reader')).toBeHidden();
   await queue('startRun', {gate: 'row-assistant'});
   const ask = page.getByTestId('literature-ask-paper-1');

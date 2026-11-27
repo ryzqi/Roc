@@ -58,3 +58,5 @@
 - .agents/skills/desktop-agent-ui/SKILL.md
 
 - 240px 导航栏原 132px 行尾动作会覆盖标题中心；440px 以下缩为阅读 / 更多 68px，菜单及快捷键保留复制 / 问 AI。真实 hover 命中、窄栏 Tab 和明暗裁切全部通过。
+- 第三阶段计数不能只依赖 generic span aria-label；可访问树使用独立 sr-only 完整数值，视觉数字整体 aria-hidden。Inspector 的方向必须由当前可见排序决定，不能按原始 items 顺序推断。
+- 最终 4x CPU trace raw CLS=0、挂载 17/1000 行，但 RAF P95 32.5ms、最长 task 36.838ms；严格帧预算未达。LayerTree 不发 layerPainted 时，空事件不等于零重绘；采用 Paint / invalidation 节点追踪和实际 Paint Flashing 截图，明确不据此宣称完整 raster damage 或物理 FPS 通过。

@@ -22,6 +22,8 @@ before(async () => {
     script: `
       import React,{useCallback,useMemo,useRef,useState} from 'react';
       import {createRoot} from 'react-dom/client';
+      import {LazyMotion,domMax} from 'motion/react';
+      import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
       import {flushSync} from 'react-dom';
       import {LiteratureHubView} from './src/renderer/literature/LiteratureHubView';
       import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
@@ -123,7 +125,7 @@ before(async () => {
         </WorkspaceScopeProvider>;
       }
       const root=createRoot(document.getElementById('root'));let key=0;
-      window.mount=(count=1000)=>flushSync(()=>root.render(<Harness key={++key} count={count}/>));
+      window.mount=(count=1000)=>flushSync(()=>root.render(<MotionPreferenceProvider><LazyMotion features={domMax} strict><Harness key={++key} count={count}/></LazyMotion></MotionPreferenceProvider>));
       window.layoutShiftEntries=[];
       window.layoutShiftObserver=new PerformanceObserver(list=>{
         window.layoutShiftEntries.push(...list.getEntries().map(entry=>({
@@ -237,6 +239,8 @@ async function auditFloatingSurfaces(state) {
 
 async function capture(name) {
   if (!process.env.ROC_LITERATURE_CAPTURE) return;
+  await page.waitForFunction(() => document.getAnimations().every(animation =>
+    animation.effect?.getComputedTiming().iterations === Infinity || animation.playState === 'finished' || animation.playState === 'idle'));
   await mkdir(process.env.ROC_LITERATURE_CAPTURE, {recursive: true});
   await page.screenshot({path: join(process.env.ROC_LITERATURE_CAPTURE, name + '.png')});
 }
@@ -446,6 +450,32 @@ test('one thousand papers mount only the visible range and keep 64px rows throug
   assert.ok(await page.locator('.library-row').count() < 40);
 });
 
+test('Inspector handoff retains its frame and immediately isolates outgoing controls in normal and reduced motion', async () => {
+  for (const reduced of [false, true]) {
+    await page.emulateMedia({reducedMotion: reduced ? 'reduce' : 'no-preference'});
+    await mount();
+    await page.getByTestId('literature-row-paper-0').click();
+    await expect(page.locator('.library-inspector-page[data-present="true"]')).toHaveCSS('opacity', '1');
+    const frame = await page.getByTestId('literature-inspector-track').boundingBox();
+    const evidence = await page.evaluate(async () => {
+      window.selectLiteratureItem('paper-1');
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return Array.from(document.querySelectorAll('.library-inspector-page'), element => ({
+        present: element.dataset.present, inert: element.inert, hidden: element.getAttribute('aria-hidden'),
+        transform: getComputedStyle(element).transform, opacity: Number(getComputedStyle(element).opacity)
+      }));
+    });
+    const outgoing = evidence.find(entry => entry.present === 'false');
+    assert.ok(outgoing?.inert && outgoing.hidden === 'true', JSON.stringify(evidence));
+    assert.equal(evidence.filter(entry => entry.present === 'true').length, 1);
+    if (reduced) assert.ok(evidence.every(entry => entry.transform === 'none' || entry.transform === 'matrix(1, 0, 0, 1, 0, 0)'), JSON.stringify(evidence));
+    assert.deepEqual(await page.getByTestId('literature-inspector-track').boundingBox(), frame);
+    await expect(page.locator('.library-inspector-page')).toHaveCount(1);
+    await expect(page.locator('.library-inspector-page[data-present="true"]')).toHaveCSS('opacity', '1');
+  }
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+});
+
 test('single click selects an Inspector and explicit reading still opens the retained full reader', async () => {
   await mount();
   await page.getByTestId('literature-row-paper-0').click();
@@ -469,10 +499,90 @@ test('single click selects an Inspector and explicit reading still opens the ret
   await expect(page.getByTestId('literature-library-browse')).toBeHidden();
 });
 
+test('hover and filter trace preserves unrelated Inspector content in both themes', async t => {
+  await app.evaluate(({BrowserWindow}) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.show(); window.focus();
+  });
+  const cdp = await page.context().newCDPSession(page);
+  const paints = [];
+  const onPaint = event => paints.push(event);
+  cdp.on('LayerTree.layerPainted', onPaint);
+  const traceEvents = [];
+  cdp.on('Tracing.dataCollected', ({value}) => traceEvents.push(...value));
+  try {
+    await cdp.send('DOM.enable');
+    await cdp.send('LayerTree.enable');
+    for (const theme of ['light', 'dark']) {
+      await mount({theme});
+      await page.getByTestId('literature-row-paper-0').click();
+      await expect(page.locator('.library-inspector-page[data-present="true"]')).toBeVisible();
+      await page.mouse.move(1400, 820);
+      // Exclude initial mount/layer promotion from interaction damage records.
+      await page.waitForTimeout(350);
+      const {root} = await cdp.send('DOM.getDocument', {depth: -1});
+      const inspectorIds = new Set();
+      const collect = (node, inside = false) => {
+        const attributes = node.attributes ?? [];
+        const inspector = inside || attributes.some((value, index) =>
+          index % 2 === 0 && value === 'data-testid' && attributes[index + 1] === 'literature-inspector');
+        if (inspector) inspectorIds.add(node.backendNodeId);
+        for (const child of node.children ?? []) collect(child, inspector);
+      };
+      collect(root);
+      assert.ok(inspectorIds.size > 1, 'Inspector content must be in the inspected DOM');
+      paints.length = 0;
+      traceEvents.length = 0;
+      await cdp.send('Tracing.start', {categories: 'devtools.timeline,disabled-by-default-devtools.timeline.invalidationTracking,disabled-by-default-devtools.timeline.layers', transferMode: 'ReportEvents'});
+      await page.getByTestId('literature-row-paper-1').hover();
+      await page.waitForTimeout(160);
+      await page.getByTestId('literature-filter-toggle').click();
+      await expect(page.getByTestId('literature-filter-popover')).toBeVisible();
+      await page.waitForTimeout(260);
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('literature-filter-popover')).toBeHidden();
+      await page.waitForTimeout(180);
+      const complete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
+      await cdp.send('Tracing.end');
+      await complete;
+      if (process.env.ROC_LITERATURE_CAPTURE) {
+        await mkdir(process.env.ROC_LITERATURE_CAPTURE, {recursive: true});
+        await writeFile(join(process.env.ROC_LITERATURE_CAPTURE, 'paint-invalidation-' + theme + '.json'), JSON.stringify(traceEvents));
+      }
+      const viewport = await page.evaluate(() => ({width: innerWidth, height: innerHeight}));
+      const records = paints.map(({layerId, clip}) => ({layerId, ...clip}));
+      const paintEvents = traceEvents.filter(event => event.name === 'Paint');
+      const invalidations = traceEvents.filter(event => /InvalidationTracking$/.test(event.name));
+      assert.ok(paintEvents.length > 0 && invalidations.length > 0, 'Trace must contain actual Paint and invalidation events');
+      assert.deepEqual([...paintEvents, ...invalidations].filter(event => inspectorIds.has(event.args?.data?.nodeId)), [],
+        `${theme}: unrelated Inspector content was invalidated or painted`);
+      if (records.length > 0) assert.deepEqual(records.filter(rect => rect.width >= viewport.width * .95 && rect.height >= viewport.height * .95), [],
+        `${theme}: interaction repainted the full viewport`);
+      const evidence = {theme, viewport, tracePaintCount: paintEvents.length, invalidationCount: invalidations.length,
+        inspectorNodeCount: inspectorIds.size, unrelatedInspectorEvents: 0, layerPaintDamageCount: records.length,
+        maxDamageAreaRatio: records.length === 0 ? null : Math.max(...records.map(rect => rect.width * rect.height / (viewport.width * viewport.height))),
+        records, measurement: 'Trace checks Inspector backend node IDs. This Chromium may emit no LayerTree.layerPainted damage events; Paint recording clips alone do not establish raster damage or physical FPS.'};
+      t.diagnostic(JSON.stringify(evidence));
+      if (process.env.ROC_LITERATURE_CAPTURE) {
+        await mkdir(process.env.ROC_LITERATURE_CAPTURE, {recursive: true});
+        await writeFile(join(process.env.ROC_LITERATURE_CAPTURE, 'paint-damage-' + theme + '.json'), JSON.stringify(evidence, null, 2));
+        await cdp.send('Overlay.setShowPaintRects', {result: true});
+        await page.getByTestId('literature-row-paper-2').hover();
+        await capture('paint-flashing-hover-' + theme);
+        await cdp.send('Overlay.setShowPaintRects', {result: false});
+      }
+    }
+  } finally {
+    cdp.off('LayerTree.layerPainted', onPaint);
+    try {await cdp.send('Overlay.setShowPaintRects', {result: false});}
+    finally {await cdp.detach();}
+  }
+});
+
 test('four-times CPU slowdown preserves geometry and zero layout shift while switching twenty papers', async t => {
   await mount();
   await page.getByTestId('literature-row-paper-0').click();
-  await expect(page.getByTestId('literature-inspector-title')).toContainText('0000 Understanding');
+  await expect(page.locator('.library-inspector-page[data-present="true"]').getByTestId('literature-inspector-title')).toContainText('0000 Understanding');
   await settleRendering();
   const baseline = await geometry({includeFirstRow: false});
   const cdp = await page.context().newCDPSession(page);
@@ -489,7 +599,7 @@ test('four-times CPU slowdown preserves geometry and zero layout shift while swi
         await page.keyboard.press('ArrowDown');
         await expect(page.getByTestId('literature-row-paper-' + index)).toBeFocused();
         await page.keyboard.press('Space');
-        await expect(page.getByTestId('literature-inspector-title')).toContainText(
+        await expect(page.locator('.library-inspector-page[data-present="true"]').getByTestId('literature-inspector-title')).toContainText(
           String(index).padStart(4, '0') + ' Understanding');
         assertStableGeometry(baseline, await geometry({includeFirstRow: false}), '4x paper ' + index);
       }

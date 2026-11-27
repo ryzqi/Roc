@@ -3,12 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { LoaderCircle, X } from 'lucide-react';
-import {
-  modalPopTransition,
-  modalPopVariants,
-  scrimTransition,
-  scrimVariants
-} from '../shared/motion';
+import { OverlayMotionSurface } from '../shell/OverlayMotionSurface';
 import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus } from '../shell/focus-trap';
 import type { ConfirmDialogProps } from '../shell/ConfirmDialog';
 import type { ModalShellProps } from '../shell/ModalShell';
@@ -104,25 +99,15 @@ export function RadixSettingsDialogShell({
           {open && radixOpen ? (
             <motion.div
               style={{ zIndex: OVERLAY_Z_INDEX[layer] }}
-              variants={scrimVariants}
-              initial={false}
-              animate="animate"
-              exit="exit"
-              transition={modalPopTransition}
               className="ui-modal-layout fixed inset-0"
               data-testid={testId ?? 'overlay'}
               data-overlay-kind="modal"
               data-overlay-layer={layer}
             >
               <Dialog.Overlay asChild>
-                <motion.div
+                <OverlayMotionSurface kind="modal" scrim
                   aria-hidden="true"
                   data-testid={testId === undefined ? undefined : `${testId}-scrim`}
-                  variants={scrimVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={scrimTransition}
                   className="absolute inset-0 bg-[var(--overlay-scrim)]"
                 />
               </Dialog.Overlay>
@@ -153,13 +138,8 @@ export function RadixSettingsDialogShell({
                   }
                 }}
               >
-                <motion.div
+                <OverlayMotionSurface kind="modal"
                   ref={panelRef}
-                  variants={modalPopVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={modalPopTransition}
                   data-testid={testId === undefined ? undefined : `${testId}-panel`}
                   className={`relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
                 >
@@ -194,7 +174,7 @@ export function RadixSettingsDialogShell({
                       {footer}
                     </div>
                   )}
-                </motion.div>
+                </OverlayMotionSurface>
               </Dialog.Content>
             </motion.div>
           ) : null}

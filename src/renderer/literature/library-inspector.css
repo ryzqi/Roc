@@ -12,3 +12,6 @@
 .library-inspector-file:hover { background: var(--overlay-hover); }
 .library-inspector-file:active { background: var(--overlay-active); }
 .library-inspector-content [role='alert'] { color: var(--status-danger-ink); font-size: var(--font-meta-size); overflow-wrap: anywhere; }
+.library-inspector-handoff { position: relative; min-inline-size: 0; }
+.library-inspector-page { min-inline-size: 0; }
+.library-inspector-page[data-present=false] { position: absolute; inset: 0; pointer-events: none; }

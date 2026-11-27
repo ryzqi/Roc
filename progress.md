@@ -90,3 +90,15 @@
 - PDF 精确任务重试 25/25，Discovery 7/7；工作区 fixture 补齐 sources 和显式阅读交互后 7/7。真窗测量确认 240px 导航栏行中部被 132px 快捷操作覆盖，正在减少窄栏外露操作并保留菜单 / 快捷键；生产修改需统一构建后复测。
 
 - 阶段二最终 workspace 7/7、list-layout 11/11 通过；窄栏保留阅读 / 更多，A/C 与菜单保留完整能力。170/240/420px 明暗 cut=0，64px 行高与标题中心命中已验证。Electron 已释放，进入阶段二提交。
+
+- 阶段二提交 `e85d64a`。阶段三首轮 typecheck、build、design 295 / motion 428 文件审计通过。共享 live reduced store、浮层复开 latch、Inspector交接、分段滑块、图标/数字反馈与可视行移除已落盘。首轮浮层20/23通过：两项高刷采样不足，另发现退出中切reduced残留极小scale；局部呈现层将立即归零，待统一重建。
+
+- 阶段三通用桌面真窗 90/90、浮层 13/13、按钮 4/4；shared motion 单测 7/7。按压断言更新为 scale .97 并等待回弹后做静态尺寸审计；测试夹具补齐 Motion Provider。
+- 只读复核发现 AnimatedCount generic span 的 aria-label 不能可靠提供读屏值，已改独立 sr-only 当前文本并增加 AX tree 断言；Inspector 切换方向现由可见排序计算，新增反向题名排序的键盘回归。
+- `pnpm build > /tmp/roc-ui-phase3-build-accessibility.log 2>&1 && pnpm check:ipc && pnpm audit:design && pnpm audit:motion && git diff --check` 通过。8 套文献 fixture 正串行运行，捕获 `/tmp/roc-ui-phase3-final/`。
+
+- 文献组合首轮 79/87；七项 AX matcher 与 node:test 不兼容，改为直接轮询真实 ariaSnapshot 后计数 / 列表 / 分页 / retention 25/25。最后 zero-reflow 9/9，工作流 29、工作区 7、操作守卫 17 已全部通过；第三阶段最终去重并集 Renderer 194/194、unit 7/7。
+- 最终 4x CPU / 20 次切换：1000 文献仅挂载 17 行，raw CLS=0，最长 task 36.838ms，RAF P95 32.5ms / max 34.3ms，输入到第二次 RAF P95 42.4ms。严格 8/16ms 帧预算仍未达，不能报告物理 60/120fps 通过。
+- LayerTree 无 layerPainted 事件，不能把空数组当零重绘；改用真实 Paint / invalidation 对照 Inspector 的 124 个 backend node IDs，明暗均 0 命中。Paint Flashing 截图已查看，绿色限于悬停行及附近控件。节点追踪和截图不等于逐帧光栅损伤证明。
+- 最终构建 eager JS 621105 bytes / 17 files，设计 295 文件、动效 428 文件 / 0 违规。最终代码只读复核与文档收尾；按显式文件清单提交阶段三，保护未跟踪的界面优化.md。
+- 收尾核对发现此前浮层 13/13 缺少完整命令日志，独占 Electron 补跑 `node --test --test-concurrency=1 tests/renderer/surface-motion.test.mjs`：13/13、11.40s，日志 `/tmp/roc-ui-phase3-surface-final.log`。已更新验收文档、Motion 合同和计划，将代码 / 自动化完成与性能目标缺口分别记录；本记录随阶段三本地提交交付。

@@ -1,12 +1,12 @@
 import {useId, useLayoutEffect, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject} from 'react';
 import {
   autoUpdate, flip, FloatingFocusManager, FloatingPortal, offset, shift, size,
-  useClick, useClientPoint, useDismiss, useFloating, useInteractions, useRole, useTransitionStatus,
+  useClick, useClientPoint, useDismiss, useFloating, useInteractions, useRole,
   type Placement
 } from '@floating-ui/react';
-import {motionDurationSeconds} from '../shared/motion';
 import {OVERLAY_Z_INDEX} from './overlay-stack';
 import {useOverlayBehavior} from './use-overlay-behavior';
+import {useFloatingSurfacePresence} from './use-floating-surface-presence';
 import './anchored-popover.css';
 
 export type AnchoredPopoverTriggerProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -99,7 +99,7 @@ export function AnchoredPopover({
   const dismiss = useDismiss(context, {outsidePressEvent: 'pointerdown', escapeKey: false});
   const accessibleRole = useRole(context, {role});
   const {getReferenceProps, getFloatingProps} = useInteractions([click, clientPoint, dismiss, accessibleRole]);
-  const {isMounted, status} = useTransitionStatus(context, {duration: motionDurationSeconds.fast * 1000});
+  const {isMounted, state, visible, reduced} = useFloatingSurfacePresence(context, isPositioned, 'popover');
 
   return <>
     {renderTrigger?.({...getReferenceProps(), ref: setReference, type: 'button'})}
@@ -127,9 +127,10 @@ export function AnchoredPopover({
           aria-hidden={!open || undefined}
           inert={!open}
           data-testid={testId}
-          data-state={status}
+          data-state={state}
+          data-motion-reduced={reduced}
           data-placement={resolvedPlacement}
-          style={{...floatingStyles, zIndex: OVERLAY_Z_INDEX.dialog, visibility: isPositioned ? undefined : 'hidden'}}
+          style={{...floatingStyles, zIndex: OVERLAY_Z_INDEX.dialog, visibility: visible ? undefined : 'hidden'}}
         >
           <div className={`anchored-popover-surface ${className ?? ''}`}>{children}</div>
         </div>

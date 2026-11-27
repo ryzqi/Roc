@@ -48,11 +48,15 @@
 .inspector-pane-scroll { flex: 1; min-block-size: 0; overflow: auto; scrollbar-gutter: stable; }
 .inspector-pane-placeholder { margin: auto; padding: var(--space-4); color: var(--ink-muted); font-size: var(--font-meta-size); }
 .inspector-pane-backdrop { position: fixed; pointer-events: none; background: var(--overlay-backdrop); }
-.inspector-pane-overlay { inline-size: 340px; max-inline-size: 100vw; border-inline-start: .5px solid var(--border-default); }
-.inspector-pane-overlay > .inspector-pane-panel { background: var(--surface-overlay); }
+.inspector-pane-overlay { inline-size: 340px; max-inline-size: 100vw; }
+.inspector-pane-overlay > .inspector-pane-panel {
+  position: relative;
+  border-inline-start: .5px solid var(--border-default);
+  background: var(--surface-overlay);
+}
 
 /* The depth fade lives inside the canvas; no outer shadow can hit a native window edge. */
-.inspector-pane-overlay::before {
+.inspector-pane-overlay > .inspector-pane-panel::before {
   content: '';
   position: absolute;
   inset-block: 0;
@@ -66,14 +70,29 @@
 .inspector-pane-overlay > .inspector-pane-panel,
 .inspector-pane-backdrop {
   opacity: 1;
+  transform: none;
   transition-property: transform, opacity;
   transition-duration: var(--duration-overlay);
   transition-timing-function: var(--ease-soft);
+}
+.inspector-pane-overlay[data-state='close'] > .inspector-pane-panel,
+.inspector-pane-backdrop[data-state='close'] {
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-exit);
 }
 .inspector-pane-overlay:is([data-state='initial'], [data-state='close']) > .inspector-pane-panel { opacity: 0; transform: translateX(16px); }
 .inspector-pane-backdrop:is([data-state='initial'], [data-state='close']) { opacity: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .inspector-pane-overlay:is([data-state='initial'], [data-state='close']) > .inspector-pane-panel { transform: none; }
+  .inspector-pane-overlay > .inspector-pane-panel { transform: none !important; }
 }
-:root[data-reduced-motion='true'] .inspector-pane-overlay:is([data-state='initial'], [data-state='close']) > .inspector-pane-panel { transform: none; }
+:root:is([data-reduced-motion='true'], [data-motion-reduced='true']) .inspector-pane-overlay > .inspector-pane-panel {
+  transform: none !important;
+}
+
+.inspector-pane-overlay[data-motion-reduced='true'] > .inspector-pane-panel,
+.inspector-pane-backdrop[data-motion-reduced='true'] {
+  transform: none !important;
+  transition-property: opacity;
+  transition-duration: var(--duration-reduced);
+}

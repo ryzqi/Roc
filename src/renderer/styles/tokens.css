@@ -159,16 +159,23 @@
   --control-hit-min: 28px;
 
   /* Motion: the seconds mapping and event presets live in shared/motion.ts. */
-  --duration-micro: 80ms;
-  --duration-fast: 120ms;
-  --duration-base: 180ms;
-  --duration-overlay: 200ms;
-  --duration-legacy-slow: 320ms;
+  --duration-micro: 90ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-overlay: 220ms;
+  --duration-legacy-slow: 280ms;
+  --duration-icon: 140ms;
+  --duration-removal: 110ms;
+  --duration-error: 260ms;
+  --duration-number: 180ms;
+  --duration-reduced: 100ms;
+  --loading-delay: 150ms;
+  --loading-breathe-duration: 1800ms;
   --duration-slow: var(--duration-legacy-slow);
-  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  /* Existing names keep their values while callers migrate to event presets. */
+  /* Existing names resolve through the same event scale. */
   --easing-standard: var(--ease-standard);
   --transition-base: var(--duration-base) var(--ease-standard);
   --transition-fast: var(--duration-fast) var(--ease-standard);

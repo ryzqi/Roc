@@ -30,7 +30,7 @@ export const formSelectClass = formInputClass;
 export const formTextAreaClass =
   'w-full min-w-0 min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 export const formSecondaryButtonClass =
-  'inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] enabled:hover:text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] motion-safe:enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
+  'inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] enabled:hover:text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] ui-press disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 /**
  * 与输入框同高的按钮（P10）。
  *
@@ -39,10 +39,10 @@ export const formSecondaryButtonClass =
  * 高度不一致也让 hover 区域与输入框不是同一条水平带。所以凡是与输入框同排的动作按钮用这个。
  */
 export const formButtonClass =
-  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-line px-3 text-muted text-[length:var(--font-meta-size)] enabled:hover:text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] motion-safe:enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-line px-3 text-muted text-[length:var(--font-meta-size)] enabled:hover:text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] ui-press disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 /** 与输入框同高的主按钮（保存/确认）。 */
 export const formPrimaryButtonClass =
-  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 motion-safe:enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-2 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 ui-press disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 
 export type ActionButtonProps = ComponentPropsWithRef<'button'> & {
   /** Unstyled retains caller geometry and focus classes; other variants supply them. */

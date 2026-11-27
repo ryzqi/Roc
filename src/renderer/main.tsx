@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { LazyMotion, MotionConfig } from 'motion/react';
+import { LazyMotion } from 'motion/react';
 import { App } from './App';
+import { MotionPreferenceProvider } from './shared/motion-preference';
 import './styles/index.css';
 
 // Load animation and layout features after the first React commit. Keep the loader
@@ -15,11 +16,10 @@ if (rootElement === null) {
 
 createRoot(rootElement).render(
   <React.StrictMode>
-    {/* Reduced motion is honoured globally; components never opt out. */}
-    <MotionConfig reducedMotion="user">
+    <MotionPreferenceProvider>
       <LazyMotion features={loadMotionFeatures} strict>
         <App />
       </LazyMotion>
-    </MotionConfig>
+    </MotionPreferenceProvider>
   </React.StrictMode>
 );

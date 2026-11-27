@@ -1,5 +1,6 @@
 import {memo, useCallback} from 'react';
-import {BookOpen, Check, Copy, MoreHorizontal, Sparkles} from 'lucide-react';
+import {BookOpen, MoreHorizontal, Sparkles} from 'lucide-react';
+import {CopyFeedbackIcon} from '../shared/CopyFeedbackIcon';
 import type {ResearchDocument, ResearchLibraryItem} from '../../shared/types';
 import {StatusBadge} from '../shared/StatusBadge';
 import {useCopyFeedback} from '../shared/hooks/use-copy-feedback';
@@ -44,7 +45,7 @@ export const LibraryPaperRow = memo(function LibraryPaperRow({
   const availability = libraryAvailability(item, receipt, fallbackDocuments, requested);
   const register = useCallback((element: HTMLButtonElement | null) => actions.register(item.id, element), [item.id, actions]);
   const title = libraryItemTitle(item);
-  return <div className="library-row" data-library-row data-selected={selected}
+  return <div className="library-row" data-library-row={item.id} data-selected={selected}
     onFocusCapture={() => actions.focus(item.id)}
     onContextMenu={event => {
       event.preventDefault();
@@ -102,7 +103,7 @@ function CitationKeyCopy({itemId, citationKey, tabIndex}: {itemId: string; citat
       aria-label={`${copied ? '已复制引用键' : '复制引用键'} ${citationKey}`}
       title={copied ? '已复制' : '复制引用键 (C)'} data-testid={`literature-citekey-copy-${itemId}`}
       className="library-row-copy library-icon-button">
-      {copied ? <Check size={14} aria-hidden="true"/> : <Copy size={14} aria-hidden="true"/>}
+      <CopyFeedbackIcon copied={copied}/>
     </button>
     {error ? <p role="alert" className="library-row-error">{error}</p> : null}
   </>;

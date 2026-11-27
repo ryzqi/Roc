@@ -14,7 +14,8 @@ import { ProjectFormDialog, type ProjectFormValues } from './ProjectFormDialog';
 import { isProjectArchived, visibleProjects, type ProjectStatusFilter } from './project-store';
 import { useProjects } from './use-projects';
 import type { RocClient } from '../shared/roc-client';
-import { motionTransitions } from '../shared/motion';
+import { motionDurationSeconds, motionTransitions } from '../shared/motion';
+import { useEffectiveReducedMotion } from '../shared/motion-preference';
 
 /**
  * Project portal (P2/T2.2–T2.6).
@@ -84,6 +85,7 @@ export function ProjectPortalView({
   onRequestConsumed,
   onOpenProject
 }: ProjectPortalViewProps): React.JSX.Element {
+  const reducedMotion = useEffectiveReducedMotion();
   const projects = useProjects(client);
   const [projectView, setProjectView] = useState<ProjectView>(readProjectView);
   const [recentIds] = useState(readRecentProjectIds);
@@ -110,12 +112,8 @@ export function ProjectPortalView({
   }, []);
 
   useEffect(() => {
-    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onPreferenceChange = (): void => { if (preference.matches) cancelPinMotion(); };
-    preference.addEventListener('change', onPreferenceChange);
     window.addEventListener('resize', cancelPinMotion);
     return () => {
-      preference.removeEventListener('change', onPreferenceChange);
       window.removeEventListener('resize', cancelPinMotion);
       cancelPinMotion();
     };
@@ -167,7 +165,7 @@ export function ProjectPortalView({
     const scrollArea = scrollRef.current;
     const active = document.activeElement;
     // Capture visual positions before cancelling an unfinished reorder, so reversal is continuous.
-    const snapshot = all.length <= 20 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches && list !== null && scrollArea !== null
+    const snapshot = all.length <= 20 && list !== null && scrollArea !== null
       ? { projects: all, query, filter, view: projectView, width: list.clientWidth,
         ids: rendered.map(project => project.id), rows: visibleRowRects(list, scrollArea) }
       : null;
@@ -194,12 +192,14 @@ export function ProjectPortalView({
       const x = before.rect.left - rect.left;
       const y = before.rect.top - rect.top;
       if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) continue;
-      pinAnimations.current.push(element.animate([{ translate: `${x}px ${y}px` }, { translate: '0px 0px' }], {
-        duration: motionTransitions['list-small'].duration * 1000,
+      pinAnimations.current.push(element.animate(reducedMotion
+        ? [{ opacity: 0.8 }, { opacity: 1 }]
+        : [{ translate: `${x}px ${y}px` }, { translate: '0px 0px' }], {
+        duration: (reducedMotion ? motionDurationSeconds.reduced : motionTransitions['list-small'].duration) * 1000,
         easing: `cubic-bezier(${motionTransitions['list-small'].ease.join(', ')})`
       }));
     }
-  }, [all, shown, query, filter, projectView, visibleLimit, cancelPinMotion]);
+  }, [all, shown, query, filter, projectView, visibleLimit, cancelPinMotion, reducedMotion]);
 
   const closeCreate = (): void => {
     setCreateOpen(false);

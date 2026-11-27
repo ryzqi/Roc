@@ -19,6 +19,7 @@ import { ModelPicker } from './model-picker';
 import type {RunInputKind} from './session-store';
 import { ActionButton } from '../shared/form-ui';
 import { ActionStatus } from '../shared/action-status';
+import { useEffectiveReducedMotion } from '../shared/motion-preference';
 
 /**
  * Composer (T4.5). Written fresh for the new shell (D3: the input area is redone, only the
@@ -218,6 +219,9 @@ export function AssistantComposer({
   const { onCompositionStart, onCompositionEnd, shouldIgnoreKeyDown } = useImeGuard();
   const attachmentsRef = useRef<HTMLDivElement | null>(null);
   const attachmentTransitionRef = useRef<ViewTransition | null>(null);
+  const reducedMotion = useEffectiveReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
   const attachmentIds = useRef(new WeakMap<RendererImageAttachment, string>());
   const dragDepthRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -231,6 +235,10 @@ export function AssistantComposer({
     () => parseSlashSkillCommand(text, replyMode ? [] : skills.map((skill) => skill.id)),
     [replyMode, skills, text]
   );
+
+  useLayoutEffect(() => {
+    if (reducedMotion) attachmentTransitionRef.current?.skipTransition();
+  }, [reducedMotion]);
 
   useEffect(() => {
     scope.active = true;
@@ -290,8 +298,7 @@ export function AssistantComposer({
     const strip = attachmentsRef.current as (HTMLDivElement & {
       startViewTransition?: (update: () => void) => ViewTransition;
     }) | null;
-    if (typeof strip?.startViewTransition !== 'function' ||
-      strip.closest('[data-reduce-motion="true"]') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (typeof strip?.startViewTransition !== 'function' || reducedMotionRef.current) {
       apply();
       return;
     }

@@ -16,6 +16,8 @@ before(async () => {
     style: 'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink)}', script: `
       import React from 'react';
       import {createRoot} from 'react-dom/client';
+      import {LazyMotion,domMax} from 'motion/react';
+      import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
       import {flushSync} from 'react-dom';
       import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
       import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
@@ -48,7 +50,7 @@ before(async () => {
           </main></LiteratureScopeProvider>;
       }
       window.mount=(projectId='project-a',reset=true)=>{if(reset){window.calls=[];window.hold=false;window.pending=[];key++;}
-        flushSync(()=>root.render(<Harness key={key} projectId={projectId}/>));};
+        flushSync(()=>root.render(<MotionPreferenceProvider><LazyMotion features={domMax} strict><Harness key={key} projectId={projectId}/></LazyMotion></MotionPreferenceProvider>));};
       window.finish=(error=null)=>{const next=window.pending.shift();next.resolve(error?{ok:false,error:{message:error}}:ok(next.data));};
       window.mount();
     `});
@@ -65,7 +67,7 @@ after(async () => {try {await app?.close();} finally {if (directory) await rm(di
 
 test('manual pages keep the total honest, retry in place and retain selection without loading all rows', async () => {
   await page.evaluate(() => window.mount());
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   assert.equal(await page.evaluate(() => window.calls.length), 1);
   await page.getByTestId('literature-row-project-a-0').click();
   await page.locator('.library-virtual-list').hover();
@@ -80,38 +82,38 @@ test('manual pages keep the total honest, retry in place and retain selection wi
   assert.equal(await page.evaluate(() => window.pending.length), 1);
   await page.evaluate(() => window.finish('Next page unavailable'));
   await expect(page.getByRole('alert')).toContainText('Next page unavailable');
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   await expect(more).toHaveText('重试加载');
   await more.click();
   await page.evaluate(() => {window.hold = false; window.finish();});
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 400 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 400 / 437 条');
   assert.equal(await page.evaluate(() => window.store.selectedId), 'project-a-0');
   assert.ok(Math.abs(await page.locator('.library-virtual-list').evaluate(element => element.scrollTop) - scrollBefore) < 2,
     'appending a page must not scroll back to the selected item');
   await more.click();
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 437 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 437 / 437 条');
   await expect(more).toHaveCount(0);
   assert.equal(await page.evaluate(() => new Set(window.store.items.map(item => item.id)).size), 437);
   assert.ok(await page.locator('[data-testid^="literature-row-"]').count() < 40);
   await page.evaluate(() => window.store.select('project-a-430'));
   await expect(page.getByTestId('literature-row-project-a-430')).toBeVisible();
   await page.getByTestId('literature-search').fill('Paper 2');
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 111 / 111 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 111 / 111 条');
   await page.waitForFunction(() => window.store.selected?.id === 'project-a-430');
 });
 
 test('old pages cannot publish after query edits, reloads or project switches', async () => {
   await page.evaluate(() => window.mount());
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   await page.evaluate(() => {window.hold = true; window.store.loadMore();});
   await page.waitForFunction(() => window.pending.length === 1);
   await page.getByTestId('literature-search').fill('Paper 436');
   await page.evaluate(() => {window.hold = false; window.finish();});
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 1 / 1 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 1 / 1 条');
   assert.deepEqual(await page.evaluate(() => window.store.items.map(item => item.id)), ['project-a-436']);
 
   await page.evaluate(() => window.mount());
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   await page.evaluate(() => {window.hold = true; window.store.loadMore();});
   await page.waitForFunction(() => window.pending.length === 1);
   await page.evaluate(() => {window.store.reload(); window.finish();});
@@ -119,12 +121,12 @@ test('old pages cannot publish after query edits, reloads or project switches', 
   // While the fresh snapshot is held, the superseded append cannot become visible.
   assert.equal(await page.evaluate(() => window.store.items.length), 200);
   await page.evaluate(() => {window.hold = false; window.finish();});
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   assert.equal(await page.evaluate(() => window.store.items.length), 200);
 
   await page.evaluate(() => {window.hold = true; window.store.loadMore();});
   await page.waitForFunction(() => window.pending.length === 1);
   await page.evaluate(() => {window.hold = false; window.mount('project-b', false); window.finish();});
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 437 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 437 条');
   assert.equal(await page.evaluate(() => window.store.items.every(item => item.id.startsWith('project-b-'))), true);
 });

@@ -27,7 +27,7 @@ RAF P95 10.1ms、输入到第二次 RAF P95 25.4ms、最长主线程 task 17.244
 
 ## 阶段二
 
-状态：**Verified passing**（定向自动化范围）。
+状态：**Verified passing**（定向自动化范围）。提交 `e85d64a`。
 
 工具条收拢为状态、搜索、筛选与导入。多选动作只在有选择时浮出；
 默认本地 PDF 自动补全并接续已有解析 / 索引，行状态来自真实回执。
@@ -73,6 +73,76 @@ Discovery 7/7、工作区 7/7、最终列表布局 11/11 通过。窄栏保留�
 1200 条文献 page+count 的 cold 为 96.2ms，warm 为 9.5/8.5ms；
 10002 原始 chunk 的四组 Main / 只读 worker 容错对照合计 894.3ms。
 测试核验原始正文及回执字节保持一致，投影缓存上界 2048 条 / 8MiB。
+
+## 阶段三
+
+状态：**Verified passing**（下表功能、布局与无障碍自动化范围）；严格帧预算仍未达标，
+物理刷新率与完整 raster damage 验收尚未完成，不表示所有性能目标通过。
+
+环境：macOS 27.2.1（26B131），Node 26.13.1，Electron 45.3.4。
+
+沿用共享 Motion 与 tokens，新增 live reduced-motion 适配；五类浮层支持中途反向，
+内容交接与退出交互隔离。文献增加分段指示器、复制／计数反馈、延迟骨架、
+真实状态呼吸与完成标记、可视行删除补位；滚动和新输入立即取消装饰动画。
+
+核心改动位于 `src/renderer/shared/motion.ts`、`motion-preference.tsx`、
+`shell/OverlayMotionSurface.tsx`、`use-floating-surface-presence.ts`，以及
+`literature/LibraryPresence.tsx`、`LibraryInspector.tsx`、`LibraryList.tsx`、
+`use-library-row-motion.ts`。共享设置、画布、项目门户与助手消费同一实时偏好；
+定位 wrapper 和虚拟列表的结构 transform 保留，装饰位移在 reduced 中立即取消。
+计数使用独立的可访问文本，旧动画数字不重复读出；Inspector 切换方向来自可见排序。
+
+| 实际执行命令 | 最终结果 |
+| --- | --- |
+| `pnpm build > /tmp/roc-ui-phase3-build-accessibility.log 2>&1` | 通过，含 typecheck / Renderer chunk gate；eager JS 621105 bytes / 17 files |
+| `pnpm check:ipc && pnpm audit:design && pnpm audit:motion && git diff --check` | 通过；设计 295 文件、动效 428 文件 / 0 违规 |
+| `node --test tests/unit/motion-contract.test.mjs` | 7/7 |
+| `node --test --test-concurrency=1 tests/renderer/desktop-interactions.test.mjs tests/renderer/project-session-layout.test.mjs tests/renderer/radix-settings-dialog.test.mjs tests/renderer/shell-management-guards.test.mjs` | 90/90；IME 事件守卫、拖拽取消/持久化、400% zoom、主题与草稿守卫 |
+| `node --test --test-concurrency=1 tests/renderer/surface-motion.test.mjs` | 13/13；含独立 MotionConfig always、无 Provider 的 body 偏好、中途 reduced 与快速反向 |
+| `node --test --test-concurrency=1 tests/renderer/action-button.test.mjs` | 4/4；按下 scale .97、释放尺寸、reduced scale 1 |
+| `ROC_LITERATURE_CAPTURE=/tmp/roc-ui-phase3-final node --test --test-concurrency=1 tests/renderer/library-state-motion.test.mjs tests/renderer/literature-zero-reflow.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/literature-workspace-layout.test.mjs tests/renderer/literature-automatic-workflow.test.mjs tests/renderer/literature-retention.test.mjs tests/renderer/literature-pagination.test.mjs tests/renderer/literature-action-guards.test.mjs` | 首轮 79/87；其中工作流 29、工作区 7、操作守卫 17 全部通过；其余修正与补跑如下 |
+| `node --test --test-concurrency=1 tests/renderer/library-state-motion.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/literature-pagination.test.mjs tests/renderer/literature-retention.test.mjs` | 最终 25/25（9 + 12 + 2 + 2） |
+| `ROC_LITERATURE_CAPTURE=/tmp/roc-ui-phase3-final node --test --test-concurrency=1 tests/renderer/literature-zero-reflow.test.mjs` | 最终 9/9；零偏移、虚拟化、宽窄窗、明暗主题、内容交接、重绘观测与 4x CPU |
+
+最终去重并集为 **194 项 Renderer + 7 项 unit** 全部通过。最后生产构建后仅调整测试和文档。
+日志分别在 `/tmp/roc-ui-phase3-{generic-runtime,literature-runtime,count-runtime,zero-final}.log`。
+浮层独立补跑 13/13（11.40s）的完整日志在 `/tmp/roc-ui-phase3-surface-final.log`。
+零重排和列表布局中的 clip-audit 覆盖实际 hover、展开及动效落点，裁切 `cut=0`。
+最终截图位于 `/tmp/roc-ui-phase3-final/`，已检查明暗 Inspector、筛选和窄窗浮层。
+
+首轮浮层 20/23：两项高刷新率三帧采样不足，改为每段 55ms 且五次低于 500ms；
+退出中切 reduced 的残留 scale 由视觉子层立即清除。计数的 generic span aria-label
+不能可靠提供读屏值，改为 sr-only 当前文本，并检查真实 AX snapshot。
+文献组合首轮七项失败来自 Playwright 的 `toMatchAriaSnapshot` 不支持 node:test，
+改为轮询 `locator.ariaSnapshot()` 的真实输出；另一项来自当前 Chromium 无
+`LayerTree.layerPainted` 事件，按下述证据边界改用节点追踪并保留 Paint Flashing。
+
+### 4x CPU 与重绘证据
+
+1000 条文献、连续切换 20 篇并开关筛选 / 处理面板，保持 64px 行高，最终挂载 17 行。
+最终 trace 为 `/tmp/roc-ui-phase3-final/zero-reflow-4x-1795769776199.trace.json`。
+
+| 指标 | 最终观测 |
+| --- | --- |
+| raw layout shift 总和（包含 hadRecentInput） | 0 |
+| CrRendererMain 最长完整 task | 36.838ms |
+| RAF 间隔 P50 / P95 / max | 8.6 / 32.5 / 34.3ms |
+| 输入到第二次 RAF P95 / max | 42.4 / 44.9ms |
+| 全段 Layout / Paint inclusive 时间 | 113.202 / 130.337ms |
+
+最长 task 内键盘触发的 click 处理为 26.529ms；这是主线程处理观测，不是独立合成动画帧时长。
+RAF P95 高于 8/16ms 预算，当前结果不支持声称帧率稳定 60/120fps；输入到第二次 RAF
+也只是下一次绘制机会代理，不是 EventTiming 或物理屏显延迟。性能目标仍有缺口。
+
+hover / filter 工作负载分别采集 light 75、dark 77 个真实 Paint 事件，各 646 个 invalidation。
+提前记录 Inspector 的 124 个 backend node IDs，两个主题均未发现事件命中这些无关节点。
+`paint-invalidation-{light,dark}.json` 是原始节点追踪，`paint-damage-{light,dark}.json`
+记录摘要；`paint-flashing-hover-{light,dark}.png` 显示绿色仅位于悬停行、动作与筛选 / 搜索处，
+Inspector 没有绿色覆盖。单张截图不证明每一帧的 raster damage 边界。
+
+此 Chromium 的 LayerTree 未输出 layerPainted；摘要中的 0 表示未收到该 API 的事件，
+不能解释为“零重绘”。Paint 的全页 clip 是 display-list recording bounds，
+不能当作真实 raster damage。完整逐帧光栅损伤与物理 FPS 仍需实机验证。
 
 ## 证据边界
 

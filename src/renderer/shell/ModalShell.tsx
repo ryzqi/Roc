@@ -3,14 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, useIsPresent } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { X } from 'lucide-react';
-import {
-  drawerTransition,
-  drawerVariants,
-  modalPopTransition,
-  modalPopVariants,
-  scrimTransition,
-  scrimVariants
-} from '../shared/motion';
+import { OverlayMotionSurface } from './OverlayMotionSurface';
 import { useOverlayBehavior, OverlayFocusRestore } from './use-overlay-behavior';
 import { OVERLAY_Z_INDEX, type OverlayLayer } from './overlay-stack';
 
@@ -26,9 +19,8 @@ import { OVERLAY_Z_INDEX, type OverlayLayer } from './overlay-stack';
  *
  * ## Entrance and exit
  *
- * Every overlay animates **both** ways: modals scale in and out over 0.18s
- * (`modalPopVariants`), drawers slide in and out over 0.2s (`drawerVariants`), and
- * the scrim fades with either. The vocabulary lives in `shared/motion.ts`.
+ * Panels and scrims share the entry/exit budgets in `shared/motion.ts`.
+ * Reduced motion keeps a short opacity handoff without spatial movement.
  *
  * The early `return null` that used to guard the closed state is gone: it would
  * unmount the panel before it could animate out, and `AnimatePresence` needs the
@@ -234,33 +226,23 @@ export function ModalShell({
           {/* The scrim is a child covering the container, so the click must be
               handled *here*: on the container, `event.target` would always be the
               scrim and the guard would never pass. */}
-          <motion.div
+          <OverlayMotionSurface kind={kind} scrim
             aria-hidden="true"
             data-testid={testId === undefined ? undefined : `${testId}-scrim`}
             onClick={closeOnBackdrop ? close : undefined}
-            variants={scrimVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={scrimTransition}
             className={
               kind === 'drawer'
                 ? 'absolute inset-0 bg-[var(--overlay-backdrop)]'
                 : 'absolute inset-0 bg-[var(--overlay-scrim)]'
             }
           />
-          <motion.div
+          <OverlayMotionSurface kind={kind}
             ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={bodyId}
             data-testid={testId === undefined ? undefined : `${testId}-panel`}
-            variants={kind === 'drawer' ? drawerVariants : modalPopVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={kind === 'drawer' ? drawerTransition : modalPopTransition}
             className={
               kind === 'drawer'
                 ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
@@ -268,7 +250,7 @@ export function ModalShell({
             }
           >
             {content}
-          </motion.div>
+          </OverlayMotionSurface>
         </OverlayPresence>
       ) : null}
     </AnimatePresence>,

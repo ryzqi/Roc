@@ -66,7 +66,7 @@ after(async()=>{
 const variants=['primary','secondary','compact'];
 const visual=locator=>locator.evaluate(element=>{
   const css=getComputedStyle(element);
-  return {background:css.backgroundColor,color:css.color,opacity:css.opacity,translate:css.translate,
+  return {background:css.backgroundColor,color:css.color,opacity:css.opacity,translate:css.translate,scale:css.scale,
     outlineStyle:css.outlineStyle,outlineWidth:css.outlineWidth,outlineColor:css.outlineColor,
     height:element.getBoundingClientRect().height};
 });
@@ -89,8 +89,9 @@ test('gallery exposes all six native button states in both themes and densities'
       const pressed=page.getByTestId(`action-${variant}-active`);
       await pressed.hover();
       await page.mouse.down();
-      try {await expect.poll(async()=>(await visual(pressed)).translate).toBe('0px 1px');}
+      try {await expect.poll(async()=>(await visual(pressed)).scale).toBe('0.97');}
       finally {await page.mouse.up();}
+      await expect.poll(async()=>(await visual(pressed)).scale).toBe('none');
       const disabled=page.getByTestId(`action-${variant}-disabled`);
       await expect(disabled).toBeDisabled();
       await page.mouse.move(0,0);
@@ -147,11 +148,12 @@ test('reduced motion preserves press feedback and a static loading indicator',as
     await page.mouse.down();
     try {
       assert.equal(await button.evaluate(element=>element.matches(':active')),true);
-      // Reduced motion keeps a 0.01ms CSS transition; its end style can land on
-      // the next frame even though the pointer is already in the active state.
+      // Reduced motion keeps color/opacity feedback while spatial press motion
+      // stays at rest, including during the pointer's active state.
       await expect.poll(async()=>{
         const pressed=await visual(button);
         assert.equal(pressed.translate,'none');
+        assert.equal(pressed.scale,'1');
         return pressed.background!==before.background || pressed.opacity!==before.opacity;
       }).toBe(true);
     } finally {await page.mouse.up();}

@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
 import { formInputClass } from '../shared/form-ui';
-import { motionTransitions } from '../shared/motion';
+import { getMotionTransition } from '../shared/motion';
+import { useEffectiveReducedMotion } from '../shared/motion-preference';
 import { EmptyState } from '../shell/EmptyState';
 import { readSettingsSection, writeSettingsSection, type ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -185,6 +186,7 @@ function renderPanel(
 }
 
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
+  const reducedMotion = useEffectiveReducedMotion();
   const store = useSettingsStore(props.client, props.projectId);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(() => {
     const recent = readSettingsSection();
@@ -530,7 +532,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               ref={panelRef}
               initial={{ opacity: 0.94 }}
               animate={{ opacity: 1 }}
-              transition={motionTransitions['content-handoff']}
+              transition={getMotionTransition('content-handoff', reducedMotion)}
               role={compactNavigation ? 'region' : 'tabpanel'}
               id={`settings-panel-${activeSection}`}
               aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}

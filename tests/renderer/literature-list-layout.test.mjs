@@ -16,6 +16,8 @@ before(async()=>{
     style:'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink)}',script:`
       import React,{useMemo,useState} from 'react';
       import {createRoot} from 'react-dom/client';
+      import {LazyMotion,domMax} from 'motion/react';
+      import {MotionPreferenceProvider} from './src/renderer/shared/motion-preference';
       import {flushSync} from 'react-dom';
       import {LibraryList} from './src/renderer/literature/LibraryList';
       import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
@@ -37,6 +39,8 @@ before(async()=>{
         window.showNavigation=setShown;window.setLibraryQuery=setQuery;window.setLibraryProject=setProjectId;
         window.appendLibraryItem=()=>setAll(current=>[...current,record('paper-added',current.length,'book','zotero')]);
         window.replaceLibraryResults=removedId=>flushSync(()=>{setAll(current=>current.filter(item=>item.id!==removedId));setQuery('Agent');});
+        window.reverseLibraryTitles=()=>setAll(current=>current.map((item,index)=>({...item,
+          metadata:{...item.metadata,title:String(current.length-index)+' Agent paper'}})));
         const store={items,status,error:status==='error'?'Library unavailable':null,query,selectedId,projectId,includeArchived,writable:true,
           total:items.length,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},requestImport:()=>{window.importRequested=true;},
           documentsStatus:'ready',documents:[{libraryItemId:selectedId,currentParseId:'parse',status:'ready'}],
@@ -47,7 +51,8 @@ before(async()=>{
             <aside data-testid="navigation" className="flex shrink-0" style={{width:240}} hidden={!shown} inert={!shown}>
               <ViewActivity active={shown}>{context
                 ? <ContextDrawer view="library" onOpenLiterature={id=>{if(id!==null)store.select(id);}} onOpenHelp={()=>{}}/>
-                : <LibraryList entryType={category} compact onRequestImport={()=>{window.importRequested=true;}}/>}</ViewActivity>
+                : <LibraryList entryType={category} compact onOpenItem={(id,direction)=>{window.inspections.push({id,direction});store.select(id);}}
+                    onRequestImport={()=>{window.importRequested=true;}}/>}</ViewActivity>
             </aside>
             <main className="flex-1 min-w-0"><button data-testid="adjacent-control" style={{marginTop:220,marginLeft:80}}
               onClick={()=>window.readerClicked=true}>取消</button></main>
@@ -55,8 +60,8 @@ before(async()=>{
         </LiteratureScopeProvider>;
       }
       const root=createRoot(document.getElementById('root'));let key=0;
-      window.mount=(count=1,initialSelection='paper-layout',context=false)=>{window.opened=[];window.asked=[];window.reloads=0;window.importRequested=false;window.categoryReads=0;
-        flushSync(()=>root.render(<Harness key={++key} count={count} initialSelection={initialSelection} context={context}/>));};
+      window.mount=(count=1,initialSelection='paper-layout',context=false)=>{window.opened=[];window.inspections=[];window.asked=[];window.reloads=0;window.importRequested=false;window.categoryReads=0;
+        flushSync(()=>root.render(<MotionPreferenceProvider><LazyMotion features={domMax} strict><Harness key={++key} count={count} initialSelection={initialSelection} context={context}/></LazyMotion></MotionPreferenceProvider>));};
     `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory,'data'))});
@@ -264,7 +269,7 @@ test('replacing literature results cancels obsolete positioning even when select
   await page.evaluate(()=>window.selectExternally('paper-120'));
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await page.evaluate(()=>window.replaceLibraryResults('paper-120'));
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 199 / 199 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 199 / 199 条');
   const nativeTop=await nativeWheel(-20000);
   assert.equal(nativeTop,0);
   assert.equal(await settledLibraryScroll(),nativeTop);
@@ -294,7 +299,7 @@ test('large result sets window their rows and preserve selected items and keyboa
   const mounted=await page.locator('[data-testid^="literature-row-"]').count();
   assert.ok(mounted>0 && mounted<40,`Expected bounded DOM for 200 results, received ${mounted}`);
   t.diagnostic(`${mounted} mounted rows for 200 literature results`);
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 200 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 200 条');
   await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveText('已解析');
   await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveAttribute('data-tone','neutral');
   await page.getByTestId('literature-row-paper-150').focus();
@@ -351,7 +356,7 @@ test('large result sets window their rows and preserve selected items and keyboa
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 200 篇');
   await closeFilters();
   await page.getByTestId('literature-search').fill('120 Agent');
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 1 / 1 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 1 / 1 条');
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
   await expect(page.getByTestId('literature-bulk-actions')).toHaveCount(0);
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('tabindex','0');
@@ -372,7 +377,7 @@ test('context literature counts follow item changes without rescanning on status
   await page.evaluate(()=>window.appendLibraryItem());
   await expect(categories.getByRole('button',{name:'图书 1 条'})).toBeVisible();
   await expect(page.getByTestId('context-zotero')).toContainText('1 条已收录');
-  await expect(page.getByTestId('literature-count')).toHaveText('已加载 201 / 201 条');
+  await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 201 / 201 条');
   await categories.getByRole('button',{name:'图书 1 条'}).click();
   await expect(page.getByTestId('literature-row-paper-added')).toBeVisible();
   await expect(page.locator('[data-testid^="literature-row-"]')).toHaveCount(1);
@@ -440,4 +445,21 @@ test('hidden context navigation retains reading state while query and project ch
   await page.evaluate(()=>window.showNavigation(true));
   await expect(page.getByTestId('adjacent-control')).toBeFocused();
   await expect(page.getByTestId('literature-bulk-actions')).toHaveCount(0);
+});
+
+test('Inspector navigation direction follows the visible sorted order', async () => {
+  await page.evaluate(() => {window.mount(3, null); window.reverseLibraryTitles();});
+  await openFilters();
+  await page.getByTestId('literature-sort').selectOption('title');
+  await closeFilters();
+  await page.getByTestId('literature-row-paper-2').click();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByTestId('literature-row-paper-1')).toBeFocused();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.getByTestId('literature-row-paper-2')).toBeFocused();
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => window.inspections), [
+    {id:'paper-2',direction:0}, {id:'paper-1',direction:1}, {id:'paper-2',direction:-1}
+  ]);
 });

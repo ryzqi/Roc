@@ -4,10 +4,10 @@
 执行《界面优化.md》三个阶段，沿用现有桌面壳、语义 Tokens 与 Motion 预设；每阶段完成必要运行验证并独立 Git 提交。
 
 ## Next Step
-阶段二工作流、分页、后台恢复与宽窄列表回归全部通过；完成阶段二独立提交后，实施阶段三统一动效与运行验证。
+三阶段实现和定向自动化交付记录已完成，阶段一 `05cf648`、阶段二 `e85d64a`，阶段三与本计划一并本地提交。严格帧预算与实机验收缺口见下方及 docs/ui-library-refinement-2026-11-27.md；不将它们计为通过。
 
 ## Current Phase
-Phase 3
+Delivery
 
 ## Phases
 
@@ -26,20 +26,25 @@ Phase 3
 - **Status:** complete
 
 ### Phase 3: 状态动效与压测抛光
-- [ ] 扩展现有共享 Motion，统一 reduced motion 与状态过渡
-- [ ] 检查 Inspector、分段控件、图标反馈、删除补位与拖拽跟手
-- [ ] Electron 宽窄窗、明暗主题、4x CPU 与 1000+ 虚拟列表验证
-- [ ] 运行设计/动效/裁切审计和必要项目检查；独立提交
-- **Status:** in_progress
+- [x] 扩展现有共享 Motion，统一 reduced motion 与状态过渡
+- [x] 检查 Inspector、分段控件、图标反馈、删除补位与拖拽跟手
+- [x] Electron 宽窄窗、明暗主题、4x CPU 与 1000+ 虚拟列表验证（帧预算未达，见验收记录）
+- [x] 运行设计/动效/裁切审计和必要项目检查；独立提交
+- **Status:** complete（实现与定向自动化范围；性能验收缺口如下）
 
 ### Phase 4: 最终回归
-- [ ] 按最终改动范围完成项目检查并检查所有提交
-- [ ] 文档记录检查命令、证据与真实环境限制
-- **Status:** pending
+- [x] 按最终改动范围完成项目检查并检查已有提交
+- [x] 文档记录检查命令、证据与真实环境限制
+- **Status:** complete
 
 ### Phase 5: 交付
-- [ ] 汇报阶段提交、改动文件、验证结果与剩余缺口
-- **Status:** pending
+- [x] 汇总阶段提交、改动文件、验证结果与剩余缺口至交付记录
+- **Status:** complete
+
+## Remaining Acceptance
+- [ ] 4x CPU 严格 8/16ms 帧预算：RAF P95 32.5ms，当前结果未达
+- [ ] 物理 60/120fps 与逐帧 raster damage：当前工具证据不足
+- [ ] 物理触控板、系统中文输入法、VoiceOver、外部 Provider 与第二台 Mac 实机验收
 
 ## Decisions Made
 | Decision | Rationale |
@@ -60,3 +65,5 @@ Phase 3
 | 恢复时规划 patch 表头不匹配 | 用已读取的段落锚点追加，未应用失败的整组 patch |
 | Undo 恢复文献后原生焦点回落 body | 等待行挂载并验证焦点所有权，补测异步与虚拟化路径 |
 | 成功 DOI 请求身份重复复用旧 ledger 收据 | 成功终态释放身份，保留在途 / 未知失败重试身份；增加移除后重加回归 |
+| Playwright toMatchAriaSnapshot 依赖自身 runner | 在 node:test 中轮询 locator.ariaSnapshot，验证真实 AX 文本 |
+| 当前 Chromium LayerTree 无 layerPainted 事件 | 记录 API 限制，改用真实 Paint / invalidation 节点追踪和 Paint Flashing；不宣称零 raster damage |

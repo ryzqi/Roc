@@ -158,7 +158,7 @@ test('library and document-status failures expose independent retries without re
     const page = await app.firstWindow();
     page.setDefaultTimeout(6000);
     page.on('pageerror', error => errors.push(error.message));
-    await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 200 条');
+    await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 200 条');
     await expect(page.getByTestId('literature-status-error')).toContainText('Initial processing check unavailable');
     await expect(page.getByTestId('literature-status-ready')).toHaveCount(0);
     await page.evaluate(() => {window.failStatuses = null;});
@@ -187,7 +187,7 @@ test('library and document-status failures expose independent retries without re
     });
     await expect(page.getByTestId('literature-refresh-error')).toContainText('List refresh unavailable');
     await expect(page.getByTestId('literature-status-error')).toContainText('Processing check unavailable');
-    await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 200 条');
+    await expect.poll(() => page.getByTestId('literature-count').ariaSnapshot()).toBe('- text: 已加载 200 / 200 条');
     await expect(page.getByRole('textbox', {name: '当前草稿'})).toBeFocused();
     await expect(page.getByTestId('literature-status-ready')).toBeVisible();
     const retained = await page.evaluate(() => ({
