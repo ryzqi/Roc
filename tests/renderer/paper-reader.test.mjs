@@ -609,6 +609,24 @@ test('actual PDF comparison opens sealed bytes lazily with one native worker and
   },null,2));
 });
 
+test('PDF opens as a complete centered page, with an explicit fit-to-width option', async () => {
+  const f=await realPdfScene();
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  await page.getByTestId('reader-original-pdf').click();
+  await waitForOriginal();
+  await expect(page.getByTestId('reader-pdf-scroll')).toHaveAttribute('data-fit-mode','page');
+  const fit=await page.getByTestId('reader-pdf-scroll').evaluate(element=>{
+    const canvas=element.querySelector('canvas'),rect=canvas.getBoundingClientRect(),scroll=element.getBoundingClientRect();
+    return {pageHeight:rect.height,viewportHeight:scroll.height,center:rect.left+rect.width/2,viewportCenter:scroll.left+scroll.width/2};
+  });
+  assert.ok(fit.pageHeight<=fit.viewportHeight,JSON.stringify(fit));
+  assert.ok(Math.abs(fit.center-fit.viewportCenter)<18,JSON.stringify(fit));
+  await page.getByRole('button',{name:'PDF 适宽',exact:true}).click();
+  await waitForOriginal();
+  await expect(page.getByTestId('reader-pdf-scroll')).toHaveAttribute('data-fit-mode','width');
+  assert.ok(await page.getByTestId('reader-pdf-canvas').evaluate(canvas=>canvas.getBoundingClientRect().width<=1041));
+});
+
 test('original reading uses the full column with comfortable height and preserves exact source when comparing', async () => {
   const f=await realPdfScene(),before=await f.changes();
   const snapshot=f.snapshot();
@@ -1260,7 +1278,7 @@ for (const trigger of ['inactive', 'pressure']) test(`${trigger} Reader releases
   else await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.send('window-pressure', {pressure: false}));
   await waitForOriginal();
   assert.equal(await page.getByRole('spinbutton', {name: 'PDF 页码'}).inputValue(), '2');
-  assert.equal(await page.getByRole('button', {name: 'PDF 适宽', exact: true}).textContent(), '125%');
+  assert.equal(await page.getByLabel('PDF 缩放比例').textContent(), '125%');
   assert.equal(await note.inputValue(), 'Preserved unsaved background annotation');
   assert.equal(await page.evaluate(() => window.liveWorkers), 1);
   assert.equal(await f.changes(), changes);
@@ -1316,7 +1334,7 @@ test('prolonged native hide releases the selected PDF and restores its annotatio
   await waitForOriginal();
   assert.equal(await page.evaluate(() => window.createdWorkers), created + 1);
   assert.equal(await page.getByRole('spinbutton', {name: 'PDF 页码'}).inputValue(), '2');
-  assert.equal(await page.getByRole('button', {name: 'PDF 适宽', exact: true}).textContent(), '125%');
+  assert.equal(await page.getByLabel('PDF 缩放比例').textContent(), '125%');
   assert.equal(await note.inputValue(), 'Preserved long hidden annotation');
   assert.equal(await f.changes(), changes);
 });
