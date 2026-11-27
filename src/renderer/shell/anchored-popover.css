@@ -1,0 +1,70 @@
+.anchored-popover-position {
+  inline-size: max-content;
+  max-inline-size: calc(100vw - 2 * var(--shadow-popover-gutter));
+  font-size: var(--font-meta-size);
+}
+
+.anchored-popover-position[aria-hidden='true'] {
+  pointer-events: none;
+}
+
+.anchored-popover-surface {
+  max-inline-size: var(--anchored-available-width);
+  max-block-size: var(--anchored-available-height);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: var(--space-3);
+  border: .5px solid var(--border-default);
+  border-radius: var(--r-card);
+  background: var(--surface-overlay);
+  color: var(--ink-primary);
+  box-shadow: var(--shadow-popover);
+  opacity: 1;
+  transform: none;
+  transition-property: opacity, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-standard);
+}
+
+.anchored-popover-position[data-placement^='bottom'] .anchored-popover-surface { transform-origin: top; }
+.anchored-popover-position[data-placement^='top'] .anchored-popover-surface { transform-origin: bottom; }
+.anchored-popover-position[data-placement^='left'] .anchored-popover-surface { transform-origin: right; }
+.anchored-popover-position[data-placement^='right'] .anchored-popover-surface { transform-origin: left; }
+
+.anchored-popover-position:is([data-state='initial'], [data-state='close']) .anchored-popover-surface {
+  opacity: 0;
+  transform: scale(.98);
+}
+
+.anchored-popover-position:is([data-state='initial'], [data-state='close'])[data-placement^='bottom'] .anchored-popover-surface {
+  transform: translateY(-4px) scale(.98);
+}
+
+.anchored-popover-position:is([data-state='initial'], [data-state='close'])[data-placement^='top'] .anchored-popover-surface {
+  transform: translateY(4px) scale(.98);
+}
+
+.anchored-popover-position:is([data-state='initial'], [data-state='close'])[data-placement^='left'] .anchored-popover-surface {
+  transform: translateX(4px) scale(.98);
+}
+
+.anchored-popover-position:is([data-state='initial'], [data-state='close'])[data-placement^='right'] .anchored-popover-surface {
+  transform: translateX(-4px) scale(.98);
+}
+
+.anchored-popover-surface :is(button, input, select):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anchored-popover-surface,
+  .anchored-popover-position:is([data-state='initial'], [data-state='close']) .anchored-popover-surface {
+    transform: none;
+  }
+}
+
+:root[data-reduced-motion='true'] .anchored-popover-surface,
+:root[data-reduced-motion='true'] .anchored-popover-position:is([data-state='initial'], [data-state='close']) .anchored-popover-surface {
+  transform: none;
+}

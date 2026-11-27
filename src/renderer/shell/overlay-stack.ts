@@ -15,7 +15,8 @@
  *
  *   - `ambient`（环境层）：布局自己冒出来的界面（窄窗时的左栏 / 助手抽屉）。它属于页面
  *     背景，永远在所有对话框**之下**；
- *   - `dialog`（对话层）：用户显式打开的（设置、管理、Git、各类确认框）。后打开的在上。
+ *   - `dialog`（对话层）：用户显式打开的（设置、管理、Git、浮层与确认框）。后打开的在上。
+ *     键盘归属与模态分开：非模态浮层也会入栈，但不令背景页面惰性。
  *
  * 同层之内仍然按打开顺序（后开在上），这是用户唯一会主动感知的规则。
  */
@@ -34,20 +35,21 @@ export const OVERLAY_Z_INDEX: Readonly<Record<OverlayLayer, number>> = {
   dialog: 50
 };
 
-const stacks: { dialog: string[]; ambient: string[] } = { dialog: [], ambient: [] };
-export function pushOverlay(overlayId: string, layer: OverlayLayer): void {
+type OverlayEntry = {id: string; modal: boolean};
+const stacks: { dialog: OverlayEntry[]; ambient: OverlayEntry[] } = { dialog: [], ambient: [] };
+export function pushOverlay(overlayId: string, layer: OverlayLayer, modal = true): void {
   const stack = stacks[layer];
-  const existing = stack.indexOf(overlayId);
+  const existing = stack.findIndex(entry => entry.id === overlayId);
   if (existing >= 0) {
     stack.splice(existing, 1);
   }
-  stack.push(overlayId);
+  stack.push({id: overlayId, modal});
 }
 
 export function popOverlay(overlayId: string): void {
   for (const layer of ['dialog', 'ambient'] as const) {
     const stack = stacks[layer];
-    const index = stack.indexOf(overlayId);
+    const index = stack.findIndex(entry => entry.id === overlayId);
     if (index >= 0) {
       stack.splice(index, 1);
     }
@@ -62,9 +64,9 @@ export function popOverlay(overlayId: string): void {
 export function topOverlayId(): string | null {
   const dialog = stacks.dialog.at(-1);
   if (dialog !== undefined) {
-    return dialog;
+    return dialog.id;
   }
-  return stacks.ambient.at(-1) ?? null;
+  return stacks.ambient.at(-1)?.id ?? null;
 }
 
 /** 打开中的浮层总数（快捷键据此屏蔽会改动背后视图的按键）。 */
@@ -73,13 +75,13 @@ export function overlayStackDepth(): number {
 }
 
 /**
- * 有对话层打开吗。
+ * 有模态对话层打开吗。
  *
- * 背景惰性（`aria-hidden`）跟的是它，而不是总数：窄窗的左栏抽屉属于页面本身，它开着时页面
- * 仍然该是页面；只有对话框才把背后判为惰性。
+ * 背景惰性（`aria-hidden`）跟的是模态语义，而不是键盘栈深度：
+ * 窄窗抽屉和非模态浮层都保留页面可访问性。
  */
 export function hasOpenDialog(): boolean {
-  return stacks.dialog.length > 0;
+  return stacks.dialog.some(entry => entry.modal);
 }
 
 /** 仅测试使用：清空两层。 */

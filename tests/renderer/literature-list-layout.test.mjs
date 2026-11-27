@@ -312,8 +312,10 @@ test('large result sets window their rows and preserve selected items and keyboa
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
   await page.getByTestId('literature-multiselect').click();
+  await page.getByTestId('literature-filter-toggle').click();
   await page.getByRole('checkbox',{name:'选择已加载结果'}).check();
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 200 篇');
+  await page.getByTestId('literature-filter-toggle').click();
   await page.getByTestId('literature-search').fill('120 Agent');
   await expect(page.getByTestId('literature-count')).toHaveText('已加载 1 / 1 条');
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
@@ -370,7 +372,7 @@ test('hidden context navigation retains reading state while query and project ch
   await expect(page.getByTestId('adjacent-control')).toBeFocused();
   await expect(page.getByTestId('literature-search')).toHaveValue('Agent');
   await expect(page.getByTestId('literature-sort')).toHaveValue('title');
-  await expect(page.getByTestId('literature-archived-toggle')).toBeChecked();
+  await expect(page.getByTestId('literature-filter-toggle')).toHaveAttribute('aria-pressed','true');
   await expect(categories).toHaveAttribute('open','');
   await expect(categories.getByRole('button',{name:'期刊论文 200 条'})).toHaveAttribute('aria-pressed','true');
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 1 篇');

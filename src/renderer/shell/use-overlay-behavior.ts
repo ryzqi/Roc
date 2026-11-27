@@ -20,9 +20,8 @@ export { overlayStackDepth, topOverlayId } from './overlay-stack';
  *   - **Tab** is trapped only by the top layer. Without this, every open
  *     overlay's listener would refocus *its own* first element and Tab
  *     would ping-pong instead of advancing.
- *   - **`aria-hidden` on `#root`** follows the presence of a *dialog*, not the stack
- *     depth: an ambient drawer (the narrow-window sidebar) is part of the page and must
- *     not make the page look inert, while any dialog above it must.
+ *   - **`aria-hidden` on `#root`** follows modal semantics, not keyboard ownership:
+ *     ambient drawers and non-modal popovers keep the page accessible.
  *
  * The stack is layered rather than strictly ordered by open time — see that module's
  * header for the covered dropdown this fixes.
@@ -49,8 +48,10 @@ export type OverlayBehaviorOptions = {
   overlayId: string;
   /** Which layer this overlay lives in; see `overlay-stack.ts`. Defaults to `dialog`. */
   layer?: OverlayLayer;
-  /** Set false to leave the app accessible behind this overlay (non-modal). */
+  /** Whether Roc manages aria-hidden on #root. A modal primitive can own it instead. */
   inertBackground?: boolean;
+  /** Modal semantics, independent of who manages aria-hidden. Defaults to inertBackground. */
+  modal?: boolean;
   /** Set false when a primitive owns focus/Tab; captureEscape can still assign Escape to Roc. */
   manageFocus?: boolean;
   /** Own Escape before a primitive's document listener; focus and Tab can remain delegated. */
@@ -68,6 +69,7 @@ export function useOverlayBehavior({
   overlayId,
   layer = 'dialog',
   inertBackground = true,
+  modal = inertBackground,
   manageFocus = true,
   captureEscape = false,
   preserveFocus = false
@@ -75,6 +77,7 @@ export function useOverlayBehavior({
   // Keep the latest callbacks reachable from a listener installed once per open.
   const closeRef = useRef(onRequestClose);
   const canCloseRef = useRef(canClose);
+  const composingRef = useRef(false);
   closeRef.current = onRequestClose;
   canCloseRef.current = canClose;
 
@@ -86,31 +89,45 @@ export function useOverlayBehavior({
     }
 
     const hadDialog = hasOpenDialog();
-    pushOverlay(overlayId, layer);
+    pushOverlay(overlayId, layer, modal);
 
     const root = document.getElementById('root');
-    // Inheritedness follows the presence of a *dialog*, not the depth: an ambient drawer is
-    // part of the page, so the page behind it is still the page. Only a dialog makes it inert.
+    // Only modal layers make the app inert. A non-modal popover owns keyboard input
+    // without preventing a later modal from acquiring background accessibility.
     if (inertBackground && !hadDialog && hasOpenDialog() && root !== null) {
       root.setAttribute('aria-hidden', 'true');
     }
 
+    let compositionTimer: number | undefined;
+    const onCompositionStart = (): void => {
+      window.clearTimeout(compositionTimer);
+      composingRef.current = true;
+    };
+    const onCompositionEnd = (): void => {
+      compositionTimer = window.setTimeout(() => {composingRef.current = false;}, 0);
+    };
     const onEscape = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented || topOverlayId() !== overlayId) return;
+      if (event.key !== 'Escape' || event.isComposing || composingRef.current || event.defaultPrevented || topOverlayId() !== overlayId) return;
       event.preventDefault();
       event.stopPropagation();
       if (canCloseRef.current()) closeRef.current();
     };
+    window.addEventListener('compositionstart', onCompositionStart, true);
+    window.addEventListener('compositionend', onCompositionEnd, true);
     if (captureEscape) window.addEventListener('keydown', onEscape, true);
     return () => {
       if (captureEscape) window.removeEventListener('keydown', onEscape, true);
+      window.removeEventListener('compositionstart', onCompositionStart, true);
+      window.removeEventListener('compositionend', onCompositionEnd, true);
+      window.clearTimeout(compositionTimer);
+      composingRef.current = false;
       popOverlay(overlayId);
-      // Only re-expose the app once no dialog is layered on it any more.
+      // Only re-expose the app once no modal is layered on it any more.
       if (inertBackground && !hasOpenDialog() && root !== null) {
         root.removeAttribute('aria-hidden');
       }
     };
-  }, [open, overlayId, layer, inertBackground, captureEscape]);
+  }, [open, overlayId, layer, inertBackground, modal, captureEscape]);
 
   useEffect(() => {
     if (!open || !manageFocus) return;
@@ -121,7 +138,7 @@ export function useOverlayBehavior({
 
     const onKeyDown = (event: KeyboardEvent): void => {
       // Nested controls get first refusal (e.g. Escape closes a model popover).
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || event.isComposing || composingRef.current) return;
       // Only the top layer traps. Lower layers stay inert but keep their state.
       if (topOverlayId() !== overlayId) {
         return;

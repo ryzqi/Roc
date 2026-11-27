@@ -79,6 +79,7 @@ export function RadixSettingsDialogShell({
     overlayId,
     layer,
     inertBackground: false,
+    modal: true,
     manageFocus: false,
     captureEscape
   });

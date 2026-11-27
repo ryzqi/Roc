@@ -95,3 +95,54 @@ test('栈：只有环境层时 topOverlayId 仍是它（抽屉自己也要响应
     stack.resetOverlayStack();
   }
 });
+
+test('栈：非模态浮层拥有键盘但不会令背景惰性', () => {
+  stack.resetOverlayStack();
+  try {
+    stack.pushOverlay('sidebar', 'ambient');
+    stack.pushOverlay('filter', 'dialog', false);
+    assert.equal(stack.topOverlayId(), 'filter');
+    assert.equal(stack.overlayStackDepth(), 2);
+    assert.equal(stack.hasOpenDialog(), false, '筛选浮层不应隐藏背景页面');
+
+    stack.pushOverlay('confirm', 'dialog');
+    assert.equal(stack.topOverlayId(), 'confirm');
+    assert.equal(stack.hasOpenDialog(), true, '真正的模态仍应隐藏背景页面');
+    stack.popOverlay('confirm');
+    assert.equal(stack.topOverlayId(), 'filter');
+    assert.equal(stack.hasOpenDialog(), false);
+  } finally {
+    stack.resetOverlayStack();
+  }
+});
+
+test('栈：模态中的非模态浮层退出后保留父层惰性与键盘归属', () => {
+  stack.resetOverlayStack();
+  try {
+    stack.pushOverlay('settings', 'dialog');
+    stack.pushOverlay('filter', 'dialog', false);
+    assert.equal(stack.topOverlayId(), 'filter');
+    assert.equal(stack.hasOpenDialog(), true);
+    stack.popOverlay('filter');
+    assert.equal(stack.topOverlayId(), 'settings');
+    assert.equal(stack.hasOpenDialog(), true);
+  } finally {
+    stack.resetOverlayStack();
+  }
+});
+
+test('栈：重复登记更新背景标记，移除不会遗留惰性', () => {
+  stack.resetOverlayStack();
+  try {
+    stack.pushOverlay('surface', 'dialog');
+    stack.pushOverlay('surface', 'dialog', false);
+    assert.equal(stack.overlayStackDepth(), 1);
+    assert.equal(stack.hasOpenDialog(), false);
+    stack.pushOverlay('surface', 'dialog');
+    assert.equal(stack.hasOpenDialog(), true);
+    stack.popOverlay('surface');
+    assert.equal(stack.hasOpenDialog(), false);
+  } finally {
+    stack.resetOverlayStack();
+  }
+});

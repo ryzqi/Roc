@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { AlertCircle, ArrowLeft, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Search, Share2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, PanelRight, Plus, Search, Share2 } from 'lucide-react';
 import { ViewActivity, useViewActive } from '../shared/view-activity';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
@@ -15,6 +15,9 @@ import { useLiterature } from './literature-scope';
 import { useLiteratureImportActions } from './use-literature-import-actions';
 import { libraryItemTitle } from './format';
 import {LiteratureProcessingPanel} from './LiteratureProcessingPanel';
+import {LibraryInspector} from './LibraryInspector';
+import {InspectorPane} from '../shell/InspectorPane';
+import './library-hub.css';
 
 /**
  * One retained literature host with local tabs grouped under discovery, library and knowledge.
@@ -32,7 +35,7 @@ const KnowledgeGraphView = retryableLazy(async () => ({default: (await import('.
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
   { id: 'search', label: '学术搜索', icon: Search, iconClass: 'text-[var(--icon-literature)]' },
-  { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  { id: 'reader', label: '文献库', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'notes', label: '笔记', icon: NotebookPen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'radar', label: '推荐与趋势', icon: Radar, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'rag', label: '问答', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
@@ -63,12 +66,20 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const [indexRequestId, setIndexRequestId] = useState(0);
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(null);
   const [narrow, setNarrow] = useState(false);
+  const [inspectorOverlay, setInspectorOverlay] = useState(true);
+  const [readerMode, setReaderMode] = useState<'browse' | 'read'>('browse');
+  const [inspectorOpen, setInspectorOpen] = useState(store.selectedId !== null);
+  const [inspectorSection, setInspectorSection] = useState<'paper' | 'processing'>('paper');
   const [monitorLock, setMonitorLock] = useState(false);
   const monitorLockRef = useRef(false);
   const onMonitorLock = useCallback((locked: boolean) => {monitorLockRef.current = locked; setMonitorLock(locked);}, []);
   const hubRef = useRef<HTMLDivElement>(null);
+  const libraryCanvasRef = useRef<HTMLDivElement>(null);
+  const inspectorTriggerRef = useRef<HTMLButtonElement>(null);
   const paperPickerRef = useRef<HTMLSelectElement>(null);
-  const navigationOpen = subView === 'reader' && !scope.contextDrawerOpen && (navigationOverride ?? (!narrow && store.selected === null));
+  const browsing = subView === 'reader' && readerMode === 'browse';
+  const navigationOpen = subView === 'reader' && !scope.contextDrawerOpen &&
+    (browsing || (navigationOverride ?? (!narrow && store.selected === null)));
   const selectSubView = (id: SubViewId, onSelected?: () => void): void => {
     if (monitorLockRef.current && id !== 'monitors') return;
     const destination = workspaceForSubView(id);
@@ -87,11 +98,25 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     const element = hubRef.current;
     if (element === null) return;
     const observer = new ResizeObserver(([entry]) => {
-      if (entry !== undefined) setNarrow(entry.contentRect.width < 1024);
+      if (entry !== undefined) {
+        setNarrow(entry.contentRect.width < 1024);
+        setInspectorOverlay(entry.contentRect.width < 900 || window.innerWidth < 1280);
+      }
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    const resize = (): void => setInspectorOverlay(element.clientWidth < 900 || window.innerWidth < 1280);
+    window.addEventListener('resize', resize);
+    return () => {observer.disconnect(); window.removeEventListener('resize', resize);};
   }, []);
+  useEffect(() => {
+    if (scope.contextDrawerOpen) setReaderMode('read');
+  }, [scope.contextDrawerOpen]);
+  useEffect(() => {
+    setInspectorOpen(false);
+    setInspectorSection('paper');
+    setReaderMode('browse');
+    setNavigationOverride(null);
+  }, [store.projectId]);
   useEffect(() => {
     hubRef.current?.querySelector(`#literature-tab-${subView}`)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }, [subView]);
@@ -104,10 +129,19 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const selectPaper = (id: string | null): void => {
     store.select(id, commitSelection => {
       commitSelection();
+      setReaderMode('read');
+      setInspectorOpen(false);
       setNavigationOverride(false);
       setFocus({parseId: null, locator: null});
       setReturnToSearch(false);
-      requestAnimationFrame(() => paperPickerRef.current?.focus());
+      requestAnimationFrame(() => paperPickerRef.current?.focus({preventScroll: true}));
+    });
+  };
+  const inspectPaper = (id: string): void => {
+    store.select(id, commitSelection => {
+      commitSelection();
+      setInspectorSection('paper');
+      setInspectorOpen(true);
     });
   };
   /** Set when the user arrives at the graph from a wiki concept page. */
@@ -127,6 +161,8 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     if (target.kind === 'concept') {
       setGraphFocus({claimId: target.claimId, nonce: request.nonce});
     } else {
+      setReaderMode('read');
+      setInspectorOpen(false);
       setFocus({parseId: target.parseId ?? null, locator: target.locator ?? null, text: target.text});
       setReaderFocusRequestId(request.nonce);
       setNavigationOverride(false);
@@ -167,7 +203,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     );
 
   return (
-    <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 min-w-0 flex-col" data-testid="literature-hub" data-sub-view={subView} data-workspace={workspace}>
+    <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 min-w-0 flex-col" data-testid="literature-hub" data-sub-view={subView} data-workspace={workspace} data-reader-mode={readerMode}>
       <div className="literature-toolbar grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b-[0.5px] border-line px-3 py-2">
         <div
           role="tablist"
@@ -213,7 +249,24 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           })}
         </div>
 
-        <div className="literature-actions ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="literature-actions ml-auto flex min-w-0 items-center justify-end gap-2">
+          {workspace !== 'library' ? null : <>
+            {!browsing && subView === 'reader' ? <button type="button" data-testid="literature-back-to-list"
+              onClick={() => {setReaderMode('browse'); setInspectorOpen(false);}}
+              className="library-hub-action"><ArrowLeft size={14} aria-hidden="true"/><span>文献库</span></button> : null}
+            <button type="button" ref={inspectorTriggerRef} data-inspector-trigger
+              data-testid="literature-toggle-inspector" className="library-hub-action"
+              aria-label="文献详情" aria-expanded={inspectorOpen && inspectorSection === 'paper'}
+              onClick={() => {setInspectorSection('paper'); setInspectorOpen(current => inspectorSection === 'paper' ? !current : true);}}>
+              <PanelRight size={14} aria-hidden="true"/><span>详情</span>
+            </button>
+            <button type="button" data-inspector-trigger data-testid="literature-processing-toggle"
+              disabled={store.projectId === null} className="library-hub-action"
+              aria-label="后台处理" aria-expanded={inspectorOpen && inspectorSection === 'processing'}
+              onClick={() => {setInspectorSection('processing'); setInspectorOpen(current => inspectorSection === 'processing' ? !current : true);}}>
+              <Layers size={14} aria-hidden="true"/><span>后台处理</span>
+            </button>
+          </>}
           <button type="button" data-testid="literature-review-inspect" disabled={scope.projectId === null}
             className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-50"
             onClick={() => {
@@ -237,13 +290,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
         </div>
       </div>
 
-      {store.projectId === null || workspace !== 'library' ? null : <LiteratureProcessingPanel client={store.client} projectId={store.projectId}
-        writable={scope.writable} pickFile={actions.pickFile} addPdfToItem={store.addPdfToItem}
-        onOpenPdf={scope.openFileInCanvas} onDocumentsChanged={store.reloadDocuments}
-        onOpenKnowledge={openPipelineKnowledge}
-        onOpenItem={libraryItemId => scope.openLiterature({kind: 'reader', libraryItemId})}/>}
-
-      {subView === 'reader' ? <div className="literature-paper-picker flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1">
+      {subView === 'reader' && !browsing ? <div className="literature-paper-picker flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1">
         {scope.contextDrawerOpen ? null : <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
           aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
           aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
@@ -268,14 +315,27 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             </select>
       </div> : null}
 
-      <div className="flex min-h-0 flex-1">
-        <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none', width: narrow ? '100%' : 240 }} className="literature-library-column min-h-0 min-w-0 shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
-          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={selectPaper} />
+      <div ref={libraryCanvasRef} id="literature-active-panel" role="tabpanel"
+        aria-labelledby={`literature-tab-${selectedTab}`} tabIndex={0}
+        className="library-hub-canvas flex min-h-0 flex-1"
+        onKeyDown={event => {
+          if (browsing && !inspectorOverlay && event.key === 'Escape' && !event.nativeEvent.isComposing && !event.defaultPrevented) {
+            event.preventDefault(); setInspectorOpen(false);
+          }
+        }}>
+        <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none',
+          width: browsing ? undefined : narrow ? '100%' : 240, flex: browsing ? 1 : undefined }}
+          data-testid="literature-library-browse" data-mode={readerMode}
+          className="literature-library-column min-h-0 min-w-0 shrink-0" aria-label="文献列表">
+          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={browsing ? inspectPaper : selectPaper}
+            onReadItem={selectPaper}/>
         </aside>
 
-        <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${selectedTab}`} tabIndex={0} style={navigationOpen && narrow ? {display: 'none'} : undefined} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
+        <div
+          style={browsing || (navigationOpen && narrow) ? {display: 'none'} : undefined}
+          className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
           {(visited.has('reader') || subView === 'reader') ? (
-            <ViewActivity active={subView === 'reader'}><div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
+            <ViewActivity active={subView === 'reader' && !browsing}><div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             {store.selectedStatus === 'error' ? <ErrorBar error={{level: 'page', message: store.selectedError ?? '读取文献失败', retry: store.reloadSelected}} /> : null}
             <PaperReader
@@ -390,6 +450,18 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             </div></ViewActivity>
           ) : null}
         </div>
+        {workspace !== 'library' ? null : <InspectorPane
+          open={inspectorOpen} overlay={!browsing || inspectorOverlay} anchorRef={libraryCanvasRef}
+          returnFocusRef={inspectorTriggerRef} title={inspectorSection === 'paper' ? '文献详情' : '后台处理'}
+          testId="literature-inspector" onClose={() => setInspectorOpen(false)}>
+          {inspectorSection === 'paper' ? <LibraryInspector key={JSON.stringify([store.projectId, store.selectedId])}
+            literature={store} onRead={selectPaper} onOpenKnowledge={openPipelineKnowledge}/>
+            : store.projectId === null ? null : <LiteratureProcessingPanel client={store.client} projectId={store.projectId}
+              presentation="inspector" writable={scope.writable} pickFile={actions.pickFile} addPdfToItem={store.addPdfToItem}
+              onOpenPdf={scope.openFileInCanvas} onDocumentsChanged={store.reloadDocuments}
+              onOpenKnowledge={openPipelineKnowledge}
+              onOpenItem={libraryItemId => {setInspectorSection('paper'); inspectPaper(libraryItemId);}}/>}
+        </InspectorPane>}
       </div>
 
       {store.action.error === null ? null : (

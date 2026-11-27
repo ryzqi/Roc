@@ -11,6 +11,7 @@ import {useAsyncAction} from '../app/use-async-resource';
 import {ActionButton, formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
 import {ActionStatus} from '../shared/action-status';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
+import {AnchoredPopover} from '../shell/AnchoredPopover';
 import './library-list.css';
 import type {LiteratureStore} from './use-literature-store';
 
@@ -39,6 +40,8 @@ export type LibraryListProps = {
   entryType?: string | null;
   /** Owns guarded selection and any navigation; without it the list selects directly. */
   onOpenItem?: (id: string) => void;
+  /** Opens full reading without changing the single-click Inspector selection. */
+  onReadItem?: (id: string) => void;
   onRequestImport: () => void;
 };
 
@@ -61,7 +64,7 @@ function fullTextLabel(item: ResearchLibraryItem, store: LiteratureStore): strin
   return '全文已保存';
 }
 
-export function LibraryList({ compact = false, entryType = null, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
+export function LibraryList({ compact = false, entryType = null, onOpenItem, onReadItem, onRequestImport }: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
   const [searchDraft, setSearchDraft] = useState(literature.query);
   const [sort, setSort] = useState<SortOrder>('updated');
@@ -143,8 +146,8 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
     const selected = item.id === literature.selectedId;
     const venue = readVenue(item.bibliography);
     const tabIndex = item.id === tabStopId ? 0 : -1;
-    return <div className="library-row" data-selected={selected}>
-      {selecting ? <label className="library-row-selection">
+    return <div className="library-row" data-library-row data-selected={selected}>
+      <label className="library-row-selection" aria-hidden={!selecting} inert={!selecting}>
         <input type="checkbox" checked={checkedIds.has(item.id)} tabIndex={tabIndex}
           aria-label={`选择文献 ${libraryItemTitle(item)}`}
           onChange={event => setCheckedIds(current => {
@@ -153,7 +156,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
             return next;
           })}/>
         <span className="sr-only">选择</span>
-      </label> : null}
+      </label>
       <button type="button" tabIndex={tabIndex}
         ref={element => {
           if (element === null) {
@@ -182,6 +185,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           if (onOpenItem) onOpenItem(item.id);
           else literature.select(item.id);
         }}
+        onDoubleClick={() => onReadItem?.(item.id)}
         aria-current={selected ? 'true' : undefined}
         data-testid={`literature-row-${item.id}`} className="library-row-open">
         <span className="library-row-title" title={libraryItemTitle(item)}>{libraryItemTitle(item)}</span>
@@ -190,13 +194,20 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           <span className="tabular-nums">{formatYear(item.metadata.publishedYear)}</span>
           {venue === null ? null : <span title={venue}>{venue}</span>}
         </span>
-        {selected || item.archived ? <span className="library-row-status">
-          {selected ? <span data-testid={`literature-fulltext-${item.id}`}>{fullTextLabel(item, literature)}</span> : null}
-          {item.archived ? <span><Archive size={12} aria-hidden="true"/>已归档</span> : null}
-        </span> : null}
       </button>
-      <CitationKeyCopy key={item.bibliography.citationKey} itemId={item.id}
-        citationKey={item.bibliography.citationKey} tabIndex={tabIndex}/>
+      <span className="library-row-status">
+        {item.archived ? <span><Archive size={12} aria-hidden="true"/>已归档</span>
+          : <span data-testid={`literature-fulltext-${item.id}`}>{fullTextLabel(item, literature)}</span>}
+      </span>
+      <div className="library-row-actions">
+        {onReadItem === undefined ? null : <button type="button" className="library-icon-button"
+          aria-label={`阅读文献 ${libraryItemTitle(item)}`} title="阅读文献" tabIndex={tabIndex}
+          data-testid={`literature-read-${item.id}`} onClick={() => onReadItem(item.id)}>
+          <BookOpen size={14} aria-hidden="true"/>
+        </button>}
+        <CitationKeyCopy key={item.bibliography.citationKey} itemId={item.id}
+          citationKey={item.bibliography.citationKey} tabIndex={tabIndex}/>
+      </div>
     </div>;
   };
 
@@ -226,27 +237,31 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
             data-testid="literature-sort" className={formSelectClass}>
             <option value="updated">最近更新</option><option value="year">发表年份</option><option value="title">文献题名</option>
           </select>
-          <button type="button" className="library-icon-button" aria-label="文献筛选" title="文献筛选"
-            aria-expanded={filtersOpen} aria-pressed={literature.includeArchived}
-            data-testid="literature-filter-toggle" onClick={() => setFiltersOpen(current => !current)}>
-            <SlidersHorizontal size={14} aria-hidden="true"/>
-          </button>
+          <AnchoredPopover open={filtersOpen} onOpenChange={setFiltersOpen} label="文献筛选"
+            testId="literature-filter-popover" renderTrigger={props => <button {...props} type="button"
+              className="library-icon-button" aria-label="文献筛选" title="文献筛选"
+              aria-pressed={literature.includeArchived} data-testid="literature-filter-toggle">
+              <SlidersHorizontal size={14} aria-hidden="true"/>
+            </button>}>
+            <div className="library-filter-options">
+              <label className="library-filter-option">
+                <input type="checkbox" checked={literature.includeArchived}
+                  onChange={event => literature.setIncludeArchived(event.target.checked)} data-testid="literature-archived-toggle"/>
+                显示已归档
+              </label>
+              {selecting ? <label className="library-filter-option">
+                <input type="checkbox" checked={items.length > 0 && checkedItems.length === items.length} disabled={items.length === 0}
+                  onChange={event => setCheckedIds(new Set(event.target.checked ? items.map(item => item.id) : []))}/>
+                选择已加载结果
+              </label> : null}
+            </div>
+          </AnchoredPopover>
           <button type="button" className="library-icon-button" aria-pressed={selecting}
             aria-label={selecting ? '结束多选' : '多选文献'} title={selecting ? '结束多选' : '多选文献'}
             data-testid="literature-multiselect" onClick={() => {setSelecting(current => !current); setCheckedIds(new Set());}}>
             <ListChecks size={14} aria-hidden="true"/>
           </button>
         </div>
-        {filtersOpen ? <label className="library-filter-option">
-          <input type="checkbox" checked={literature.includeArchived}
-            onChange={event => literature.setIncludeArchived(event.target.checked)} data-testid="literature-archived-toggle"/>
-          显示已归档
-        </label> : null}
-        {selecting ? <label className="library-filter-option">
-          <input type="checkbox" checked={items.length > 0 && checkedItems.length === items.length} disabled={items.length === 0}
-            onChange={event => setCheckedIds(new Set(event.target.checked ? items.map(item => item.id) : []))}/>
-          选择已加载结果
-        </label> : null}
       </div>
 
       {literature.status === 'error' ? (

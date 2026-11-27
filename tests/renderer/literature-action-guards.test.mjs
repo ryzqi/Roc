@@ -376,6 +376,7 @@ test('browser unmount stops the subsequent import stage and refresh callback', a
 test('library citation copy exposes clipboard rejection and clears it after a successful retry', async () => {
   await mount('library');
   await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic clipboard rejection');};});
+  await page.getByTestId('literature-row-paper-copy').hover();
   await page.getByRole('button',{name:'复制引用键 author2026paper',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('剪贴板不可用，请手动复制。');
   await page.evaluate(()=>{navigator.clipboard.writeText=async value=>{window.copiedKey=value;};});

@@ -30,7 +30,7 @@ const LibraryItem = forwardRef<HTMLDivElement, ItemProps<ResearchLibraryItem> & 
 
 const components: Components<ResearchLibraryItem> = {List: LibraryList, Item: LibraryItem};
 
-/** Loaded only for large result sets; variable-height titles remain fully measurable. */
+/** Loaded only for large result sets; every paper keeps the same 64px track. */
 export const LibraryVirtualizedRows = forwardRef<LibraryVirtualizedRowsHandle, LibraryVirtualizedRowsProps>(
   function LibraryVirtualizedRows({items, initialIndex, navigationScope, onRangeChanged, onNavigationInterrupted, renderRow}, ref) {
     const virtualizerRef = useRef<VirtuosoHandle | null>(null);
@@ -96,7 +96,7 @@ export const LibraryVirtualizedRows = forwardRef<LibraryVirtualizedRowsHandle, L
     };
     return <Virtuoso ref={virtualizerRef} scrollerRef={setScrollerRef} style={{height: '100%'}} className="library-virtual-list"
       data={items} computeItemKey={(_index, item) => item.id} components={components}
-      initialTopMostItemIndex={initialIndex} defaultItemHeight={88} increaseViewportBy={176}
+      initialTopMostItemIndex={initialIndex} fixedItemHeight={64} increaseViewportBy={128}
       rangeChanged={onRangeChanged} itemContent={renderRow}
       itemsRendered={() => {if (navigating.current) keepNavigationActive();}}
       totalListHeightChanged={() => {if (navigating.current) keepNavigationActive();}}

@@ -12,10 +12,11 @@ const buttonClass = 'min-h-7 rounded-control px-2 text-muted hover:bg-[var(--ove
 type RetryContext = {key: string; locked: boolean};
 type RetryState = {context: RetryContext; pending: boolean; error: string | null; notice: string | null};
 
-export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, onKnowledge}: {
+export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, onKnowledge, presentation = 'disclosure'}: {
   itemId: string; document: ResearchDocument | null;
   onMetadata: () => void; onPdf: () => void; onParse: () => void;
-  onKnowledge: (target: 'index' | 'wiki') => void
+  onKnowledge: (target: 'index' | 'wiki') => void;
+  presentation?: 'disclosure' | 'inspector';
 }): React.JSX.Element {
   const scope = useWorkspaceScope();
   const [selected, setSelected] = useState<PipelineStage['id'] | null>(null);
@@ -77,10 +78,7 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
     if (newProcessingFailure) setSelected(current => current ?? failedStageId);
     if (disclosure.current !== null) disclosure.current.open = true;
   }, [receipt.status, processingFailure, failedStageId, retryFailure]);
-  return <details ref={disclosure} data-testid="reader-resource-status" className="reading-disclosure reading-pipeline-details">
-    <summary data-testid="reader-pipeline-toggle">处理阶段{receipt.error !== null ? <span>读取失败</span> :
-      failedStage ? <span>{failedStage.label}{failedStage.state}</span> : null}</summary>
-    <div className="reading-disclosure-body">
+  const body = <>
     {receipt.error !== null ? <div className="reading-pipeline-feedback">
       <p role="alert" className="text-muted">处理回执读取失败：{receipt.error}</p>
       <button type="button" onClick={receipt.reload} className={buttonClass}>重试</button>
@@ -103,6 +101,7 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
       if (stage === 'pdf' && document !== null) onPdf();
       if (stage === 'parse' && document !== null) onParse();
     }}/>}
+    <div className={presentation === 'inspector' ? 'reading-pipeline-stage-slot' : undefined}>
     {current === undefined ? null : <div data-testid="reader-pipeline-details" className="flex flex-wrap items-center gap-2 text-[length:var(--font-meta-size)]" aria-label={`${current.label}详情`}>
       <span className="text-muted">{current.label}：{current.state}</span>
       {selected !== 'pdf' || document !== null ? null : <button type="button" className={buttonClass} disabled={!scope.writable || pending}
@@ -112,5 +111,13 @@ export function ResourceStatus({itemId, document, onMetadata, onPdf, onParse, on
         onClick={() => onKnowledge(selected)}>{selected === 'index' ? '查看索引任务' : '查看知识页'}</button>}
     </div>}
     </div>
+    </>;
+  return presentation === 'inspector' ? <section data-testid="reader-resource-status" className="reading-pipeline-inspector" aria-label="文献处理阶段">
+    <h3>处理阶段</h3>
+    <div className="reading-disclosure-body">{body}</div>
+  </section> : <details ref={disclosure} data-testid="reader-resource-status" className="reading-disclosure reading-pipeline-details">
+    <summary data-testid="reader-pipeline-toggle">处理阶段{receipt.error !== null ? <span>读取失败</span> :
+      failedStage ? <span>{failedStage.label}{failedStage.state}</span> : null}</summary>
+    <div className="reading-disclosure-body">{body}</div>
   </details>;
 }

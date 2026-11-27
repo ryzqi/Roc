@@ -22,6 +22,7 @@ type Props = {
   onOpenItem: (libraryItemId: string) => void;
   onOpenKnowledge?: (target: 'index' | 'wiki') => void;
   onDocumentsChanged: () => void;
+  presentation?: 'disclosure' | 'inspector';
 };
 const buttonClass = 'min-h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
 
@@ -31,8 +32,8 @@ export function LiteratureProcessingPanel(props: Props): React.JSX.Element {
   return <ProcessingSession key={props.projectId} {...props}/>;
 }
 
-function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem, onOpenPdf, onOpenItem, onOpenKnowledge, onDocumentsChanged}: Props): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
+function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem, onOpenPdf, onOpenItem, onOpenKnowledge, onDocumentsChanged, presentation = 'disclosure'}: Props): React.JSX.Element {
+  const [expanded, setExpanded] = useState(presentation === 'inspector');
   const [preferences, setPreferences] = useState(false);
   const [offset, setOffset] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
@@ -95,10 +96,10 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
 
   return <section aria-label="文献后台处理" data-testid="literature-processing" className="shrink-0 border-b-[0.5px] border-line text-[length:var(--font-meta-size)]">
     <div className="flex flex-wrap items-center gap-2 px-3 py-1">
-      <button type="button" className={`${buttonClass} flex items-center gap-1`} aria-expanded={expanded} aria-controls="literature-processing-details"
+      {presentation === 'inspector' ? null : <button type="button" className={`${buttonClass} flex items-center gap-1`} aria-expanded={expanded} aria-controls="literature-processing-details"
         onClick={() => setExpanded(value => !value)}>
         {expanded ? <ChevronDown size={14} aria-hidden="true"/> : <ChevronRight size={14} aria-hidden="true"/>}文献处理
-      </button>
+      </button>}
       <span role="status" aria-atomic="true" className="min-w-0 flex-1 text-muted tabular-nums">
         {page.data === null ? page.status === 'loading' ? '正在读取后台进度…' : '进度暂不可用' :
           page.data.total === 0 ? '暂无任务' : `共 ${page.data.total} 篇任务`}
@@ -112,7 +113,8 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
     {page.error !== null ? <ActionStatus state="error" className="px-3 py-1 text-[var(--st-bad)]">{page.error}</ActionStatus> : null}
     {actionError !== null ? <ActionStatus state="error" className="px-3 py-1 text-[var(--st-bad)]">{actionError}</ActionStatus> : null}
     {notice !== null ? <ActionStatus state="success" className="px-3 py-1 text-muted">{notice}</ActionStatus> : null}
-    <div id="literature-processing-details" hidden={!expanded} className="max-h-60 overflow-y-auto px-3 pb-2">
+    <div id="literature-processing-details" hidden={!expanded}
+      className={`${presentation === 'inspector' ? '' : 'max-h-60 overflow-y-auto'} px-3 pb-2`}>
       {page.data !== null && jobs.length > 0 ? <p className="flex flex-wrap gap-x-4 gap-y-1 py-2 text-muted tabular-nums" aria-label="本页处理概况">
         <span>元数据 {progress.metadata} 篇</span><span>PDF {progress.pdf} 篇</span>
         <span>全文索引 {progress.indexed} 篇</span><span>知识库 {progress.wiki} 篇</span>
@@ -136,11 +138,13 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
               if (stage === 'index' || stage === 'wiki') {if (onOpenKnowledge) onOpenKnowledge(stage); return;}
               onOpenItem(job.libraryItemId);
             }} selected={inspectedStage?.jobId === job.id ? inspectedStage.stage : null}/></div>
+            <div className={presentation === 'inspector' ? 'literature-processing-stage-slot' : undefined}>
             {inspectedStage?.jobId !== job.id ? null : <p className="px-2 text-muted" data-testid="literature-processing-stage-detail">
               {literaturePipeline(null, job).find(stage => stage.id === inspectedStage.stage)?.label}：
               {literaturePipeline(null, job).find(stage => stage.id === inspectedStage.stage)?.state}
               {inspectedStage.stage !== acquisitionPipelineStage(job) || !canRetryAcquisition(job) ? null : '，可核对下方原因后重试。'}
             </p>}
+            </div>
             {job.receipt ? <div className="break-words px-2 text-muted">
               <p>全文来源：{job.receipt.provider}，版本：{{published: '正式发表版', accepted: '接受稿', preprint: '预印本', unknown: '未标注'}[job.receipt.version]}，许可证：{job.receipt.license ?? '未标注'}</p>
               <details><summary className="cursor-pointer">下载凭证</summary>
