@@ -56,7 +56,9 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const [pageDraft, setPageDraft] = useState('');
   const [pageError, setPageError] = useState<string | null>(null);
   const [width, setWidth] = useState(0);
-  const [height,setHeight]=useState(0),[fitPage,setFitPage]=useState(false);
+  // Start with a complete page in view. Fit-to-width remains a deliberate option
+  // for reading small text, and caps the paper width on large desktop monitors.
+  const [height,setHeight]=useState(0),[fitPage,setFitPage]=useState(true);
   const scrollRef=useRef<HTMLDivElement>(null);
   const [textSelection,setTextSelection]=useState<PdfTextSelection|null>(null);
   const [inlineCommandsOpen,setInlineCommandsOpen]=useState(false);
@@ -204,6 +206,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
     setInlineCommandsOpen(false);
   };
   useEffect(() => {setPageDraft(String(pageNumber)); setPageError(null);}, [pageKey, pageNumber]);
+  useEffect(() => {scrollRef.current?.scrollTo({top: 0});}, [pageNumber]);
 
   useEffect(() => {
     if (current === null || width <= 0) return;
@@ -336,9 +339,11 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ChevronRight size={14}/></button>
         <button type="button" aria-label="缩小 PDF" disabled={current === null || zoom <= 0.5} onClick={() => setZoomSelection({key, value: Math.max(0.5, zoom - 0.25)})}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ZoomOut size={14}/></button>
-        <button type="button" aria-label="PDF 适宽" disabled={current === null} onClick={() => {setFitPage(false);setZoomSelection({key, value: 1});}}
-          className="rounded-control px-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-40">{zoom === 1 ? (fitPage?'适页':'适宽') : `${Math.round(zoom*100)}%`}</button>
-        <button type="button" disabled={current===null} aria-pressed={fitPage} onClick={()=>{setFitPage(true);setZoomSelection({key,value:1});}} className="rounded-control px-1 hover:bg-[var(--overlay-hover)]">适页</button>
+        <button type="button" aria-label="PDF 适宽" aria-pressed={!fitPage} disabled={current === null} onClick={() => {setFitPage(false);setZoomSelection({key, value: 1});}}
+          className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40 aria-pressed:bg-[var(--overlay-active)]">适宽</button>
+        <button type="button" aria-label="PDF 适页" disabled={current===null} aria-pressed={fitPage} onClick={()=>{setFitPage(true);setZoomSelection({key,value:1});}}
+          className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40 aria-pressed:bg-[var(--overlay-active)]">适页</button>
+        <span className="min-w-10 text-center text-muted tabular-nums" aria-label="PDF 缩放比例">{Math.round(zoom*100)}%</span>
         <button type="button" aria-label="放大 PDF" disabled={current === null || zoom >= 3} onClick={() => setZoomSelection({key, value: Math.min(3, zoom + 0.25)})}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ZoomIn size={14}/></button>
         <button type="button" disabled={currentPaint === null || failure !== null}
@@ -357,7 +362,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
         pdf={current.pdf} page={pageNumber} navigate={navigate} selection={textSelection} writable={canAnnotate} highlights={highlights}
         onHighlights={setHighlights} onQuery={setQuery} onNote={onNote} onTranslate={onTranslate}/>:null}
       </div>
-      <div ref={scrollRef} data-testid="reader-pdf-scroll" className="min-h-0 flex-1 overflow-auto px-2 py-2 [scrollbar-gutter:stable]">
+      <div ref={scrollRef} data-testid="reader-pdf-scroll" data-fit-mode={fitPage ? 'page' : 'width'} className="reading-pdf-scroll min-h-0 flex-1 overflow-auto px-2 py-3 [scrollbar-gutter:stable]">
         {failure === null ? null : <ErrorBar error={{level: 'blocked', message: failure, retry: () => setRevision(revision => revision + 1)}}/>}
         {pageError === null ? null : <p role="alert" className="text-[var(--st-warn)]">{pageError}</p>}
         {regionError?.key === candidateKey ? <p role="alert" className="text-[var(--st-warn)]">{regionError.message}</p> : null}
@@ -389,9 +394,9 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
               </button>
             </li>)}</ul>}
         </div>}
-        <div ref={areaRef} className="relative w-full">
+        <div ref={areaRef} className="relative mx-auto w-full max-w-[1040px]">
           {failure !== null || currentPaint !== null ? null : <p role="status" className="flex items-center gap-1 text-muted"><Loader2 size={14} className="animate-spin"/>读取原文…</p>}
-          <div className="relative w-fit" style={{visibility: failure === null && currentPaint !== null ? 'visible' : 'hidden'}} data-testid="reader-pdf-page"
+          <div className="reading-pdf-page relative w-fit" style={{visibility: failure === null && currentPaint !== null ? 'visible' : 'hidden'}} data-testid="reader-pdf-page"
               onClick={event => {
                 if (skipClick.current) {skipClick.current = false; return;}
                 if (selecting || !window.getSelection()?.isCollapsed) return;

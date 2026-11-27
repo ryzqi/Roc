@@ -1,7 +1,7 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
+import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Maximize2, Minimize2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -98,6 +98,7 @@ export function PaperReader({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [readingMode, setReadingMode] = useState<'parsed' | 'original' | 'compare'>('parsed');
   const comparePdf = readingMode === 'compare';
   const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
@@ -545,7 +546,13 @@ export function PaperReader({
   </aside> : null;
 
   return (
-    <div ref={readerRoot} className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode}>
+    <div ref={readerRoot} className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode} data-focus-mode={focusMode}
+      onKeyDown={event => {
+        if (event.key === 'Escape' && focusMode && !event.defaultPrevented && !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement).tagName)) {
+          event.preventDefault();
+          setFocusMode(false);
+        }
+      }}>
       <header className="reading-paper-header">
         <div className="reading-paper-heading">
         <h2 className="text-ink" data-testid="reader-title" title={paperTitle}>
@@ -704,6 +711,12 @@ export function PaperReader({
 
           <div className="reading-toolbar reading-navigation">
             {toggleInspector}
+            <button type="button" className="reading-focus-toggle" data-testid="reader-focus-toggle" aria-pressed={focusMode}
+              title={focusMode ? '退出专注阅读（Esc）' : '隐藏其他导航，专注阅读'}
+              onClick={() => setFocusMode(current => !current)}>
+              {focusMode ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}
+              {focusMode ? '退出专注' : '专注阅读'}
+            </button>
           {activeDocument?.mediaType === 'application/pdf' ? (
             <>
               <div role="group" aria-label="阅读视图" className="reading-view-switch">
@@ -728,8 +741,8 @@ export function PaperReader({
               ) : null}
             </>
           ) : null}
-          <details className="reading-disclosure reading-parse-details" key={activeDocumentId} open={activeDocument?.status !== 'ready' ? true : undefined}>
-            <summary data-testid="reader-parse-disclosure">处理{activeDocument !== null && activeDocument.status !== 'ready' ? <span className="text-muted">{STATUS_LABELS[activeDocument.status]}</span> : null}</summary>
+          <details className="reading-disclosure reading-parse-details" key={activeDocumentId}>
+            <summary data-testid="reader-parse-disclosure">处理{activeDocument !== null && activeDocument.status !== 'ready' ? <span className="text-muted">{activeDocument.status === 'parsing' ? <Loader2 size={12} className="inline animate-spin" aria-hidden="true"/> : null} {STATUS_LABELS[activeDocument.status]}</span> : null}</summary>
           {activeDocument === null ? null : (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-meta-size)]">
               <span className="text-muted" data-testid="reader-document-status" data-status={activeDocument.status}>

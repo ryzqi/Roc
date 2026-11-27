@@ -45,6 +45,7 @@ before(async () => {
       metadata:{title:'Synthetic multi agent research paper with a long title',authors:['Fixture Author'],publishedYear:2026,citationCount:null,doi:null,url:null,openAccessUrl:null},
       bibliography:{title:'Synthetic paper',citationKey:'fixture2026',fields:{}}};
     const fixtureDocument={id:'document',libraryItemId:'paper',filename:'synthetic.pdf',mediaType:'application/pdf',status:'ready',sourceHash:'source',currentParseId:'parse',activeParseId:null};
+    window.setDocumentStatus=status=>{fixtureDocument.status=status;};
     const content={sourceHash:'source',pageCount:1,parseMode:'native-text',warnings:[],assets:[],blocks:[{id:'block',kind:'paragraph',label:'Synthetic page',text:'Explicit synthetic source. '.repeat(400),locator:'page:1',locations:[],imageAssetId:null}]};
     const loadDocumentContent=async()=>({ok:true,data:{run:{id:'parse',documentId:'document'},content}});
     const store={client,projectId:'fixture',selected,items:[selected],documents:[fixtureDocument],loadDocumentContent,
@@ -281,6 +282,41 @@ test('reader gives content most of the viewport and notes use the full narrow co
     await page.getByTestId('reader-inspector-toggle').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
+});
+
+test('background parsing stays compact, with controls available on demand',async()=>{
+  await page.setViewportSize({width:820,height:800});
+  await page.evaluate(()=>{window.setDocumentStatus('parsing');window.mountTranslation(820,740);});
+  try {
+    await page.getByTestId('reader-block-paragraph').waitFor();
+    const disclosure=page.getByTestId('reader-parse-disclosure');
+    await expect(disclosure).toContainText('解析中');
+    assert.equal(await disclosure.evaluate(element=>element.parentElement.open),false);
+    const content=await page.getByTestId('reader-content-area').boundingBox();
+    assert.ok(content.height>=500,`background status left ${content.height}px for reading`);
+    await disclosure.click();
+    await expect(page.getByTestId('reader-cancel-parse')).toBeVisible();
+    await disclosure.click();
+    assert.equal(await disclosure.evaluate(element=>element.parentElement.open),false);
+  } finally {
+    await page.evaluate(()=>window.setDocumentStatus('ready'));
+  }
+});
+
+test('focus reading fills the viewport and Escape restores the workspace',async()=>{
+  await page.setViewportSize({width:820,height:800});
+  await page.evaluate(()=>window.mountTranslation(820,740));
+  await page.getByTestId('reader-block-paragraph').waitFor();
+  const reader=page.getByTestId('paper-reader');
+  const focus=page.getByTestId('reader-focus-toggle');
+  await focus.click();
+  await expect(reader).toHaveAttribute('data-focus-mode','true');
+  const geometry=await reader.evaluate(element=>({width:element.getBoundingClientRect().width,
+    height:element.getBoundingClientRect().height,windowWidth:innerWidth,windowHeight:innerHeight}));
+  assert.equal(geometry.width,geometry.windowWidth);
+  assert.equal(geometry.height,geometry.windowHeight);
+  await focus.focus();await page.keyboard.press('Escape');
+  await expect(reader).toHaveAttribute('data-focus-mode','false');
 });
 
 
